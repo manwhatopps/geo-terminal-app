@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "GEO Terminal",
+    "slug": "geo-terminal",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0C1116",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.manwhatopps.geoterminal",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.manwhatopps.geoterminal",
+      "adaptiveIcon": {
+        "backgroundColor": "#0C1116",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
