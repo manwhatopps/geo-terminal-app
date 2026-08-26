@@ -30,6 +30,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# CI signing material (public repo — never commit)
+*.cer
+*.csr
+ci/*.b64
+
 # local env files
 .env*.local
 
