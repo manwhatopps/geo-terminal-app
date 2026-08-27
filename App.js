@@ -5,6 +5,7 @@ import {
   StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
 
@@ -15,6 +16,17 @@ const C = {
   barBg: '#1B2630', chip: '#1A242E',
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
+const DARK_MAP = [
+  { elementType: 'geometry', stylers: [{ color: '#0F161D' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#7E8C96' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0C1116' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0C1116' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#141C24' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#22303A' }] },
+  { featureType: 'road', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+];
 const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
 
 function Section({ title, extra, children }) {
@@ -84,6 +96,56 @@ function Board({ data }) {
       <Text style={s.foot}>
         Brief 07:00 · tripwire sweeps 12:00 + 18:00 · lab Wed · audit Sun · lecture Sat.
         Every number is scored against reality — including the wrong ones.
+      </Text>
+    </View>
+  );
+}
+
+function ConflictMap({ data }) {
+  const events = data.events || [];
+  const [sel, setSel] = useState(null);
+  return (
+    <View style={s.stack}>
+      <Section title="Live conflict map" extra={`${events.length} active`}>
+        <View style={s.mapBox}>
+          <MapView
+            style={s.map}
+            provider={PROVIDER_DEFAULT}
+            customMapStyle={DARK_MAP}
+            initialRegion={{ latitude: 30, longitude: 45, latitudeDelta: 55, longitudeDelta: 60 }}
+          >
+            {events.map((e, i) => (
+              <Marker
+                key={i}
+                coordinate={{ latitude: e.lat, longitude: e.lon }}
+                onPress={() => setSel(e)}
+              >
+                <View style={[s.pin, { backgroundColor: riskColor[e.sev] || C.elev }]} />
+              </Marker>
+            ))}
+          </MapView>
+        </View>
+        {sel && (
+          <View style={s.mapCallout}>
+            <Text style={[s.calloutH, { color: riskColor[sel.sev] || C.elev }]}>{sel.label}</Text>
+            <Text style={s.calloutT}>{sel.note}</Text>
+          </View>
+        )}
+      </Section>
+      <Section title="Active theaters">
+        {events.map((e, i) => (
+          <Pressable key={i} onPress={() => setSel(e)}>
+            <Text style={s.li}>
+              <Text style={{ color: riskColor[e.sev] || C.elev }}>● </Text>
+              <Text style={{ fontWeight: '600' }}>{e.label}. </Text>{e.note}
+            </Text>
+          </Pressable>
+        ))}
+      </Section>
+      <Text style={s.foot}>
+        Points are analyst-geocoded from the day's brief — color is severity
+        (amber elevated, orange high, red critical). Not a live sensor feed; it
+        moves when the brief moves.
       </Text>
     </View>
   );
@@ -163,6 +225,7 @@ function Scholar({ data }) {
 
 const TABS = [
   { key: 'board', label: 'BOARD', C: Board },
+  { key: 'map', label: 'MAP', C: ConflictMap },
   { key: 'brief', label: 'BRIEF', C: Brief },
   { key: 'lab', label: 'LAB', C: Lab },
   { key: 'scholar', label: 'SCHOLAR', C: Scholar },
@@ -292,7 +355,13 @@ const s = StyleSheet.create({
   foot: { color: C.muted, fontSize: 11, lineHeight: 17, paddingHorizontal: 6 },
   navWrap: { backgroundColor: C.panel2, borderTopWidth: 1, borderTopColor: C.line },
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 8, paddingHorizontal: 4 },
-  navBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 4 },
+  navBtn: { paddingVertical: 6, paddingHorizontal: 9, borderRadius: 4 },
   navBtnActive: { backgroundColor: C.chip },
-  navTxt: { color: C.muted, fontSize: 11, letterSpacing: 2 },
+  navTxt: { color: C.muted, fontSize: 10.5, letterSpacing: 1.4 },
+  mapBox: { height: 340, backgroundColor: C.panel2 },
+  map: { flex: 1 },
+  pin: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink },
+  mapCallout: { padding: 14, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.panel2 },
+  calloutH: { fontWeight: '700', fontSize: 14, marginBottom: 3 },
+  calloutT: { color: C.text, fontSize: 13.5, lineHeight: 19 },
 });
