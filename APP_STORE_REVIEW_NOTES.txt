@@ -1,0 +1,45 @@
+NOTES FOR APP REVIEW — GEO Terminal
+Bundle ID: com.manwhatopps.geoterminal
+Version: 1.0.0
+
+WHAT THE APP DOES
+GEO Terminal is a read-only editorial app that presents geopolitical analysis and
+probabilistic forecasts written by the developer. It has five tabs: a forecast board,
+a world conflict map (Apple Maps with annotated markers), a daily written brief, a
+"hypothesis lab," and a weekly long-form lecture. Content is fetched as a static public
+JSON feed. There is NO account, NO login, NO user-generated content, NO ads, and NO
+data collection.
+
+IS THIS FINANCIAL / SAFETY ADVICE? — NO.
+All content is clearly presented as editorial opinion and analysis, not advice. The app
+displays a disclaimer on first launch (which the user acknowledges before proceeding) and
+links to a full Content Disclaimer, Terms of Service, and Privacy Policy from within the
+app. Forecasts are explicitly framed as subjective probabilistic opinion that is often
+wrong; the app is not a financial, investment, trading, legal, security, safety, or travel
+tool, and states so. No transactions, portfolios, or brokerage features exist.
+
+HOW TO REVIEW
+No account or test credentials are needed — nothing is gated. On first launch you will see
+a one-time disclaimer; tap "I understand" to enter. Then tap through the five bottom-tab
+sections. The map requires no permissions (it does not request location). Pull to refresh
+reloads the public content feed.
+
+MONETIZATION
+[v1: None. If a subscription is enabled later, it will use Apple In-App Purchase / StoreKit,
+with price and auto-renewal terms disclosed at the point of purchase and in the Terms.]
+
+PERMISSIONS USED
+Internet only (to fetch the public content feed). No location, camera, photos, contacts,
+tracking, or advertising identifiers.
+
+AGE RATING
+17+ (frequent/intense references to real-world conflict and political violence in the news
+analysis). No objectionable, sexual, or user-generated content.
+
+LEGAL
+Privacy Policy: [PRIVACY URL]
+Terms of Service: [TERMS URL]
+Content Disclaimer: [DISCLAIMER URL]
+
+CONTACT
+[CONTACT EMAIL]

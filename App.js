@@ -1,13 +1,20 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, RefreshControl, ScrollView,
+  ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
+const ACK_KEY = 'geo-disclaimer-ack-v1';
+const LEGAL = {
+  terms: 'https://manwhatopps.github.io/geo-terminal-feed/terms.html',
+  privacy: 'https://manwhatopps.github.io/geo-terminal-feed/privacy.html',
+  disclaimer: 'https://manwhatopps.github.io/geo-terminal-feed/disclaimer.html',
+};
 
 const C = {
   ink: '#0C1116', panel: '#141C24', panel2: '#0F161D', line: '#22303A',
@@ -231,11 +238,68 @@ const TABS = [
   { key: 'scholar', label: 'SCHOLAR', C: Scholar },
 ];
 
+function DisclaimerGate({ onAccept }) {
+  return (
+    <SafeAreaView style={s.root}>
+      <StatusBar style="light" />
+      <ScrollView contentContainerStyle={s.gateScroll}>
+        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>
+          GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL
+        </Text>
+        <Text style={s.gateH}>Before you begin</Text>
+        <Text style={s.gateP}>
+          GEO Terminal publishes geopolitical analysis and probabilistic forecasts as
+          <Text style={{ color: C.text, fontWeight: '700' }}> opinion</Text> — not fact, and not advice.
+        </Text>
+        <Text style={s.gateP}>
+          Forecasts are subjective estimates that will often be wrong. Statements about
+          governments, organizations, and public figures are commentary based on public
+          reporting, not assertions of fact.
+        </Text>
+        <Text style={s.gateP}>
+          This app is <Text style={{ color: C.text, fontWeight: '700' }}>not</Text> financial,
+          investment, legal, security, safety, or travel advice. Do not rely on it for any
+          decision. Consult a qualified professional.
+        </Text>
+        <View style={s.gateLinks}>
+          <Pressable onPress={() => Linking.openURL(LEGAL.disclaimer)}><Text style={s.link}>Full Disclaimer</Text></Pressable>
+          <Pressable onPress={() => Linking.openURL(LEGAL.terms)}><Text style={s.link}>Terms</Text></Pressable>
+          <Pressable onPress={() => Linking.openURL(LEGAL.privacy)}><Text style={s.link}>Privacy</Text></Pressable>
+        </View>
+        <Pressable onPress={onAccept} style={s.gateBtn}>
+          <Text style={[s.gateBtnTxt, MONO]}>I UNDERSTAND</Text>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function LegalFooter() {
+  return (
+    <View style={s.legalRow}>
+      <Pressable onPress={() => Linking.openURL(LEGAL.disclaimer)}><Text style={s.legalLink}>Disclaimer</Text></Pressable>
+      <Text style={s.legalDot}>·</Text>
+      <Pressable onPress={() => Linking.openURL(LEGAL.terms)}><Text style={s.legalLink}>Terms</Text></Pressable>
+      <Text style={s.legalDot}>·</Text>
+      <Pressable onPress={() => Linking.openURL(LEGAL.privacy)}><Text style={s.legalLink}>Privacy</Text></Pressable>
+    </View>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [tab, setTab] = useState('board');
   const [refreshing, setRefreshing] = useState(false);
+  const [acked, setAcked] = useState(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ACK_KEY).then((v) => setAcked(v === '1')).catch(() => setAcked(false));
+  }, []);
+  const accept = useCallback(() => {
+    AsyncStorage.setItem(ACK_KEY, '1').catch(() => {});
+    setAcked(true);
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -255,6 +319,17 @@ export default function App() {
   }, [load]);
 
   const Active = TABS.find((t) => t.key === tab).C;
+
+  if (acked === null) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+  if (!acked) {
+    return <SafeAreaProvider><DisclaimerGate onAccept={accept} /></SafeAreaProvider>;
+  }
 
   return (
     <SafeAreaProvider>
@@ -279,6 +354,7 @@ export default function App() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
           >
             <Active data={data} />
+            <LegalFooter />
           </ScrollView>
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
@@ -364,4 +440,14 @@ const s = StyleSheet.create({
   mapCallout: { padding: 14, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.panel2 },
   calloutH: { fontWeight: '700', fontSize: 14, marginBottom: 3 },
   calloutT: { color: C.text, fontSize: 13.5, lineHeight: 19 },
+  gateScroll: { padding: 26, paddingTop: 60, flexGrow: 1, justifyContent: 'center' },
+  gateH: { color: C.text, fontSize: 20, fontWeight: '800', marginBottom: 14 },
+  gateP: { color: C.muted, fontSize: 14.5, lineHeight: 22, marginBottom: 12 },
+  gateLinks: { flexDirection: 'row', gap: 16, marginTop: 8, marginBottom: 26 },
+  link: { color: C.accent, fontSize: 13.5, textDecorationLine: 'underline' },
+  gateBtn: { backgroundColor: C.accent, borderRadius: 6, paddingVertical: 15, alignItems: 'center' },
+  gateBtnTxt: { color: C.ink, fontWeight: '800', letterSpacing: 2, fontSize: 14 },
+  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 16 },
+  legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
+  legalDot: { color: C.line },
 });
