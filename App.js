@@ -244,8 +244,27 @@ function Lab({ data }) {
 
 function Learn({ data }) {
   const lec = data.lecture;
+  const actors = data.actors || [];
   return (
     <View style={s.stack}>
+      {actors.length > 0 && (
+        <Section title="The players" extra={`${actors.length} tracked`}>
+          <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 10 }]}>
+            Who's actually driving the board — and whether they decide, execute, or just voice.
+            Roles verified; opaque palace dynamics flagged as such.
+          </Text>
+          {actors.map((a, i) => (
+            <View key={i} style={s.actor}>
+              <Text style={s.actorName}>{a.n}</Text>
+              <Text style={[s.actorRole, MONO]}>{a.r.toUpperCase()}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{a.w}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{a.g}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{a.m}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{a.l}</Text>
+            </View>
+          ))}
+        </Section>
+      )}
       <Section title="This week's lecture" extra={lec.date}>
         <View style={s.prose}>
           <Text style={s.h3}>{lec.title}</Text>
@@ -511,4 +530,9 @@ const s = StyleSheet.create({
   fgDef: { color: C.text, fontSize: 13, marginTop: 4, marginBottom: 6, lineHeight: 18 },
   fgEx: { color: C.muted, fontSize: 12, marginBottom: 3, lineHeight: 17 },
   fgTell: { color: C.calm, fontSize: 12.5, lineHeight: 18 },
+  actor: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  actorName: { color: C.text, fontSize: 14, fontWeight: '700' },
+  actorRole: { color: C.accent, fontSize: 10, letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
+  actorRow: { color: C.text, fontSize: 12.5, lineHeight: 18, marginVertical: 2 },
+  actorK: { color: C.muted, fontWeight: '600' },
 });
