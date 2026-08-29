@@ -8,10 +8,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Select newest stable Xcode
+      - name: Select Xcode 16 (Expo SDK 57 doesn't compile on Xcode 26's Swift/C++ interop)
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '16'
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
