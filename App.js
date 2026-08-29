@@ -34,6 +34,31 @@ function decode(s) {
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }
+// ── news region filter + chronological ordering ──
+const REGION_KEY = 'geo-region';
+const REGION_ORDER = ['US', 'China', 'Russia', 'Ukraine', 'Iran', 'Israel', 'Middle East', 'Europe', 'Asia', 'Africa', 'Latin America', 'Global'];
+function regionsPresent(brief) {
+  const set = new Set((brief || []).map((s) => s.region).filter(Boolean));
+  const ordered = REGION_ORDER.filter((r) => set.has(r));
+  for (const r of set) if (!ordered.includes(r)) ordered.push(r);
+  return ordered;
+}
+function briefSorted(brief) {
+  return (brief || []).map((s, i) => ({ s, i })).sort((a, b) => {
+    const ta = a.s.ts ? Date.parse(a.s.ts) : -Infinity, tb = b.s.ts ? Date.parse(b.s.ts) : -Infinity;
+    return tb !== ta ? tb - ta : a.i - b.i;
+  });
+}
+function timeLabel(ts) {
+  if (!ts) return '';
+  const t = Date.parse(ts); if (isNaN(t)) return '';
+  const d = new Date(t), now = new Date();
+  const mins = Math.round((now - d) / 60000);
+  if (mins >= 0 && mins < 60) return mins <= 1 ? 'just now' : mins + 'm ago';
+  if (mins >= 60 && mins < 1440 && d.toDateString() === now.toDateString())
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 const TABS = [
   { key: 'news', label: 'NEWS' },
   { key: 'conspiracy', label: 'CONSPIRACY' },
@@ -102,7 +127,10 @@ function StoryCard({ item, simpleText, easy, deep }) {
   return (
     <View style={s.storycard}>
       <View style={s.spine} />
-      {item.tag ? <Text style={[s.ktag, MONO]}>{decode(item.tag).toUpperCase()}</Text> : null}
+      <View style={s.cardmeta}>
+        {item.tag ? <Text style={[s.ktag, MONO, { marginBottom: 0 }]}>{decode(item.tag).toUpperCase()}</Text> : <View />}
+        {timeLabel(item.ts) ? <Text style={[s.stime, MONO]}>{timeLabel(item.ts)}</Text> : null}
+      </View>
       <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.h)}</Text>
       <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
       {item.context && !easy ? (
@@ -125,16 +153,40 @@ function StoryCard({ item, simpleText, easy, deep }) {
 function NewsTab({ data, easy, deep }) {
   const rline = easy && data.easy ? data.easy.risk : data.risk.line;
   const simple = (easy && data.easy && data.easy.brief) || [];
+  const [region, setRegion] = useState('ALL');
+  useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
+  const choose = (r) => { setRegion(r); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
+
+  const regions = regionsPresent(data.brief);
+  const active = region === 'ALL' || regions.includes(region) ? region : 'ALL';
+  const counts = {}; for (const s of (data.brief || [])) if (s.region) counts[s.region] = (counts[s.region] || 0) + 1;
+  const chips = [['ALL', 'All', (data.brief || []).length]].concat(regions.map((r) => [r, r, counts[r] || 0]));
+  const rows = briefSorted(data.brief).filter(({ s }) => active === 'ALL' || s.region === active);
+
   return (
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} />
       <Text style={s.gline}>{decode(rline)}</Text>
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
-        <Text style={[s.briefT, MONO]}>TODAY'S HEADLINES</Text>
+        <Text style={[s.briefT, MONO]}>LATEST HEADLINES</Text>
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
       </View>
-      {(data.brief || []).map((b, i) => <StoryCard key={i} item={b} simpleText={simple[i]} easy={easy} deep={deep} />)}
+      {regions.length ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+          {chips.map(([val, lab, n]) => {
+            const on = val === active;
+            return (
+              <Pressable key={val} onPress={() => choose(val)} style={[s.rchip, on && s.rchipOn]}>
+                <Text style={[s.rchipTxt, MONO, on && { color: C.ink, fontWeight: '700' }]}>{lab} {n}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+      {rows.length
+        ? rows.map(({ s, i }) => <StoryCard key={i} item={s} simpleText={simple[i]} easy={easy} deep={deep} />)
+        : <Text style={s.foot}>No headlines in this filter right now.</Text>}
       {data.watch && data.watch.length ? (
         <Section title="What to watch next">
           {data.watch.map((w, i) => (
@@ -434,6 +486,12 @@ const s = StyleSheet.create({
   storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
   spine: { position: 'absolute', left: 12, top: 22, bottom: 20, width: 2, borderRadius: 2, backgroundColor: C.accentDim },
   ktag: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.8, color: C.muted, marginBottom: 11 },
+  cardmeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
+  stime: { fontSize: 10.5, color: C.muted, letterSpacing: 0.6 },
+  rfilter: { flexDirection: 'row', gap: 7, paddingHorizontal: 4, paddingVertical: 4 },
+  rchip: { backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 13 },
+  rchipOn: { backgroundColor: C.accent, borderColor: C.accent },
+  rchipTxt: { fontSize: 11, letterSpacing: 0.6, color: C.muted },
   storyH3: { fontSize: 22, lineHeight: 27, fontWeight: '700', color: C.text, marginBottom: 12 },
   storyP: { fontSize: 15, lineHeight: 25, color: C.text },
   ctxbtn: { marginTop: 15, alignSelf: 'flex-start', borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
