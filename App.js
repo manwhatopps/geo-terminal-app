@@ -96,15 +96,16 @@ function ThreatGauge({ risk }) {
   );
 }
 
-function StoryCard({ item }) {
-  const [open, setOpen] = useState(false);
+function StoryCard({ item, simpleText, easy, deep }) {
+  const [open, setOpen] = useState(deep);
+  const body = easy && simpleText ? simpleText : item.t;
   return (
     <View style={s.storycard}>
       <View style={s.spine} />
       {item.tag ? <Text style={[s.ktag, MONO]}>{decode(item.tag).toUpperCase()}</Text> : null}
-      <Text style={[s.storyH3, SERIF]}>{decode(item.h)}</Text>
-      <Text style={s.storyP}>{decode(item.t)}</Text>
-      {item.context ? (
+      <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.h)}</Text>
+      <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
+      {item.context && !easy ? (
         <>
           <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
             <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'WHY THIS IS HAPPENING'}</Text>
@@ -121,8 +122,9 @@ function StoryCard({ item }) {
   );
 }
 
-function NewsTab({ data, easy }) {
+function NewsTab({ data, easy, deep }) {
   const rline = easy && data.easy ? data.easy.risk : data.risk.line;
+  const simple = (easy && data.easy && data.easy.brief) || [];
   return (
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} />
@@ -132,7 +134,7 @@ function NewsTab({ data, easy }) {
         <Text style={[s.briefT, MONO]}>TODAY'S HEADLINES</Text>
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
       </View>
-      {(data.brief || []).map((b, i) => <StoryCard key={i} item={b} />)}
+      {(data.brief || []).map((b, i) => <StoryCard key={i} item={b} simpleText={simple[i]} easy={easy} deep={deep} />)}
       {data.watch && data.watch.length ? (
         <Section title="What to watch next">
           {data.watch.map((w, i) => (
@@ -260,17 +262,21 @@ function StrategyTab({ data, easy }) {
   );
 }
 
-function ModeToggle({ easy, onChange }) {
+const LEVELS = [['simple', 'SIMPLE'], ['regular', 'REGULAR'], ['deep', 'DEEP']];
+function ModeToggle({ level, onChange }) {
   return (
-    <View style={s.modetog}>
-      {['pro', 'easy'].map((m) => {
-        const active = (m === 'easy') === easy;
-        return (
-          <Pressable key={m} onPress={() => onChange(m === 'easy')} style={[s.modeBtn, active && s.modeBtnActive]}>
-            <Text style={[s.modeTxt, MONO, active && { color: C.ink, fontWeight: '700' }]}>{m === 'pro' ? 'PRO' : 'PLAIN'}</Text>
-          </Pressable>
-        );
-      })}
+    <View style={s.levelbar}>
+      <Text style={[s.levelLbl, MONO]}>READING LEVEL</Text>
+      <View style={s.modetog}>
+        {LEVELS.map(([v, lab], i) => {
+          const active = v === level;
+          return (
+            <Pressable key={v} onPress={() => onChange(v)} style={[s.modeBtn, i > 0 && s.modeBtnDiv, active && s.modeBtnActive]}>
+              <Text style={[s.modeTxt, MONO, active && { color: C.ink, fontWeight: '700' }]}>{lab}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -314,14 +320,18 @@ export default function App() {
   const [tab, setTab] = useState('news');
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
-  const [easy, setEasy] = useState(false);
+  const [level, setLevel] = useState('regular');
+  const easy = level === 'simple', deep = level === 'deep';
 
   useEffect(() => {
     AsyncStorage.getItem(ACK_KEY).then((v) => setAcked(v === '1')).catch(() => setAcked(false));
-    AsyncStorage.getItem(MODE_KEY).then((v) => setEasy(v === 'easy')).catch(() => {});
+    AsyncStorage.getItem(MODE_KEY).then((v) => {
+      if (v === 'simple' || v === 'regular' || v === 'deep') setLevel(v);
+      else if (v === 'easy') setLevel('simple'); // migrate old two-way toggle
+    }).catch(() => {});
   }, []);
   const accept = useCallback(() => { AsyncStorage.setItem(ACK_KEY, '1').catch(() => {}); setAcked(true); }, []);
-  const setMode = useCallback((v) => { setEasy(v); AsyncStorage.setItem(MODE_KEY, v ? 'easy' : 'pro').catch(() => {}); }, []);
+  const setMode = useCallback((v) => { setLevel(v); AsyncStorage.setItem(MODE_KEY, v).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     try {
@@ -346,9 +356,9 @@ export default function App() {
         <View style={s.header}>
           <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
-          <ModeToggle easy={easy} onChange={setMode} />
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
+        <ModeToggle level={level} onChange={setMode} />
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -358,7 +368,7 @@ export default function App() {
         )}
         {data && (
           <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'news' && <NewsTab data={data} easy={easy} />}
+            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
             <LegalFooter />
@@ -385,10 +395,13 @@ const s = StyleSheet.create({
   statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
   wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 14 },
   stamp: { color: C.muted, fontSize: 10, marginLeft: 'auto', letterSpacing: 0.5 },
-  modetog: { flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 4, overflow: 'hidden', marginLeft: 10 },
-  modeBtn: { paddingVertical: 4, paddingHorizontal: 9 },
+  levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel2 },
+  levelLbl: { color: C.muted, fontSize: 9, letterSpacing: 1.5 },
+  modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
+  modeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center' },
+  modeBtnDiv: { borderLeftWidth: 1, borderLeftColor: C.line },
   modeBtnActive: { backgroundColor: C.accent },
-  modeTxt: { color: C.muted, fontSize: 9.5, letterSpacing: 1 },
+  modeTxt: { color: C.muted, fontSize: 10, letterSpacing: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
   retry: { borderWidth: 1, borderColor: C.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 22 },
   retryTxt: { color: C.accent, letterSpacing: 2, fontSize: 13 },
