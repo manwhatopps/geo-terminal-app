@@ -5,56 +5,47 @@ import {
   StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
 const ACK_KEY = 'geo-disclaimer-ack-v1';
+const MODE_KEY = 'geo-mode';
 const LEGAL = {
   terms: 'https://manwhatopps.github.io/geo-terminal-feed/terms.html',
   privacy: 'https://manwhatopps.github.io/geo-terminal-feed/privacy.html',
   disclaimer: 'https://manwhatopps.github.io/geo-terminal-feed/disclaimer.html',
 };
 
+// "Analyst's Desk in a Situation Room" — nautical-chart navy, document-paper cards, cyan = instrument light.
 const C = {
-  ink: '#0C1116', panel: '#141C24', panel2: '#0F161D', line: '#22303A',
-  text: '#D9E1E6', muted: '#7E8C96', accent: '#5FA8B8',
-  calm: '#5B9E77', elev: '#C9A44C', high: '#C4674D', crit: '#D14B3E',
-  barBg: '#1B2630', chip: '#1A242E',
+  ink: '#0B1220', panel: '#20263A', panel2: '#141D2E', line: '#2A3A57',
+  text: '#E8EDF5', muted: '#93A2BE', accent: '#3FE0D0', accentDim: '#0E8C86',
+  calm: '#5B9E7A', elev: '#E0B24A', high: '#E08A3C', crit: '#E5544E',
+  barBg: '#141D2E', chip: '#26324E',
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
-const FIELD_GUIDE = [
-  { n: 'Manufactured urgency', d: 'A fake deadline or scarcity to kill your deliberation.', e: '"Economic D-Day," "effective immediately" tariff framing.', t: 'The deadline benefits the persuader, not you. Ask: what actually breaks if I wait a day?' },
-  { n: 'Firehose of falsehood', d: 'High-volume, contradictory claims that make verification collapse.', e: "State bot networks driving most of a wartime hashtag's traffic.", t: "Volume + speed + claims that don't even agree with each other. The goal is exhaustion, not consistency." },
-  { n: 'Atrocity framing', d: "Overwhelming, often-unverified images of the enemy's cruelty to short-circuit judgment.", e: 'AI-generated "atrocity" videos racking up hundreds of millions of views.', t: 'Unsourced, undated, rage-optimized visuals. Reverse-image-search before you believe or share.' },
-  { n: 'The authority costume', d: 'Borrowed credibility from a uniform, title, or "studies show."', e: 'Doctor-endorsed cigarettes; "experts say" with no expert named.', t: "The credential is displayed; the evidence isn't. Ask which study, by whom." },
-  { n: 'Manufactured consensus', d: '"Everyone believes this" — via bots, bought followers, or trending metrics.', e: 'Astroturfed hashtags; identical phrasing from new accounts.', t: 'Engagement with no organic origin. Who actually started it?' },
-  { n: 'In-group framing', d: 'Binding a claim to your identity so rejecting it feels like betrayal.', e: '"Real patriots know…"; identity-coded issue messaging.', t: "It's about belonging, not evidence. You feel tribal before you feel convinced." },
-  { n: 'Anchoring the debate', d: 'An extreme opening number so the "compromise" lands where they wanted.', e: 'A shock demand, then a "reasonable" retreat to the real target.', t: 'The first ask is outrageous on purpose. Negotiate from your own anchor, not theirs.' },
-  { n: 'Loaded labels', d: 'Renaming something to smuggle a verdict inside a neutral-sounding noun.', e: '"Liberation Day" tariffs; "collateral damage."', t: 'Strip the adjective and re-describe the plain event.' },
-  { n: 'Sanewashing', d: 'Smoothing incoherent or extreme statements into reasonable-sounding paraphrase.', e: 'Rambling remarks rendered as tidy policy in the write-up.', t: 'The paraphrase is more coherent than the transcript. Go read the primary quote.' },
-  { n: 'Nutpicking', d: 'Elevating a fringe crank as representative of a whole group.', e: 'A 12-follower account cited as "what they all believe."', t: 'The "representative" example is conveniently the worst one. Check its real reach.' },
-  { n: 'The consistency trap', d: 'A tiny engineered "yes" that makes the big "yes" feel obligatory.', e: 'Sign the petition → donate → volunteer ladders.', t: 'Each step cites your last step as the reason. The escalation is doing the work.' },
-  { n: 'The denied control', d: "An outcome with no counterfactual, so you can't judge the cause.", e: '"Since the policy, X improved" — with no baseline shown.', t: 'Ask "compared to what?" No control group, no claim.' },
-];
-const DARK_MAP = [
-  { elementType: 'geometry', stylers: [{ color: '#0F161D' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#7E8C96' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#0C1116' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0C1116' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#141C24' }] },
-  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#22303A' }] },
-  { featureType: 'road', stylers: [{ visibility: 'off' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-];
+const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
 const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
+const SERIF = { fontFamily: 'Georgia' };
+
+// Feed strings carry HTML entities (web decodes via innerHTML; RN <Text> shows them literally).
+function decode(s) {
+  return String(s == null ? '' : s)
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+const TABS = [
+  { key: 'news', label: 'NEWS' },
+  { key: 'conspiracy', label: 'CONSPIRACY' },
+  { key: 'strategy', label: 'STRATEGY' },
+];
 
 function Section({ title, extra, children }) {
   return (
     <View style={s.section}>
       <View style={s.h2row}>
         <Text style={s.h2}>{title.toUpperCase()}</Text>
+        <View style={s.h2rule} />
         {extra ? <Text style={[s.h2extra, MONO]}>{extra}</Text> : null}
       </View>
       {children}
@@ -62,281 +53,244 @@ function Section({ title, extra, children }) {
   );
 }
 
-function Forecast({ f }) {
-  const d = f.prev != null ? f.p - f.prev : null;
+function ProbBar({ p, prev }) {
   return (
-    <View style={s.fc}>
-      <View style={s.fcTop}>
-        <Text style={[s.fcId, MONO]}>{f.id}</Text>
-        <Text style={s.fcQ}>{f.q}</Text>
-        <Text style={[s.fcP, MONO]}>{f.p}<Text style={s.fcPct}>%</Text></Text>
-      </View>
-      <View style={s.bar}>
-        <View style={[s.fill, { width: `${f.p}%` }]} />
-        {f.prev != null && <View style={[s.tick, { left: `${f.prev}%`, backgroundColor: C.muted }]} />}
-        {f.mkt != null && <View style={[s.tick, { left: `${f.mkt}%`, backgroundColor: C.elev }]} />}
-      </View>
-      <View style={s.meta}>
-        {d != null && (
-          <Text style={[s.chip, MONO, { color: d > 0 ? C.high : C.calm }]}>
-            {d > 0 ? '+' : ''}{d} pts
-          </Text>
-        )}
-        <Text style={[s.metaTxt, MONO]}>by {f.by}</Text>
-        <Text style={s.metaTxt}>conf {f.conf}</Text>
-      </View>
-      {f.note ? <Text style={s.note}>{f.note}</Text> : null}
+    <View style={s.bar}>
+      <View style={[s.fill, { width: `${p}%` }]} />
+      {prev != null && <View style={[s.tick, { left: `${prev}%` }]} />}
     </View>
   );
 }
 
-function Board({ data }) {
-  const rc = riskColor[data.risk.color] || C.elev;
+function PlainLead({ text }) {
+  if (!text) return null;
   return (
-    <View style={s.stack}>
-      <View style={[s.risk, { borderLeftColor: rc }]}>
-        <Text style={[s.riskState, MONO, { color: rc }]}>RISK: {data.risk.state}</Text>
-        <Text style={s.riskLine}>{data.risk.line}</Text>
-      </View>
-      {data.track && (
-        <Section title="Track record">
-          <View style={s.track}>
-            <View style={s.brierBox}>
-              {data.track.resolved > 0 ? (
-                <>
-                  <Text style={[s.brierBig, MONO]}>{data.track.brier != null ? data.track.brier.toFixed(3) : '—'}</Text>
-                  <Text style={[s.brierLab, MONO]}>BRIER</Text>
-                </>
-              ) : (
-                <Text style={[s.brierBig, MONO]}>0<Text style={s.brierUnit}> resolved</Text></Text>
-              )}
-            </View>
-            <Text style={s.trackSay}>
-              {data.track.resolved > 0
-                ? `${data.track.resolved} forecast${data.track.resolved > 1 ? 's' : ''} resolved and scored. Lower Brier is better; 0.25 is a coin-flip. ${data.track.note || ''}`
-                : data.track.note}
-            </Text>
-          </View>
-        </Section>
-      )}
-      <Section title="Forecast board" extra={`${data.forecasts.length} open`}>
-        {data.forecasts.map((f) => <Forecast key={f.id} f={f} />)}
-        <View style={s.legend}>
-          <Text style={s.legendTxt}>▮ current</Text>
-          <Text style={[s.legendTxt, { color: C.muted }]}>| previous</Text>
-          <Text style={[s.legendTxt, { color: C.elev }]}>| market</Text>
-        </View>
-      </Section>
-      <Section title="Tripwires">
-        {data.tripwires.fired.map((t, i) => (
-          <Text key={`f${i}`} style={s.li}><Text style={{ color: C.crit }}>▲ FIRED — </Text>{t}</Text>
-        ))}
-        {data.tripwires.armed.map((t, i) => (
-          <Text key={`a${i}`} style={s.li}><Text style={{ color: C.accent }}>◦ </Text>{t}</Text>
-        ))}
-      </Section>
-      <Text style={s.foot}>
-        Brief 07:00 · tripwire sweeps 12:00 + 18:00 · lab Wed · audit Sun · lecture Sat.
-        Every number is scored against reality — including the wrong ones.
-      </Text>
+    <View style={s.plainLead}>
+      <Text style={[s.plainLbl, MONO]}>IN PLAIN ENGLISH</Text>
+      <Text style={s.plainP}>{decode(text)}</Text>
     </View>
   );
 }
 
-function ConflictMap({ data }) {
-  const events = data.events || [];
-  const [sel, setSel] = useState(null);
+function ThreatGauge({ risk }) {
+  const idx = RISK_LEVELS.indexOf(risk.color);
+  const rc = riskColor[risk.color] || C.elev;
   return (
-    <View style={s.stack}>
-      <Section title="Live conflict map" extra={`${events.length} active`}>
-        <View style={s.mapBox}>
-          <MapView
-            style={s.map}
-            provider={PROVIDER_DEFAULT}
-            customMapStyle={DARK_MAP}
-            initialRegion={{ latitude: 30, longitude: 45, latitudeDelta: 55, longitudeDelta: 60 }}
-          >
-            {events.map((e, i) => (
-              <Marker
-                key={i}
-                coordinate={{ latitude: e.lat, longitude: e.lon }}
-                onPress={() => setSel(e)}
-              >
-                <View style={[s.pin, { backgroundColor: riskColor[e.sev] || C.elev }]} />
-              </Marker>
-            ))}
-          </MapView>
-        </View>
-        {sel && (
-          <View style={s.mapCallout}>
-            <Text style={[s.calloutH, { color: riskColor[sel.sev] || C.elev }]}>{sel.label}</Text>
-            <Text style={s.calloutT}>{sel.note}</Text>
-          </View>
-        )}
-      </Section>
-      <Section title="Active theaters">
-        {events.map((e, i) => (
-          <Pressable key={i} onPress={() => setSel(e)}>
-            <Text style={s.li}>
-              <Text style={{ color: riskColor[e.sev] || C.elev }}>● </Text>
-              <Text style={{ fontWeight: '600' }}>{e.label}. </Text>{e.note}
-            </Text>
+    <View style={s.gauge}>
+      <View style={s.gtop}>
+        <Text style={[s.glabel, MONO]}>GLOBAL THREAT POSTURE</Text>
+        <Text style={[s.gstate, SERIF, { color: rc }]}>{risk.state}</Text>
+      </View>
+      <View style={s.meter}>
+        {RISK_LEVELS.map((lv, i) => (
+          <View key={lv} style={[s.zone, { backgroundColor: riskColor[lv], opacity: i === idx ? 1 : 0.28 }]} />
+        ))}
+        <View style={[s.needle, { left: `${((idx + 0.5) / 4) * 100}%`, marginLeft: -6 }]} />
+      </View>
+      <View style={s.gscale}>
+        {['CALM', 'ELEVATED', 'HIGH', 'CRITICAL'].map((t) => (
+          <Text key={t} style={[s.gscaleTxt, MONO]}>{t}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function StoryCard({ item }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={s.storycard}>
+      <View style={s.spine} />
+      {item.tag ? <Text style={[s.ktag, MONO]}>{decode(item.tag).toUpperCase()}</Text> : null}
+      <Text style={[s.storyH3, SERIF]}>{decode(item.h)}</Text>
+      <Text style={s.storyP}>{decode(item.t)}</Text>
+      {item.context ? (
+        <>
+          <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+            <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'WHY THIS IS HAPPENING'}</Text>
           </Pressable>
-        ))}
-      </Section>
-      <Text style={s.foot}>
-        Points are analyst-geocoded from the day's brief — color is severity
-        (amber elevated, orange high, red critical). Not a live sensor feed; it
-        moves when the brief moves.
-      </Text>
-    </View>
-  );
-}
-
-function Brief({ data }) {
-  return (
-    <View style={s.stack}>
-      <Section title="Daily brief" extra={data.updated}>
-        <View style={s.prose}>
-          {data.brief.map((b, i) => (
-            <View key={i}>
-              <Text style={s.h3}>{b.h}</Text>
-              <Text style={s.p}>{b.t}</Text>
+          {open && (
+            <View style={s.ctxpanel}>
+              <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
+              <Text style={s.ctxP}>{decode(item.context)}</Text>
             </View>
-          ))}
-        </View>
-      </Section>
-      <Section title="Watch — next 48h">
-        {data.watch.map((w, i) => (
-          <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{w}</Text>
-        ))}
-      </Section>
-      {data.lesson ? (
-        <Section title="Today's lesson">
-          <View style={s.prose}><Text style={s.p}>{data.lesson}</Text></View>
-        </Section>
+          )}
+        </>
       ) : null}
     </View>
   );
 }
 
-function Lab({ data }) {
+function NewsTab({ data, easy }) {
+  const rline = easy && data.easy ? data.easy.risk : data.risk.line;
   return (
     <View style={s.stack}>
-      <Section title="Hypothesis lab" extra={`${data.hypotheses.length} live`}>
-        {data.hypotheses.map((h, i) => (
-          <View key={i} style={s.hyp}>
-            <Text style={[s.hypP, MONO]}>{h.p}%</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.hypName}>{h.name}.</Text>
-              <Text style={s.hypD}>{h.d}</Text>
-            </View>
-          </View>
-        ))}
-      </Section>
-      <Text style={s.foot}>
-        Hypotheses live under the decay rule: failed predictions cut probability;
-        nothing survives on narrative alone.
-      </Text>
+      <ThreatGauge risk={data.risk} />
+      <Text style={s.gline}>{decode(rline)}</Text>
+      <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
+      <View style={s.briefhead}>
+        <Text style={[s.briefT, MONO]}>TODAY'S HEADLINES</Text>
+        <Text style={[s.briefD, MONO]}>{data.updated}</Text>
+      </View>
+      {(data.brief || []).map((b, i) => <StoryCard key={i} item={b} />)}
+      {data.watch && data.watch.length ? (
+        <Section title="What to watch next">
+          {data.watch.map((w, i) => (
+            <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>
+          ))}
+        </Section>
+      ) : null}
+      <Text style={s.foot}>Headlines refresh through the day. Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
 }
 
-function Learn({ data }) {
-  const lec = data.lecture;
-  const actors = data.actors || [];
+function CalibrationTrack({ track, forecasts }) {
+  if (!track) return null;
+  const scored = track.resolved > 0;
+  const items = (track.items && track.items.length)
+    ? track.items
+    : (forecasts || []).slice(0, 14).map(() => ({ pending: true }));
+  return (
+    <Section title="Our track record" extra={scored ? track.resolved + ' scored' : 'scoring opens Oct'}>
+      <View style={s.cal}>
+        <View style={s.calbig}>
+          <Text style={[s.calnum, MONO]}>{scored && track.brier != null ? track.brier.toFixed(3) : '—'}</Text>
+          <Text style={[s.callab, MONO]}>{scored ? 'BRIER SCORE' : 'NO SCORE YET'}</Text>
+        </View>
+        <Text style={s.calsay}>{decode(track.note)}</Text>
+        <View style={s.calstrip}>
+          {items.map((it, i) => (
+            <View key={i} style={[s.caldot, it.pending ? s.caldotPend
+              : (it.outcome === 'YES') === (it.p >= 50) ? s.caldotHit : s.caldotMiss]} />
+          ))}
+        </View>
+      </View>
+    </Section>
+  );
+}
+
+function ConspiracyTab({ data }) {
   return (
     <View style={s.stack}>
-      {actors.length > 0 && (
-        <Section title="The players" extra={`${actors.length} tracked`}>
-          <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 10 }]}>
-            Who's actually driving the board — and whether they decide, execute, or just voice.
-            Roles verified; opaque palace dynamics flagged as such.
-          </Text>
-          {actors.map((a, i) => (
-            <View key={i} style={s.actor}>
-              <Text style={s.actorName}>{a.n}</Text>
-              <Text style={[s.actorRole, MONO]}>{a.r.toUpperCase()}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{a.w}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{a.g}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{a.m}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{a.l}</Text>
+      <View style={s.tabintro}>
+        <Text style={s.tabintroP}>What we think happens next — falsifiable predictions and hidden-strategy hypotheses. The fun part, and the honest one: every call is scored against reality, misses included.</Text>
+      </View>
+      <CalibrationTrack track={data.track} forecasts={data.forecasts} />
+      {data.hypotheses && data.hypotheses.length ? (
+        <Section title="Hidden-strategy lab" extra={data.hypotheses.length + ' live'}>
+          {data.hypotheses.map((h, i) => (
+            <View key={i} style={s.hyp}>
+              <Text style={[s.hypP, MONO]}>{h.p}%</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.hypName}>{decode(h.name)}.</Text>
+                <Text style={s.hypD}>{decode(h.d)}</Text>
+              </View>
             </View>
           ))}
         </Section>
-      )}
-      <Section title="This week's lecture" extra={lec.date}>
-        <View style={s.prose}>
-          <Text style={s.h3}>{lec.title}</Text>
-          {lec.sections.map((part, i) => (
-            <View key={i}>
-              <Text style={[s.kicker, MONO]}>{part.h.toUpperCase()}</Text>
-              <Text style={s.p}>{part.t}</Text>
+      ) : null}
+      <Section title="Predictions on the board" extra={String((data.forecasts || []).length)}>
+        {(data.forecasts || []).map((f, i) => {
+          const d = f.prev != null ? f.p - f.prev : null;
+          return (
+            <View key={i} style={s.pred}>
+              <View style={s.predtop}>
+                <Text style={s.predq}>{decode(f.q)}</Text>
+                <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
+              </View>
+              <ProbBar p={f.p} prev={f.prev} />
+              <View style={s.predmeta}>
+                {d ? <Text style={[s.chip, MONO, { color: d > 0 ? C.high : C.calm }]}>{(d > 0 ? '+' : '') + d}</Text> : null}
+                <Text style={s.predmetaTxt}>by {f.by}</Text>
+              </View>
+              {f.note ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
             </View>
-          ))}
-        </View>
+          );
+        })}
       </Section>
-      <Section title="Spot the technique" extra={`${FIELD_GUIDE.length} tells`}>
-        <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 10 }]}>
-          How you're persuaded, and how to catch it. The tell is the part that protects you.
-        </Text>
-        {FIELD_GUIDE.map((g, i) => (
-          <View key={i} style={s.fg}>
-            <Text style={s.fgName}><Text style={[s.fgNum, MONO]}>{i + 1} </Text>{g.n}</Text>
-            <Text style={s.fgDef}>{g.d}</Text>
-            <Text style={s.fgEx}>e.g. {g.e}</Text>
-            <Text style={s.fgTell}><Text style={{ fontWeight: '700' }}>Tell — </Text>{g.t}</Text>
-          </View>
-        ))}
-      </Section>
-      <Text style={s.foot}>
-        New lecture every Saturday. The field guide draws on the political-psychology canon —
-        and deliberately omits the debunked studies (retracted priming work, failed replications),
-        because a guide to being fooled can't itself be fooled.
-      </Text>
+      <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
   );
 }
 
-const TABS = [
-  { key: 'board', label: 'BOARD', C: Board },
-  { key: 'map', label: 'MAP', C: ConflictMap },
-  { key: 'brief', label: 'BRIEF', C: Brief },
-  { key: 'lab', label: 'LAB', C: Lab },
-  { key: 'learn', label: 'LEARN', C: Learn },
-];
+function StrategyTab({ data, easy }) {
+  const lec = data.lecture;
+  return (
+    <View style={s.stack}>
+      <View style={s.tabintro}>
+        <Text style={s.tabintroP}>The strategy desk — world events read from inside each capital, not from a podium. Who actually decides, what they really want, and what it means from their own perspective.</Text>
+      </View>
+      {data.actors && data.actors.length ? (
+        <Section title="The players" extra={data.actors.length + ' tracked'}>
+          {data.actors.map((a, i) => (
+            <View key={i} style={s.actor}>
+              <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
+              <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{decode(a.w)}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{decode(a.g)}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{decode(a.m)}</Text>
+              <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{decode(a.l)}</Text>
+            </View>
+          ))}
+        </Section>
+      ) : null}
+      {lec ? (
+        <Section title="This week's deep dive" extra={lec.date}>
+          <View style={s.prose}>
+            <Text style={[s.h3, SERIF]}>{decode(lec.title)}</Text>
+            {lec.sections.map((part, i) => (
+              <View key={i}>
+                <Text style={[s.kicker, MONO]}>{decode(part.h).toUpperCase()}</Text>
+                <Text style={s.p}>{decode(part.t)}</Text>
+              </View>
+            ))}
+          </View>
+        </Section>
+      ) : null}
+      {data.plumbing ? (
+        <Section title="The economic read" extra={data.plumbing.stage}>
+          <View style={s.prose}>
+            <Text style={s.p}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+          </View>
+        </Section>
+      ) : null}
+      <Text style={s.foot}>Deep analysis and opinion, for information only. Not financial, legal, or safety advice.</Text>
+    </View>
+  );
+}
+
+function ModeToggle({ easy, onChange }) {
+  return (
+    <View style={s.modetog}>
+      {['pro', 'easy'].map((m) => {
+        const active = (m === 'easy') === easy;
+        return (
+          <Pressable key={m} onPress={() => onChange(m === 'easy')} style={[s.modeBtn, active && s.modeBtnActive]}>
+            <Text style={[s.modeTxt, MONO, active && { color: C.ink, fontWeight: '700' }]}>{m === 'pro' ? 'PRO' : 'PLAIN'}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 function DisclaimerGate({ onAccept }) {
   return (
     <SafeAreaView style={s.root}>
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={s.gateScroll}>
-        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>
-          GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL
-        </Text>
-        <Text style={s.gateH}>Before you begin</Text>
-        <Text style={s.gateP}>
-          GEO Terminal publishes geopolitical analysis and probabilistic forecasts as
-          <Text style={{ color: C.text, fontWeight: '700' }}> opinion</Text> — not fact, and not advice.
-        </Text>
-        <Text style={s.gateP}>
-          Forecasts are subjective estimates that will often be wrong. Statements about
-          governments, organizations, and public figures are commentary based on public
-          reporting, not assertions of fact.
-        </Text>
-        <Text style={s.gateP}>
-          This app is <Text style={{ color: C.text, fontWeight: '700' }}>not</Text> financial,
-          investment, legal, security, safety, or travel advice. Do not rely on it for any
-          decision. Consult a qualified professional.
-        </Text>
+        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
+        <Text style={[s.gateH, SERIF]}>Before you begin</Text>
+        <Text style={s.gateP}>GEO Terminal publishes geopolitical analysis and probabilistic forecasts as <Text style={{ color: C.text, fontWeight: '700' }}>opinion</Text> — not fact, and not advice.</Text>
+        <Text style={s.gateP}>Forecasts are subjective estimates that will often be wrong. Statements about governments, organizations, and public figures are commentary based on public reporting, not assertions of fact.</Text>
+        <Text style={s.gateP}>This app is <Text style={{ color: C.text, fontWeight: '700' }}>not</Text> financial, investment, legal, security, safety, or travel advice. Do not rely on it for any decision. Consult a qualified professional.</Text>
         <View style={s.gateLinks}>
           <Pressable onPress={() => Linking.openURL(LEGAL.disclaimer)}><Text style={s.link}>Full Disclaimer</Text></Pressable>
           <Pressable onPress={() => Linking.openURL(LEGAL.terms)}><Text style={s.link}>Terms</Text></Pressable>
           <Pressable onPress={() => Linking.openURL(LEGAL.privacy)}><Text style={s.link}>Privacy</Text></Pressable>
         </View>
-        <Pressable onPress={onAccept} style={s.gateBtn}>
-          <Text style={[s.gateBtnTxt, MONO]}>I UNDERSTAND</Text>
-        </Pressable>
+        <Pressable onPress={onAccept} style={s.gateBtn}><Text style={[s.gateBtnTxt, MONO]}>I UNDERSTAND</Text></Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -357,59 +311,45 @@ function LegalFooter() {
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [tab, setTab] = useState('board');
+  const [tab, setTab] = useState('news');
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
+  const [easy, setEasy] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(ACK_KEY).then((v) => setAcked(v === '1')).catch(() => setAcked(false));
+    AsyncStorage.getItem(MODE_KEY).then((v) => setEasy(v === 'easy')).catch(() => {});
   }, []);
-  const accept = useCallback(() => {
-    AsyncStorage.setItem(ACK_KEY, '1').catch(() => {});
-    setAcked(true);
-  }, []);
+  const accept = useCallback(() => { AsyncStorage.setItem(ACK_KEY, '1').catch(() => {}); setAcked(true); }, []);
+  const setMode = useCallback((v) => { setEasy(v); AsyncStorage.setItem(MODE_KEY, v ? 'easy' : 'pro').catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     try {
       const r = await fetch(`${FEED}?t=${Date.now()}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setData(await r.json());
-      setErr(null);
-    } catch (e) {
-      setErr(String(e.message || e));
-    }
+      setData(await r.json()); setErr(null);
+    } catch (e) { setErr(String(e.message || e)); }
   }, []);
-
   useEffect(() => { load(); }, [load]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true); await load(); setRefreshing(false);
-  }, [load]);
-
-  const Active = TABS.find((t) => t.key === tab).C;
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
 
   if (acked === null) {
-    return (
-      <SafeAreaProvider>
-        <SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView>
-      </SafeAreaProvider>
-    );
+    return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
   }
-  if (!acked) {
-    return <SafeAreaProvider><DisclaimerGate onAccept={accept} /></SafeAreaProvider>;
-  }
+  if (!acked) return <SafeAreaProvider><DisclaimerGate onAccept={accept} /></SafeAreaProvider>;
 
+  const rc = data ? (riskColor[data.risk.color] || C.elev) : C.elev;
   return (
     <SafeAreaProvider>
       <SafeAreaView style={s.root} edges={['top']}>
         <StatusBar style="light" />
         <View style={s.header}>
+          <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
-          <Text style={[s.stamp, MONO]}>{data ? `UPDATED ${data.updated}` : ''}</Text>
+          <ModeToggle easy={easy} onChange={setMode} />
+          <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
-        {!data && !err && (
-          <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>
-        )}
+        {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
             <Text style={s.p}>Couldn't reach the feed ({err}).</Text>
@@ -417,20 +357,19 @@ export default function App() {
           </View>
         )}
         {data && (
-          <ScrollView
-            contentContainerStyle={s.scroll}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
-          >
-            <Active data={data} />
+          <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
+            {tab === 'news' && <NewsTab data={data} easy={easy} />}
+            {tab === 'conspiracy' && <ConspiracyTab data={data} />}
+            {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
             <LegalFooter />
           </ScrollView>
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
           <View style={s.nav}>
             {TABS.map((t) => (
-              <Pressable key={t.key} onPress={() => setTab(t.key)}
-                style={[s.navBtn, tab === t.key && s.navBtnActive]}>
+              <Pressable key={t.key} onPress={() => setTab(t.key)} style={s.navBtn}>
                 <Text style={[s.navTxt, MONO, tab === t.key && { color: C.accent }]}>{t.label}</Text>
+                {tab === t.key && <View style={s.navUnder} />}
               </Pressable>
             ))}
           </View>
@@ -442,74 +381,101 @@ export default function App() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
-  header: {
-    flexDirection: 'row', alignItems: 'baseline', paddingHorizontal: 16,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 15 },
-  stamp: { color: C.muted, fontSize: 11, marginLeft: 'auto', letterSpacing: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
+  wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 14 },
+  stamp: { color: C.muted, fontSize: 10, marginLeft: 'auto', letterSpacing: 0.5 },
+  modetog: { flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 4, overflow: 'hidden', marginLeft: 10 },
+  modeBtn: { paddingVertical: 4, paddingHorizontal: 9 },
+  modeBtnActive: { backgroundColor: C.accent },
+  modeTxt: { color: C.muted, fontSize: 9.5, letterSpacing: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
   retry: { borderWidth: 1, borderColor: C.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 22 },
   retryTxt: { color: C.accent, letterSpacing: 2, fontSize: 13 },
-  scroll: { padding: 14, gap: 14 },
-  stack: { gap: 14 },
-  risk: {
-    backgroundColor: C.panel, borderWidth: 1, borderColor: C.line,
-    borderLeftWidth: 4, borderRadius: 6, padding: 15,
-  },
-  riskState: { fontWeight: '800', letterSpacing: 2.5, fontSize: 14 },
-  riskLine: { color: C.text, marginTop: 7, fontSize: 14.5, lineHeight: 21 },
-  section: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, overflow: 'hidden' },
-  h2row: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: C.panel2,
-    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  h2: { color: C.muted, fontSize: 11, fontWeight: '700', letterSpacing: 3 },
-  h2extra: { color: C.accent, fontSize: 11, marginLeft: 'auto' },
-  fc: { paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.line },
-  fcTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  fcId: { color: C.muted, fontSize: 10, letterSpacing: 1 },
-  fcQ: { color: C.text, fontSize: 14, fontWeight: '600', flex: 1 },
-  fcP: { color: C.accent, fontSize: 23, fontWeight: '700' },
-  fcPct: { color: C.muted, fontSize: 12, fontWeight: '400' },
-  bar: { height: 6, borderRadius: 3, backgroundColor: C.barBg, marginTop: 10, marginBottom: 8 },
-  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: C.accent },
-  tick: { position: 'absolute', top: -3, width: 2, height: 12 },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
-  chip: { backgroundColor: C.chip, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1, fontSize: 11 },
-  metaTxt: { color: C.muted, fontSize: 11 },
-  note: { color: C.muted, fontSize: 12, marginTop: 5, lineHeight: 17 },
-  legend: { flexDirection: 'row', gap: 14, padding: 12, paddingHorizontal: 16, backgroundColor: C.panel2 },
-  legendTxt: { color: C.accent, fontSize: 10.5 },
-  li: {
-    color: C.text, fontSize: 13.5, lineHeight: 19, paddingHorizontal: 16,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
-  },
-  hyp: {
-    flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: C.line,
-  },
+  scroll: { padding: 15, gap: 18 },
+  stack: { gap: 18 },
+  section: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
+  h2row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.panel2, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  h2: { color: C.muted, fontSize: 10, fontWeight: '700', letterSpacing: 2.2, fontFamily: 'Menlo' },
+  h2rule: { flex: 1, height: 1, backgroundColor: C.line },
+  h2extra: { color: C.accent, fontSize: 10, letterSpacing: 0.6 },
+  // gauge
+  gauge: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 18 },
+  gtop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 13 },
+  glabel: { fontSize: 9.5, letterSpacing: 2, color: C.muted },
+  gstate: { fontSize: 24, fontWeight: '700' },
+  meter: { flexDirection: 'row', gap: 3, height: 9, marginBottom: 7, position: 'relative' },
+  zone: { flex: 1, borderRadius: 2 },
+  needle: { position: 'absolute', top: -4, width: 12, height: 17, backgroundColor: C.accent, borderRadius: 2, borderWidth: 2, borderColor: C.panel },
+  gscale: { flexDirection: 'row', justifyContent: 'space-between' },
+  gscaleTxt: { fontSize: 8, letterSpacing: 0.5, color: C.muted },
+  gline: { color: C.text, fontSize: 14.5, lineHeight: 22, marginTop: -8, paddingHorizontal: 4 },
+  // plain lead
+  plainLead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 6, padding: 14 },
+  plainLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: C.accent },
+  plainP: { color: C.text, fontSize: 14.5, lineHeight: 22, marginTop: 6 },
+  // brief / story
+  briefhead: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 4, paddingTop: 2 },
+  briefT: { fontSize: 11, fontWeight: '700', letterSpacing: 2.4, color: C.muted },
+  briefD: { marginLeft: 'auto', fontSize: 10, color: C.accent, letterSpacing: 0.6 },
+  storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
+  spine: { position: 'absolute', left: 12, top: 22, bottom: 20, width: 2, borderRadius: 2, backgroundColor: C.accentDim },
+  ktag: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.8, color: C.muted, marginBottom: 11 },
+  storyH3: { fontSize: 22, lineHeight: 27, fontWeight: '700', color: C.text, marginBottom: 12 },
+  storyP: { fontSize: 15, lineHeight: 25, color: C.text },
+  ctxbtn: { marginTop: 15, alignSelf: 'flex-start', borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
+  ctxbtnTxt: { color: C.accent, fontSize: 10.5, fontWeight: '600', letterSpacing: 1.4 },
+  ctxpanel: { marginTop: 14, padding: 15, backgroundColor: C.panel2, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 7 },
+  ctxlbl: { fontSize: 9.5, letterSpacing: 1.6, color: C.muted, marginBottom: 8 },
+  ctxP: { fontSize: 14, lineHeight: 24, color: C.text },
+  li: { color: C.text, fontSize: 13.5, lineHeight: 19, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line },
+  foot: { color: C.muted, fontSize: 11, lineHeight: 17, paddingHorizontal: 6 },
+  // tab intro
+  tabintro: { paddingHorizontal: 6 },
+  tabintroP: { color: C.muted, fontSize: 13.5, lineHeight: 22 },
+  // calibration
+  cal: { padding: 16 },
+  calbig: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
+  calnum: { fontSize: 34, fontWeight: '800', color: C.accent },
+  callab: { fontSize: 9.5, letterSpacing: 1.4, color: C.muted },
+  calsay: { fontSize: 12.5, color: C.muted, lineHeight: 19, marginTop: 10, marginBottom: 12 },
+  calstrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  caldot: { width: 11, height: 11, borderRadius: 6 },
+  caldotHit: { backgroundColor: C.calm },
+  caldotMiss: { backgroundColor: C.crit },
+  caldotPend: { borderWidth: 1.5, borderColor: C.accentDim },
+  // hypotheses
+  hyp: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   hypP: { color: C.accent, fontWeight: '700', minWidth: 44, fontSize: 15 },
   hypName: { color: C.text, fontWeight: '600', fontSize: 13.5 },
   hypD: { color: C.muted, fontSize: 12.5, marginTop: 3, lineHeight: 18 },
+  // predictions
+  pred: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.line },
+  predtop: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+  predq: { flex: 1, fontSize: 14.5, fontWeight: '600', color: C.text, lineHeight: 19 },
+  predp: { fontSize: 21, fontWeight: '800', color: C.accent },
+  predpS: { fontSize: 12, fontWeight: '400', color: C.muted },
+  predmeta: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 4 },
+  chip: { backgroundColor: C.chip, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1, fontSize: 11 },
+  predmetaTxt: { color: C.muted, fontSize: 11 },
+  prednote: { color: C.muted, fontSize: 12.5, marginTop: 7, lineHeight: 19 },
+  bar: { height: 5, borderRadius: 3, backgroundColor: C.barBg, marginTop: 11, marginBottom: 8 },
+  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: C.accent },
+  tick: { position: 'absolute', top: -3, width: 2, height: 11, backgroundColor: C.muted },
+  // actors
+  actor: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  actorName: { color: C.text, fontSize: 16, fontWeight: '700' },
+  actorRole: { color: C.accent, fontSize: 10, letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
+  actorRow: { color: C.text, fontSize: 12.5, lineHeight: 18, marginVertical: 2 },
+  actorK: { color: C.muted, fontWeight: '600' },
+  // prose
   prose: { paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4 },
-  h3: { color: C.text, fontSize: 14.5, fontWeight: '700', marginTop: 12, marginBottom: 4 },
+  h3: { color: C.text, fontSize: 19, fontWeight: '700', marginTop: 12, marginBottom: 6 },
   kicker: { color: C.muted, fontSize: 11, letterSpacing: 2.5, marginTop: 14, marginBottom: 3 },
-  p: { color: C.text, fontSize: 14, lineHeight: 21, marginVertical: 5 },
-  foot: { color: C.muted, fontSize: 11, lineHeight: 17, paddingHorizontal: 6 },
-  navWrap: { backgroundColor: C.panel2, borderTopWidth: 1, borderTopColor: C.line },
-  nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 8, paddingHorizontal: 4 },
-  navBtn: { paddingVertical: 6, paddingHorizontal: 9, borderRadius: 4 },
-  navBtnActive: { backgroundColor: C.chip },
-  navTxt: { color: C.muted, fontSize: 10.5, letterSpacing: 1.4 },
-  mapBox: { height: 340, backgroundColor: C.panel2 },
-  map: { flex: 1 },
-  pin: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink },
-  mapCallout: { padding: 14, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.panel2 },
-  calloutH: { fontWeight: '700', fontSize: 14, marginBottom: 3 },
-  calloutT: { color: C.text, fontSize: 13.5, lineHeight: 19 },
+  p: { color: C.text, fontSize: 14, lineHeight: 22, marginVertical: 5 },
+  // gate
   gateScroll: { padding: 26, paddingTop: 60, flexGrow: 1, justifyContent: 'center' },
-  gateH: { color: C.text, fontSize: 20, fontWeight: '800', marginBottom: 14 },
+  gateH: { color: C.text, fontSize: 22, fontWeight: '700', marginBottom: 14 },
   gateP: { color: C.muted, fontSize: 14.5, lineHeight: 22, marginBottom: 12 },
   gateLinks: { flexDirection: 'row', gap: 16, marginTop: 8, marginBottom: 26 },
   link: { color: C.accent, fontSize: 13.5, textDecorationLine: 'underline' },
@@ -518,21 +484,10 @@ const s = StyleSheet.create({
   legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 16 },
   legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
   legalDot: { color: C.line },
-  track: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 15 },
-  brierBox: { alignItems: 'center', minWidth: 74 },
-  brierBig: { color: C.accent, fontSize: 30, fontWeight: '800' },
-  brierUnit: { color: C.muted, fontSize: 13, fontWeight: '400' },
-  brierLab: { color: C.muted, fontSize: 9, letterSpacing: 2 },
-  trackSay: { flex: 1, color: C.muted, fontSize: 12.5, lineHeight: 18 },
-  fg: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  fgName: { color: C.text, fontSize: 14, fontWeight: '700' },
-  fgNum: { color: C.accent, fontWeight: '700' },
-  fgDef: { color: C.text, fontSize: 13, marginTop: 4, marginBottom: 6, lineHeight: 18 },
-  fgEx: { color: C.muted, fontSize: 12, marginBottom: 3, lineHeight: 17 },
-  fgTell: { color: C.calm, fontSize: 12.5, lineHeight: 18 },
-  actor: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  actorName: { color: C.text, fontSize: 14, fontWeight: '700' },
-  actorRole: { color: C.accent, fontSize: 10, letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
-  actorRow: { color: C.text, fontSize: 12.5, lineHeight: 18, marginVertical: 2 },
-  actorK: { color: C.muted, fontWeight: '600' },
+  // nav
+  navWrap: { backgroundColor: C.panel2, borderTopWidth: 1, borderTopColor: C.line },
+  nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 9, paddingHorizontal: 4 },
+  navBtn: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10 },
+  navTxt: { color: C.muted, fontSize: 11, letterSpacing: 1.4 },
+  navUnder: { marginTop: 5, width: 16, height: 2, borderRadius: 2, backgroundColor: C.accent },
 });
