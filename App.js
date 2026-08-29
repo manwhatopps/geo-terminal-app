@@ -23,6 +23,20 @@ const C = {
   barBg: '#1B2630', chip: '#1A242E',
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
+const FIELD_GUIDE = [
+  { n: 'Manufactured urgency', d: 'A fake deadline or scarcity to kill your deliberation.', e: '"Economic D-Day," "effective immediately" tariff framing.', t: 'The deadline benefits the persuader, not you. Ask: what actually breaks if I wait a day?' },
+  { n: 'Firehose of falsehood', d: 'High-volume, contradictory claims that make verification collapse.', e: "State bot networks driving most of a wartime hashtag's traffic.", t: "Volume + speed + claims that don't even agree with each other. The goal is exhaustion, not consistency." },
+  { n: 'Atrocity framing', d: "Overwhelming, often-unverified images of the enemy's cruelty to short-circuit judgment.", e: 'AI-generated "atrocity" videos racking up hundreds of millions of views.', t: 'Unsourced, undated, rage-optimized visuals. Reverse-image-search before you believe or share.' },
+  { n: 'The authority costume', d: 'Borrowed credibility from a uniform, title, or "studies show."', e: 'Doctor-endorsed cigarettes; "experts say" with no expert named.', t: "The credential is displayed; the evidence isn't. Ask which study, by whom." },
+  { n: 'Manufactured consensus', d: '"Everyone believes this" — via bots, bought followers, or trending metrics.', e: 'Astroturfed hashtags; identical phrasing from new accounts.', t: 'Engagement with no organic origin. Who actually started it?' },
+  { n: 'In-group framing', d: 'Binding a claim to your identity so rejecting it feels like betrayal.', e: '"Real patriots know…"; identity-coded issue messaging.', t: "It's about belonging, not evidence. You feel tribal before you feel convinced." },
+  { n: 'Anchoring the debate', d: 'An extreme opening number so the "compromise" lands where they wanted.', e: 'A shock demand, then a "reasonable" retreat to the real target.', t: 'The first ask is outrageous on purpose. Negotiate from your own anchor, not theirs.' },
+  { n: 'Loaded labels', d: 'Renaming something to smuggle a verdict inside a neutral-sounding noun.', e: '"Liberation Day" tariffs; "collateral damage."', t: 'Strip the adjective and re-describe the plain event.' },
+  { n: 'Sanewashing', d: 'Smoothing incoherent or extreme statements into reasonable-sounding paraphrase.', e: 'Rambling remarks rendered as tidy policy in the write-up.', t: 'The paraphrase is more coherent than the transcript. Go read the primary quote.' },
+  { n: 'Nutpicking', d: 'Elevating a fringe crank as representative of a whole group.', e: 'A 12-follower account cited as "what they all believe."', t: 'The "representative" example is conveniently the worst one. Check its real reach.' },
+  { n: 'The consistency trap', d: 'A tiny engineered "yes" that makes the big "yes" feel obligatory.', e: 'Sign the petition → donate → volunteer ladders.', t: 'Each step cites your last step as the reason. The escalation is doing the work.' },
+  { n: 'The denied control', d: "An outcome with no counterfactual, so you can't judge the cause.", e: '"Since the policy, X improved" — with no baseline shown.', t: 'Ask "compared to what?" No control group, no claim.' },
+];
 const DARK_MAP = [
   { elementType: 'geometry', stylers: [{ color: '#0F161D' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#7E8C96' }] },
@@ -84,6 +98,27 @@ function Board({ data }) {
         <Text style={[s.riskState, MONO, { color: rc }]}>RISK: {data.risk.state}</Text>
         <Text style={s.riskLine}>{data.risk.line}</Text>
       </View>
+      {data.track && (
+        <Section title="Track record">
+          <View style={s.track}>
+            <View style={s.brierBox}>
+              {data.track.resolved > 0 ? (
+                <>
+                  <Text style={[s.brierBig, MONO]}>{data.track.brier != null ? data.track.brier.toFixed(3) : '—'}</Text>
+                  <Text style={[s.brierLab, MONO]}>BRIER</Text>
+                </>
+              ) : (
+                <Text style={[s.brierBig, MONO]}>0<Text style={s.brierUnit}> resolved</Text></Text>
+              )}
+            </View>
+            <Text style={s.trackSay}>
+              {data.track.resolved > 0
+                ? `${data.track.resolved} forecast${data.track.resolved > 1 ? 's' : ''} resolved and scored. Lower Brier is better; 0.25 is a coin-flip. ${data.track.note || ''}`
+                : data.track.note}
+            </Text>
+          </View>
+        </Section>
+      )}
       <Section title="Forecast board" extra={`${data.forecasts.length} open`}>
         {data.forecasts.map((f) => <Forecast key={f.id} f={f} />)}
         <View style={s.legend}>
@@ -207,11 +242,11 @@ function Lab({ data }) {
   );
 }
 
-function Scholar({ data }) {
+function Learn({ data }) {
   const lec = data.lecture;
   return (
     <View style={s.stack}>
-      <Section title="Lecture" extra={lec.date}>
+      <Section title="This week's lecture" extra={lec.date}>
         <View style={s.prose}>
           <Text style={s.h3}>{lec.title}</Text>
           {lec.sections.map((part, i) => (
@@ -222,9 +257,23 @@ function Scholar({ data }) {
           ))}
         </View>
       </Section>
+      <Section title="Spot the technique" extra={`${FIELD_GUIDE.length} tells`}>
+        <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 10 }]}>
+          How you're persuaded, and how to catch it. The tell is the part that protects you.
+        </Text>
+        {FIELD_GUIDE.map((g, i) => (
+          <View key={i} style={s.fg}>
+            <Text style={s.fgName}><Text style={[s.fgNum, MONO]}>{i + 1} </Text>{g.n}</Text>
+            <Text style={s.fgDef}>{g.d}</Text>
+            <Text style={s.fgEx}>e.g. {g.e}</Text>
+            <Text style={s.fgTell}><Text style={{ fontWeight: '700' }}>Tell — </Text>{g.t}</Text>
+          </View>
+        ))}
+      </Section>
       <Text style={s.foot}>
-        New lecture every Saturday — one theme from the week, taught through
-        50–500 years of history, with competing frameworks in tension.
+        New lecture every Saturday. The field guide draws on the political-psychology canon —
+        and deliberately omits the debunked studies (retracted priming work, failed replications),
+        because a guide to being fooled can't itself be fooled.
       </Text>
     </View>
   );
@@ -235,7 +284,7 @@ const TABS = [
   { key: 'map', label: 'MAP', C: ConflictMap },
   { key: 'brief', label: 'BRIEF', C: Brief },
   { key: 'lab', label: 'LAB', C: Lab },
-  { key: 'scholar', label: 'SCHOLAR', C: Scholar },
+  { key: 'learn', label: 'LEARN', C: Learn },
 ];
 
 function DisclaimerGate({ onAccept }) {
@@ -450,4 +499,16 @@ const s = StyleSheet.create({
   legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 16 },
   legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
   legalDot: { color: C.line },
+  track: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 15 },
+  brierBox: { alignItems: 'center', minWidth: 74 },
+  brierBig: { color: C.accent, fontSize: 30, fontWeight: '800' },
+  brierUnit: { color: C.muted, fontSize: 13, fontWeight: '400' },
+  brierLab: { color: C.muted, fontSize: 9, letterSpacing: 2 },
+  trackSay: { flex: 1, color: C.muted, fontSize: 12.5, lineHeight: 18 },
+  fg: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  fgName: { color: C.text, fontSize: 14, fontWeight: '700' },
+  fgNum: { color: C.accent, fontWeight: '700' },
+  fgDef: { color: C.text, fontSize: 13, marginTop: 4, marginBottom: 6, lineHeight: 18 },
+  fgEx: { color: C.muted, fontSize: 12, marginBottom: 3, lineHeight: 17 },
+  fgTell: { color: C.calm, fontSize: 12.5, lineHeight: 18 },
 });
