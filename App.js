@@ -18,12 +18,13 @@ const LEGAL = {
   disclaimer: 'https://manwhatopps.github.io/geo-terminal-feed/disclaimer.html',
 };
 
-// "Analyst's Desk in a Situation Room" — nautical-chart navy, document-paper cards, cyan = instrument light.
+// SIGINT terminal — phosphor green on near-black, amber for warnings, typewriter headlines.
+// (Mirrors dashboard.html's dark :root; the old navy "Situation Room" palette is retired.)
 const C = {
-  ink: '#0B1220', panel: '#20263A', panel2: '#141D2E', line: '#2A3A57',
-  text: '#E8EDF5', muted: '#93A2BE', accent: '#3FE0D0', accentDim: '#0E8C86',
-  calm: '#5B9E7A', elev: '#E0B24A', high: '#E08A3C', crit: '#E5544E',
-  barBg: '#141D2E', chip: '#26324E',
+  ink: '#040A06', panel: '#0B1710', panel2: '#071009', line: '#1C3B27',
+  text: '#C9F2D2', muted: '#63906F', accent: '#3BF57E', accentDim: '#1E9A4E',
+  calm: '#3BAB6E', elev: '#FFB000', high: '#FF7A1A', crit: '#FF4545',
+  barBg: '#071009', chip: '#122A1B',
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
 const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
@@ -95,7 +96,7 @@ const VERDICT_META = {
   false: { c: C.crit, label: 'FALSE' },
 };
 const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
-const SERIF = { fontFamily: 'Georgia' };
+const SERIF = { fontFamily: 'Courier New', fontWeight: '700' };  // typewriter dossier headlines
 
 // Feed strings carry HTML entities (web decodes via innerHTML; RN <Text> shows them literally).
 function decode(s) {
@@ -276,6 +277,13 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls 
       ) : null}
     </View>
   );
+}
+
+// terminal cursor after the wordmark — the little tell that the desk is live
+function BlinkCursor() {
+  const [on, setOn] = useState(true);
+  useEffect(() => { const id = setInterval(() => setOn((v) => !v), 550); return () => clearInterval(id); }, []);
+  return <Text style={{ color: C.accent, opacity: on ? 1 : 0 }}>▮</Text>;
 }
 
 const SPARK = '▁▂▃▄▅▆▇█';
@@ -901,9 +909,10 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={s.root} edges={['top']}>
         <StatusBar style="light" />
+        <Text style={[s.classbar, MONO]}>UNCLASSIFIED // OPEN SOURCE // ANALYSIS · NOT ADVICE</Text>
         <View style={s.header}>
           <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
-          <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
+          <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL<BlinkCursor /></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
         <ModeToggle level={level} onChange={setMode} />
@@ -946,7 +955,8 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
   header: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
-  wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 14 },
+  wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 14, textShadowColor: C.accent, textShadowRadius: 8 },
+  classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
   stamp: { color: C.muted, fontSize: 10, marginLeft: 'auto', letterSpacing: 0.5 },
   levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel2 },
   levelLbl: { color: C.muted, fontSize: 9, letterSpacing: 1.5 },
