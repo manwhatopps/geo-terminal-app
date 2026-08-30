@@ -946,6 +946,7 @@ function ConspiracyTab({ data }) {
         pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
         active={region} onPick={setRegion} />
       <Watchtower items={specs} />
+      <Watchlist tripwires={data.tripwires} />
       {hyps.length ? (
         <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
           {hyps.map((h, i) => (
@@ -984,6 +985,112 @@ function ConspiracyTab({ data }) {
   );
 }
 
+// ── COUNTRY DOSSIERS — flag chips, tap to open the dossier (mockup's country page, inline) ──
+function Dossiers({ items }) {
+  const [sel, setSel] = useState(null);
+  if (!items || !items.length) return null;
+  const d = sel != null ? items[sel] : null;
+  const tc = d ? (riskColor[(d.threat || {}).level] || C.elev) : null;
+  const G = [['government', 'GOVERNMENT'], ['leader', 'LEADER'], ['population', 'POPULATION'], ['gdp', 'GDP'], ['military', 'MILITARY'], ['influence', 'INFLUENCE']];
+  return (
+    <Section title="Country dossiers" extra={items.length + ' tracked'}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+        {items.map((it, i) => (
+          <Pressable key={i} onPress={() => setSel(sel === i ? null : i)} style={[s.rchip, sel === i && s.rchipOn]}>
+            <Text style={[s.rchipTxt, MONO, sel === i && { color: C.text, fontWeight: '700' }]}>{(it.flag || '') + ' ' + it.name}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {d ? (
+        <View style={s.storycard}>
+          <Text style={[s.storyH3, SERIF]}>{(d.flag || '') + ' ' + decode(d.name)}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+            {G.map(([k, lab]) => (d.glance || {})[k] ? (
+              <View key={k} style={{ width: '50%', paddingVertical: 5, paddingRight: 8 }}>
+                <Text style={[MONO, { color: C.muted, fontSize: 8.5, letterSpacing: 1 }]}>{lab}</Text>
+                <Text style={{ color: C.text, fontSize: 12.5, marginTop: 1 }}>{decode(d.glance[k])}</Text>
+              </View>
+            ) : null)}
+          </View>
+          <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>INTEL SUMMARY</Text>
+          <Text style={s.storyP}>{decode(d.summary || '')}</Text>
+          {d.threat ? (
+            <>
+              <Text style={[s.ctxlbl, MONO, { marginTop: 8, color: tc }]}>{'THREAT ASSESSMENT · ' + String(d.threat.level || '').toUpperCase()}</Text>
+              {(d.threat.concerns || []).map((cn, i) => (
+                <Text key={i} style={s.li}><Text style={{ color: tc }}>› </Text>{decode(cn)}</Text>
+              ))}
+            </>
+          ) : null}
+          {d.updated ? <Text style={[MONO, { color: C.muted, fontSize: 9, marginTop: 6 }]}>{'UPDATED ' + d.updated}</Text> : null}
+        </View>
+      ) : null}
+    </Section>
+  );
+}
+
+// ── SCENARIO EXPLORER — what-if branches on the staged-forecast discipline ──
+function Scenarios({ items }) {
+  const [sel, setSel] = useState(null);
+  if (!items || !items.length) return null;
+  return (
+    <Section title="Scenario explorer" extra={items.length + ' branches'}>
+      {items.map((sc, i) => (
+        <View key={i} style={s.storycard}>
+          <Pressable onPress={() => setSel(sel === i ? null : i)}>
+            <Text style={[s.storyH3, SERIF, { fontSize: 16, color: C.accent }]}>{decode(sc.q)}</Text>
+          </Pressable>
+          {sel === i ? (
+            <>
+              <Text style={s.storyP}>{decode(sc.read || '')}</Text>
+              {(sc.stages || []).map((st, j) => (
+                <View key={j} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
+                  <Text style={[MONO, { color: C.accent, fontSize: 12, width: 44 }]}>{(st.p != null ? st.p + '%' : '—')}</Text>
+                  <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }}>{decode(st.s)}</Text>
+                </View>
+              ))}
+              {sc.falsifier ? (
+                <Text style={[s.li, { marginTop: 4 }]}>
+                  <Text style={{ color: C.crit }}>› </Text>
+                  <Text style={[MONO, { fontSize: 10, color: C.muted }]}>{'KILLS THE BRANCH: '}</Text>
+                  {decode(sc.falsifier)}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>TAP TO EXPLORE ›</Text>
+          )}
+        </View>
+      ))}
+      <Text style={s.foot}>Branches, not prophecies — every stage carries a probability and a falsifier; most branches fizzle early.</Text>
+    </Section>
+  );
+}
+
+// ── WATCHLIST — the tripwires: what is armed, what fired (mockup's alerts page) ──
+function Watchlist({ tripwires }) {
+  const tw = tripwires || {};
+  const armed = tw.armed || [], fired = tw.fired || [];
+  if (!armed.length && !fired.length) return null;
+  return (
+    <Section title="Watchlist" extra={armed.length + ' armed'}>
+      {fired.map((f, i) => (
+        <View key={'f' + i} style={{ flexDirection: 'row', paddingVertical: 5 }}>
+          <Text style={[MONO, { color: C.crit, fontSize: 9, width: 52, letterSpacing: 1 }]}>FIRED</Text>
+          <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }}>{decode(f)}</Text>
+        </View>
+      ))}
+      {armed.map((a, i) => (
+        <View key={'a' + i} style={{ flexDirection: 'row', paddingVertical: 5 }}>
+          <Text style={[MONO, { color: C.elev, fontSize: 9, width: 52, letterSpacing: 1 }]}>ARMED</Text>
+          <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }}>{decode(a)}</Text>
+        </View>
+      ))}
+      <Text style={s.foot}>Named thresholds checked every sweep — non-fires are logged deliberately so silence is scoreable.</Text>
+    </Section>
+  );
+}
+
 function StrategyTab({ data, easy }) {
   const lec = data.lecture;
   const [region, setRegion] = useState('ALL');
@@ -1011,6 +1118,8 @@ function StrategyTab({ data, easy }) {
           ))}
         </Section>
       ) : null}
+      <Dossiers items={data.dossiers} />
+      <Scenarios items={data.scenarios} />
       {lec ? (
         <Section title="This week's deep dive" extra={lec.date}>
           <View style={s.prose}>
