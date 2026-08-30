@@ -25,6 +25,14 @@ const C = {
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
 const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
+// DECODE tab verdicts. Reuses the risk palette so a verdict badge reads on the same scale as the
+// threat gauge: green = the claim survives, red = it does not. Mirrors dashboard.html's VERDICT_META.
+const VERDICT_META = {
+  true: { c: C.calm, label: 'TRUE' },
+  partly: { c: C.elev, label: 'PARTLY TRUE' },
+  framing: { c: C.high, label: 'FRAMING' },
+  false: { c: C.crit, label: 'FALSE' },
+};
 const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
 const SERIF = { fontFamily: 'Georgia' };
 
@@ -63,6 +71,7 @@ const TABS = [
   { key: 'news', label: 'NEWS' },
   { key: 'conspiracy', label: 'CONSPIRACY' },
   { key: 'strategy', label: 'STRATEGY' },
+  { key: 'decode', label: 'DECODE' },
 ];
 
 function Section({ title, extra, children }) {
@@ -146,6 +155,110 @@ function StoryCard({ item, simpleText, easy, deep }) {
           )}
         </>
       ) : null}
+    </View>
+  );
+}
+
+// ── DECODE — a claim, interrogated: announced vs binding, and who gains vs who pays ──
+// NOTE: `decode(...)` here is the HTML-entity helper defined above, unrelated to the DECODE tab.
+function DecodeCard({ item, easy, deep }) {
+  const [open, setOpen] = useState(deep);
+  const vm = VERDICT_META[item.verdict] || VERDICT_META.partly;
+  const angles = item.angles || [];
+  const watch = item.watch || [];
+  const clock = item.clock || {};
+  const buckets = [['0–90 DAYS', clock.d90], ['6–18 MONTHS', clock.m18], ['3–7 YEARS', clock.y7]].filter(([, v]) => v);
+
+  return (
+    <View style={s.storycard}>
+      <View style={[s.spine, { backgroundColor: vm.c }]} />
+      <View style={s.cardmeta}>
+        <Text style={[s.ktag, MONO, { marginBottom: 0, color: vm.c, borderColor: vm.c }]}>{vm.label}</Text>
+        {timeLabel(item.ts) ? <Text style={[s.stime, MONO]}>{timeLabel(item.ts)}</Text> : null}
+      </View>
+      <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.claim)}</Text>
+      {item.source ? <Text style={[s.stime, MONO, { marginBottom: 6 }]}>{decode(item.source).toUpperCase()}</Text> : null}
+
+      {easy ? (
+        <Text style={[s.storyP, { fontSize: 16.5, lineHeight: 27 }]}>{decode(item.easy || item.verdictNote)}</Text>
+      ) : (
+        <>
+          {item.verdictNote ? <Text style={s.storyP}>{decode(item.verdictNote)}</Text> : null}
+          <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+            <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'DECODE THE CLAIM'}</Text>
+          </Pressable>
+          {open && (
+            <View style={s.ctxpanel}>
+              {item.reality ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO]}>WHAT IS ACTUALLY TRUE TODAY</Text>
+                  <Text style={s.ctxP}>{decode(item.reality)}</Text>
+                </>
+              ) : null}
+              {item.aspiration ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO]}>WHAT IS ASPIRATIONAL OR UNVERIFIED</Text>
+                  <Text style={s.ctxP}>{decode(item.aspiration)}</Text>
+                </>
+              ) : null}
+              {angles.length ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO]}>WHO GAINS, WHO PAYS</Text>
+                  {angles.map((a, i) => (
+                    <Text key={i} style={s.li}>
+                      <Text style={{ color: C.accent }}>› </Text>
+                      <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
+                      {' — ' + decode(a.effect)}
+                    </Text>
+                  ))}
+                </>
+              ) : null}
+              {buckets.length ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO]}>ON THE CLOCK</Text>
+                  {buckets.map(([lab, txt], i) => (
+                    <Text key={i} style={s.li}>
+                      <Text style={{ color: C.accent }}>› </Text>
+                      <Text style={[MONO, { fontWeight: '700' }]}>{lab}</Text>
+                      {' — ' + decode(txt)}
+                    </Text>
+                  ))}
+                </>
+              ) : null}
+              {watch.length ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO]}>WHAT WOULD CONFIRM OR KILL THIS</Text>
+                  {watch.map((w, i) => (
+                    <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>
+                  ))}
+                </>
+              ) : null}
+            </View>
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+function DecodeTab({ data, easy, deep }) {
+  const items = data.decode || [];
+  return (
+    <View style={s.stack}>
+      <View style={s.tabintro}>
+        <Text style={s.tabintroP}>
+          When someone important announces something big, this tab checks it. Was it actually signed, or just said?
+          How long would it really take? And who does it help — and who ends up paying?
+        </Text>
+      </View>
+      <View style={s.briefhead}>
+        <Text style={[s.briefT, MONO]}>CLAIMS DECODED</Text>
+        <Text style={[s.briefD, MONO]}>{data.updated}</Text>
+      </View>
+      {items.length
+        ? items.map((d, i) => <DecodeCard key={i} item={d} easy={easy} deep={deep} />)
+        : <Text style={s.foot}>No claims decoded yet — check back after the next run.</Text>}
+      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
 }
@@ -423,6 +536,7 @@ export default function App() {
             {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
+            {tab === 'decode' && <DecodeTab data={data} easy={easy} deep={deep} />}
             <LegalFooter />
           </ScrollView>
         )}
