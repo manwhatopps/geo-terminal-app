@@ -280,6 +280,20 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls 
   );
 }
 
+// ── STAT STRIP — every category opens with numbers, never a paragraph ──
+function StatStrip({ stats }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+      {stats.map(([num, label], i) => (
+        <View key={i} style={{ flex: 1, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, paddingVertical: 8, alignItems: 'center' }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 16, fontWeight: '700' }]} numberOfLines={1}>{String(num)}</Text>
+          <Text style={[MONO, { color: C.muted, fontSize: 8.5, letterSpacing: 0.8, marginTop: 2 }]} numberOfLines={1}>{label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ── FILTERS live behind a dropdown, not a banner — tap ⌕ to reveal the chips ──
 function FilterDrop({ pairs, active, onPick }) {
   const [open, setOpen] = useState(active !== 'ALL');
@@ -446,10 +460,13 @@ function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
             </View>
           </>
         ) : (
-          <>
-            <Text style={[s.ctxlbl, MONO]}>TAP A POINT FOR THE ANALYST'S READ</Text>
-            <Text style={s.ctxP}>Each dot is a live pressure point from today's brief — amber elevated, orange high, red critical. Analyst-geocoded, not a sensor feed; it moves when the brief moves.</Text>
-          </>
+          <Text style={[s.ctxlbl, MONO]}>
+            {'TAP A POINT FOR THE READ · '}
+            <Text style={{ color: C.elev }}>● ELEV </Text>
+            <Text style={{ color: C.high }}>● HIGH </Text>
+            <Text style={{ color: C.crit }}>● CRIT </Text>
+            <Text style={{ color: C.muted }}>◌ SEISMIC</Text>
+          </Text>
         )}
       </View>
     </View>
@@ -615,12 +632,11 @@ function DecodeTab({ data, easy, deep, goTab }) {
   };
   return (
     <View style={s.stack}>
-      <View style={s.tabintro}>
-        <Text style={s.tabintroP}>
-          When someone important announces something big, this tab checks it. Was it actually signed, or just said?
-          How long would it really take? And who does it help — and who ends up paying?
-        </Text>
-      </View>
+      <StatStrip stats={[
+        [items.length, 'CLAIMS'],
+        [(vcounts.framing || 0) + (vcounts.false || 0), 'FRAMING/FALSE'],
+        [(vcounts.true || 0) + (vcounts.partly || 0), 'TRUE/PARTLY'],
+      ]} />
       <View style={s.briefhead}>
         <Text style={[s.briefT, MONO]}>CLAIMS DECODED</Text>
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
@@ -693,9 +709,11 @@ function NewsTab({ data, easy, deep, goTab, goBoard }) {
 
   return (
     <View style={s.stack}>
-      <View style={s.tabintro}>
-        <Text style={s.tabintroP}>Today's wire, deciphered — each story with the mechanism underneath it, not just the headline.</Text>
-      </View>
+      <StatStrip stats={[
+        [(data.brief || []).length, 'STORIES'],
+        [regions.length, 'THEATERS'],
+        [(data.updated || '').split(' ')[1] || '—', 'UPDATED'],
+      ]} />
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
         <Text style={[s.briefT, MONO]}>LATEST HEADLINES</Text>
@@ -755,11 +773,14 @@ function ConspiracyTab({ data }) {
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
+  const movedN = (data.forecasts || []).filter((f) => f.prev != null && f.p !== f.prev).length;
   return (
     <View style={s.stack}>
-      <View style={s.tabintro}>
-        <Text style={s.tabintroP}>What we think happens next — falsifiable predictions and hidden-strategy hypotheses. The fun part, and the honest one: every call is scored against reality, misses included.</Text>
-      </View>
+      <StatStrip stats={[
+        [(data.forecasts || []).length, 'LIVE CALLS'],
+        [movedN, 'MOVED TODAY'],
+        [(data.hypotheses || []).length, 'HYPOTHESES'],
+      ]} />
       <CalibrationTrack track={data.track} forecasts={data.forecasts} />
       <FilterDrop
         pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
@@ -808,9 +829,11 @@ function StrategyTab({ data, easy }) {
   const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
-      <View style={s.tabintro}>
-        <Text style={s.tabintroP}>The strategy desk — world events read from inside each capital, not from a podium. Who actually decides, what they really want, and what it means from their own perspective.</Text>
-      </View>
+      <StatStrip stats={[
+        [(data.actors || []).length, 'PLAYERS'],
+        [data.lecture ? (data.lecture.date || 'LIVE') : '—', 'DEEP DIVE'],
+        [data.plumbing ? (data.plumbing.stage || 'LIVE') : '—', 'ECON READ'],
+      ]} />
       {data.actors && data.actors.length ? (
         <Section title="The players" extra={actors.length + ' tracked'}>
           <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
