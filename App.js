@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Circle, Line, Path as SvgPath, Rect } from 'react-native-svg';
+import { LAND_PATH } from './worldmap';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
 const ACK_KEY = 'geo-disclaimer-ack-v1';
@@ -155,6 +157,74 @@ function StoryCard({ item, simpleText, easy, deep }) {
           )}
         </>
       ) : null}
+    </View>
+  );
+}
+
+// ── THE BOARD — the situation-room wall map. Tap a point, get the read. Learning is invited
+// (every dot is a question), never forced (the brief below works without touching it). ──
+function WorldMap({ events }) {
+  const [sel, setSel] = useState(null);
+  if (!events || !events.length) return null;
+  const X = (lon) => ((lon + 180) / 360) * 1000;
+  const Y = (lat) => ((90 - lat) / 180) * 500;
+  const grid = [];
+  for (let lon = -150; lon <= 150; lon += 30) grid.push({ x1: X(lon), y1: 0, x2: X(lon), y2: 500 });
+  for (let lat = -60; lat <= 60; lat += 30) grid.push({ x1: 0, y1: Y(lat), x2: 1000, y2: Y(lat) });
+  const e = sel != null ? events[sel] : null;
+  const selC = e ? (riskColor[e.sev] || C.elev) : null;
+  const coords = e
+    ? (e.lat >= 0 ? e.lat.toFixed(2) + 'N' : (-e.lat).toFixed(2) + 'S') + ' ' +
+      (e.lon >= 0 ? e.lon.toFixed(2) + 'E' : (-e.lon).toFixed(2) + 'W')
+    : '';
+  return (
+    <View style={s.section}>
+      <View style={s.h2row}>
+        <Text style={s.h2}>THE BOARD</Text>
+        <View style={s.h2rule} />
+        <Text style={[s.h2extra, MONO]}>{events.length + ' ACTIVE'}</Text>
+      </View>
+      <View style={{ backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line }}>
+        <Svg viewBox="0 0 1000 500" width="100%" height={undefined} style={{ aspectRatio: 2 }}>
+          <Rect x="0" y="0" width="1000" height="500" fill={C.panel2} />
+          {grid.map((g, i) => (
+            <Line key={'g' + i} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke={C.line} strokeWidth="0.4" opacity="0.35" />
+          ))}
+          <SvgPath d={LAND_PATH} fill={C.chip} stroke={C.line} strokeWidth="0.6" />
+          {e ? (
+            <>
+              <Line x1={X(e.lon)} y1="0" x2={X(e.lon)} y2="500" stroke={selC} strokeWidth="0.8" opacity="0.5" strokeDasharray="4 3" />
+              <Line x1="0" y1={Y(e.lat)} x2="1000" y2={Y(e.lat)} stroke={selC} strokeWidth="0.8" opacity="0.5" strokeDasharray="4 3" />
+            </>
+          ) : null}
+          {events.map((ev, i) => {
+            const c = riskColor[ev.sev] || C.elev;
+            return (
+              <Circle
+                key={'e' + i}
+                cx={X(ev.lon)} cy={Y(ev.lat)} r={sel === i ? 7 : 5}
+                fill={c} stroke={C.ink} strokeWidth="0.8" opacity={sel == null || sel === i ? 1 : 0.55}
+                onPress={() => setSel(i)}
+              />
+            );
+          })}
+        </Svg>
+      </View>
+      <View style={s.ctxpanel}>
+        {e ? (
+          <>
+            <Text style={[s.ctxlbl, MONO, { color: selC }]}>
+              {'■ ' + decode(e.label).toUpperCase() + '  · ' + coords + ' · ' + (e.sev || 'elev').toUpperCase()}
+            </Text>
+            <Text style={s.ctxP}>{decode(e.note)}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={[s.ctxlbl, MONO]}>TAP A POINT FOR THE ANALYST'S READ</Text>
+            <Text style={s.ctxP}>Each dot is a live pressure point from today's brief — amber elevated, orange high, red critical. Analyst-geocoded, not a sensor feed; it moves when the brief moves.</Text>
+          </>
+        )}
+      </View>
     </View>
   );
 }
@@ -339,6 +409,7 @@ function NewsTab({ data, easy, deep }) {
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} />
       <Text style={s.gline}>{decode(rline)}</Text>
+      <WorldMap events={data.events} />
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
         <Text style={[s.briefT, MONO]}>LATEST HEADLINES</Text>
