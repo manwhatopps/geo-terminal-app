@@ -22,7 +22,7 @@ const LEGAL = {
 // (Mirrors dashboard.html's dark :root; the old navy "Situation Room" palette is retired.)
 const C = {
   ink: '#040A06', panel: '#0B1710', panel2: '#071009', line: '#1C3B27',
-  text: '#C9F2D2', muted: '#63906F', accent: '#3BF57E', accentDim: '#1E9A4E',
+  text: '#C9F2D2', muted: '#63906F', accent: '#45BE7C', accentDim: '#1F7D4A',
   calm: '#3BAB6E', elev: '#FFB000', high: '#FF7A1A', crit: '#FF4545',
   barBg: '#071009', chip: '#122A1B',
 };
@@ -62,7 +62,7 @@ function ChipBar({ pairs, active, onPick }) {
         const on = val === active;
         return (
           <Pressable key={val} onPress={() => onPick(val)} style={[s.rchip, on && s.rchipOn]}>
-            <Text style={[s.rchipTxt, MONO, on && { color: C.ink, fontWeight: '700' }]}>
+            <Text style={[s.rchipTxt, MONO, on && { color: C.text, fontWeight: '700' }]}>
               {lab + (n != null ? ' ' + n : '')}
             </Text>
           </Pressable>
@@ -201,6 +201,10 @@ function WhyPosture({ text, deep }) {
   );
 }
 
+// The fun scale: same analyst-set level underneath, told the way it feels.
+const KEG = { calm: 'ALL QUIET', elev: 'SPARKS', high: 'FUSE LIT', crit: 'POWDER KEG' };
+const KEG_SCALE = ['QUIET', 'SPARKS', 'FUSE LIT', 'KEG'];
+
 function ThreatGauge({ risk, events, forecasts }) {
   const idx = RISK_LEVELS.indexOf(risk.color);
   const rc = riskColor[risk.color] || C.elev;
@@ -211,8 +215,8 @@ function ThreatGauge({ risk, events, forecasts }) {
   return (
     <View style={s.gauge}>
       <View style={s.gtop}>
-        <Text style={[s.glabel, MONO]}>BOARD PRESSURE</Text>
-        <Text style={[s.gstate, SERIF, { color: rc }]}>{risk.state}</Text>
+        <Text style={[s.glabel, MONO]}>POWDER KEG INDEX</Text>
+        <Text style={[s.gstate, SERIF, { color: rc }]}>{KEG[risk.color] || risk.state}</Text>
       </View>
       <View style={[s.gscale, { marginBottom: 6 }]}>
         <Text style={[s.gscaleTxt, MONO]}>
@@ -232,7 +236,7 @@ function ThreatGauge({ risk, events, forecasts }) {
         <View style={[s.needle, { left: `${((idx + 0.5) / 4) * 100}%`, marginLeft: -6 }]} />
       </View>
       <View style={s.gscale}>
-        {['CALM', 'ELEVATED', 'HIGH', 'CRITICAL'].map((t) => (
+        {KEG_SCALE.map((t) => (
           <Text key={t} style={[s.gscaleTxt, MONO]}>{t}</Text>
         ))}
       </View>
@@ -676,19 +680,20 @@ function HomeTab({ data, easy, deep, goTab, boardSel, setBoardSel }) {
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
       <WhyPosture text={rline} deep={deep} />
-      <ClocksStrip clocks={data.clocks} />
-      <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel}
-        onFilter={goCoverage} goTab={goTab} data={data} />
+      {/* the categories ARE the homepage - options first, board after */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tiles.map(([key, label, n, sub]) => (
           <Pressable key={key} onPress={() => goTab(key)}
-            style={{ width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 12, marginBottom: 10 }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 22, fontWeight: '700' }]}>{n}</Text>
-            <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.5, marginTop: 2 }]}>{label}</Text>
+            style={{ width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 14, marginBottom: 10 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 24, fontWeight: '700' }]}>{n}</Text>
+            <Text style={[MONO, { color: C.text, fontSize: 12, letterSpacing: 1.5, marginTop: 3 }]}>{label + ' ›'}</Text>
             <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{sub}</Text>
           </Pressable>
         ))}
       </View>
+      <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel}
+        onFilter={goCoverage} goTab={goTab} data={data} />
+      <ClocksStrip clocks={data.clocks} />
       {data.quiz && data.quiz.length ? <QuizSection quiz={data.quiz} /> : null}
       <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
     </View>
@@ -884,7 +889,7 @@ function ModeToggle({ level, onChange }) {
           const active = v === level;
           return (
             <Pressable key={v} onPress={() => onChange(v)} style={[s.modeBtn, i > 0 && s.modeBtnDiv, active && s.modeBtnActive]}>
-              <Text style={[s.modeTxt, MONO, active && { color: C.ink, fontWeight: '700' }]}>{lab}</Text>
+              <Text style={[s.modeTxt, MONO, active && { color: C.text, fontWeight: '700' }]}>{lab}</Text>
             </Pressable>
           );
         })}
@@ -967,7 +972,6 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={s.root} edges={['top']}>
         <StatusBar style="light" />
-        <Text style={[s.classbar, MONO]}>UNCLASSIFIED // OPEN SOURCE // ANALYSIS · NOT ADVICE</Text>
         <View style={s.header}>
           <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL<BlinkCursor /></Text>
@@ -999,7 +1003,7 @@ export default function App() {
               return (
                 <Pressable key={t.key} onPress={() => setTab(t.key)}
                   style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                  <Text style={[s.modeTxt, MONO, { fontSize: 8.5, letterSpacing: 0.6 }, on && { color: C.ink, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
+                  <Text style={[s.modeTxt, MONO, { fontSize: 8.5, letterSpacing: 0.6 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
                 </Pressable>
               );
             })}
@@ -1022,7 +1026,7 @@ const s = StyleSheet.create({
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
   modeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center' },
   modeBtnDiv: { borderLeftWidth: 1, borderLeftColor: C.line },
-  modeBtnActive: { backgroundColor: C.accent },
+  modeBtnActive: { backgroundColor: C.accentDim },
   modeTxt: { color: C.muted, fontSize: 10, letterSpacing: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
   retry: { borderWidth: 1, borderColor: C.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 22 },
@@ -1060,7 +1064,7 @@ const s = StyleSheet.create({
   stime: { fontSize: 10.5, color: C.muted, letterSpacing: 0.6 },
   rfilter: { flexDirection: 'row', gap: 7, paddingHorizontal: 4, paddingVertical: 4 },
   rchip: { backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 13 },
-  rchipOn: { backgroundColor: C.accent, borderColor: C.accent },
+  rchipOn: { backgroundColor: C.accentDim, borderColor: C.accentDim },
   rchipTxt: { fontSize: 11, letterSpacing: 0.6, color: C.muted },
   storyH3: { fontSize: 22, lineHeight: 27, fontWeight: '700', color: C.text, marginBottom: 12 },
   storyP: { fontSize: 15, lineHeight: 25, color: C.text },
