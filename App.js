@@ -148,8 +148,7 @@ const TABS = [
   { key: 'map', label: 'MAP', g: '◈' },
   { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'conspiracy', label: 'CONSP.', g: '◉' },
-  { key: 'strategy', label: 'STRAT.', g: '♟' },
-  { key: 'decode', label: 'DECODE', g: '⌖' },
+  { key: 'strategy', label: 'STRATEGY', g: '♟' },
 ];
 
 function Section({ title, extra, children }) {
@@ -269,8 +268,31 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls 
           </Pressable>
           {open && (
             <View style={s.ctxpanel}>
+              {item.dec && item.dec.verdict ? (
+                <Text style={[s.ktag, MONO, { color: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, borderColor: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, alignSelf: 'flex-start', marginBottom: 8 }]}>
+                  {'CLAIM: ' + (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label}
+                </Text>
+              ) : null}
               <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
               <Text style={s.ctxP}>{decode(item.context)}</Text>
+              {item.dec && item.dec.angles && item.dec.angles.length ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHO GAINS, WHO PAYS</Text>
+                  {item.dec.angles.map((a, i) => (
+                    <Text key={i} style={s.li}>
+                      <Text style={{ color: C.accent }}>› </Text>
+                      <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
+                      {' — ' + decode(a.effect)}
+                    </Text>
+                  ))}
+                </>
+              ) : null}
+              {item.dec && item.dec.kill ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHAT WOULD CHANGE THIS READ</Text>
+                  <Text style={s.ctxP}>{decode(item.dec.kill)}</Text>
+                </>
+              ) : null}
             </View>
           )}
         </>
@@ -693,7 +715,7 @@ function HomeTab({ data, easy, deep, goTab }) {
     ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
     ['conspiracy', '◉', 'CONSPIRACY', (data.forecasts || []).length, 'live calls, publicly scored'],
     ['strategy', '♟', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
-    ['decode', '⌖', 'DECODE', (data.decode || []).length, 'claims interrogated'],
+    ['map', '◈', 'THE BOARD', (data.events || []).length, 'live pressure points'],
   ];
   const topDevs = briefSorted(data.brief).slice(0, 3);
   return (
@@ -1042,7 +1064,6 @@ export default function App() {
             {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
-            {tab === 'decode' && <DecodeTab data={data} easy={easy} deep={deep} goTab={setTab} />}
             <LegalFooter />
           </ScrollView>
         )}
