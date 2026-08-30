@@ -52,6 +52,30 @@ function regionForecasts(data, r) {
   const rx = REGION_RX[r];
   return rx ? (data.forecasts || []).filter((f) => rx.test(f.q || '')) : [];
 }
+// COMMON FILTERS — every category gets the same chip system NEWS has.
+// pairs: [[value, label, count], ...] with "ALL" first.
+function ChipBar({ pairs, active, onPick }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+      {pairs.map(([val, lab, n]) => {
+        const on = val === active;
+        return (
+          <Pressable key={val} onPress={() => onPick(val)} style={[s.rchip, on && s.rchipOn]}>
+            <Text style={[s.rchipTxt, MONO, on && { color: C.ink, fontWeight: '700' }]}>
+              {lab + (n != null ? ' ' + n : '')}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+function textRegionPairs(items, textOf) {
+  const counts = {};
+  items.forEach((it) => { const r = inferRegion(textOf(it)); if (r) counts[r] = (counts[r] || 0) + 1; });
+  return [['ALL', 'All', items.length]].concat(Object.keys(counts).sort().map((r) => [r, r, counts[r]]));
+}
+
 // Small dotted-underline link, the app's version of the dashboard's .weblink
 function WebLink({ label, onPress }) {
   return (
@@ -162,14 +186,29 @@ function WhyPosture({ text, deep }) {
   );
 }
 
-function ThreatGauge({ risk }) {
+function ThreatGauge({ risk, events, forecasts }) {
   const idx = RISK_LEVELS.indexOf(risk.color);
   const rc = riskColor[risk.color] || C.elev;
+  // receipts, not vibes: the composite is auditable against countable inputs shown WITH it
+  const sev = { crit: 0, high: 0, elev: 0 };
+  (events || []).forEach((e) => { if (sev[e.sev] != null) sev[e.sev]++; });
+  const moved = (forecasts || []).filter((f) => f.prev != null && f.p !== f.prev).length;
   return (
     <View style={s.gauge}>
       <View style={s.gtop}>
-        <Text style={[s.glabel, MONO]}>GLOBAL THREAT POSTURE</Text>
+        <Text style={[s.glabel, MONO]}>BOARD PRESSURE</Text>
         <Text style={[s.gstate, SERIF, { color: rc }]}>{risk.state}</Text>
+      </View>
+      <View style={[s.gscale, { marginBottom: 6 }]}>
+        <Text style={[s.gscaleTxt, MONO]}>
+          <Text style={{ color: C.crit }}>{sev.crit} CRIT</Text>
+          {' · '}
+          <Text style={{ color: C.high }}>{sev.high} HIGH</Text>
+          {' · '}
+          <Text style={{ color: C.elev }}>{sev.elev} ELEV</Text>
+          {' ON THE BOARD'}
+        </Text>
+        <Text style={[s.gscaleTxt, MONO]}>{moved + '/' + (forecasts || []).length + ' CALLS MOVED'}</Text>
       </View>
       <View style={s.meter}>
         {RISK_LEVELS.map((lv, i) => (
@@ -451,6 +490,10 @@ function DecodeCard({ item, easy, deep, coverageRegion, onCoverage }) {
 
 function DecodeTab({ data, easy, deep, goTab }) {
   const items = data.decode || [];
+  const [vf, setVf] = useState('ALL');
+  const vcounts = {};
+  items.forEach((d) => { vcounts[d.verdict] = (vcounts[d.verdict] || 0) + 1; });
+  const shown = items.filter((d) => vf === 'ALL' || d.verdict === vf);
   // claim -> the news coverage of the same theater: pre-set the region filter (NewsTab reads
   // it from storage on mount - tabs remount on switch), then jump
   const seeCoverage = (r) => {
@@ -469,8 +512,14 @@ function DecodeTab({ data, easy, deep, goTab }) {
         <Text style={[s.briefT, MONO]}>CLAIMS DECODED</Text>
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
       </View>
+      {items.length ? (
+        <ChipBar
+          pairs={[['ALL', 'All', items.length]].concat(
+            ['true', 'partly', 'framing', 'false'].filter((v) => vcounts[v]).map((v) => [v, VERDICT_META[v].label, vcounts[v]]))}
+          active={vf} onPick={setVf} />
+      ) : null}
       {items.length
-        ? items.map((d, i) => {
+        ? shown.map((d, i) => {
             const dr = inferRegion((d.claim || '') + ' ' + (d.source || ''));
             const hasCoverage = dr && (data.brief || []).some((c) => c.region === dr);
             return (
@@ -500,7 +549,7 @@ function NewsTab({ data, easy, deep, goTab }) {
 
   return (
     <View style={s.stack}>
-      <ThreatGauge risk={data.risk} />
+      <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
       <WhyPosture text={rline} deep={deep} />
       <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel} onFilter={choose} goTab={goTab} data={data} />
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
@@ -570,15 +619,22 @@ function CalibrationTrack({ track, forecasts }) {
 }
 
 function ConspiracyTab({ data }) {
+  const [region, setRegion] = useState('ALL');
+  const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
+  const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
+  const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
   return (
     <View style={s.stack}>
       <View style={s.tabintro}>
         <Text style={s.tabintroP}>What we think happens next — falsifiable predictions and hidden-strategy hypotheses. The fun part, and the honest one: every call is scored against reality, misses included.</Text>
       </View>
       <CalibrationTrack track={data.track} forecasts={data.forecasts} />
-      {data.hypotheses && data.hypotheses.length ? (
-        <Section title="Hidden-strategy lab" extra={data.hypotheses.length + ' live'}>
-          {data.hypotheses.map((h, i) => (
+      <ChipBar
+        pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
+        active={region} onPick={setRegion} />
+      {hyps.length ? (
+        <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
+          {hyps.map((h, i) => (
             <View key={i} style={s.hyp}>
               <Text style={[s.hypP, MONO]}>{h.p}%</Text>
               <View style={{ flex: 1 }}>
@@ -589,8 +645,8 @@ function ConspiracyTab({ data }) {
           ))}
         </Section>
       ) : null}
-      <Section title="Predictions on the board" extra={String((data.forecasts || []).length)}>
-        {(data.forecasts || []).map((f, i) => {
+      <Section title="Predictions on the board" extra={String(fcs.length)}>
+        {fcs.map((f, i) => {
           const d = f.prev != null ? f.p - f.prev : null;
           return (
             <View key={i} style={s.pred}>
@@ -615,14 +671,18 @@ function ConspiracyTab({ data }) {
 
 function StrategyTab({ data, easy }) {
   const lec = data.lecture;
+  const [region, setRegion] = useState('ALL');
+  const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
+  const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
       <View style={s.tabintro}>
         <Text style={s.tabintroP}>The strategy desk — world events read from inside each capital, not from a podium. Who actually decides, what they really want, and what it means from their own perspective.</Text>
       </View>
       {data.actors && data.actors.length ? (
-        <Section title="The players" extra={data.actors.length + ' tracked'}>
-          {data.actors.map((a, i) => (
+        <Section title="The players" extra={actors.length + ' tracked'}>
+          <ChipBar pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
+          {actors.map((a, i) => (
             <View key={i} style={s.actor}>
               <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
               <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
