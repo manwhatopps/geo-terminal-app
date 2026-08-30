@@ -142,6 +142,7 @@ function fullStamp(ts) {
   return date + ' · ' + hm + rel;
 }
 const TABS = [
+  { key: 'home', label: 'HOME' },
   { key: 'news', label: 'NEWS' },
   { key: 'conspiracy', label: 'CONSPIRACY' },
   { key: 'strategy', label: 'STRATEGY' },
@@ -275,6 +276,20 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls 
           ) : null}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+// ── FILTERS live behind a dropdown, not a banner — tap ⌕ to reveal the chips ──
+function FilterDrop({ pairs, active, onPick }) {
+  const [open, setOpen] = useState(active !== 'ALL');
+  const activeLab = active !== 'ALL' ? ' · ' + String(active).toUpperCase() : '';
+  return (
+    <View>
+      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + '⌕ FILTER' + activeLab}</Text>
+      </Pressable>
+      {open ? <ChipBar pairs={pairs} active={active} onPick={onPick} /> : null}
     </View>
   );
 }
@@ -611,7 +626,7 @@ function DecodeTab({ data, easy, deep, goTab }) {
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
       </View>
       {items.length ? (
-        <ChipBar
+        <FilterDrop
           pairs={[['ALL', 'All', items.length]].concat(
             ['true', 'partly', 'framing', 'false'].filter((v) => vcounts[v]).map((v) => [v, VERDICT_META[v].label, vcounts[v]]))}
           active={vf} onPick={setVf} />
@@ -631,11 +646,42 @@ function DecodeTab({ data, easy, deep, goTab }) {
   );
 }
 
-function NewsTab({ data, easy, deep, goTab }) {
+// ── HOME — the situation overview: posture, clocks, the board, then doors into each category ──
+function HomeTab({ data, easy, deep, goTab, boardSel, setBoardSel }) {
   const rline = easy && data.easy ? data.easy.risk : data.risk.line;
+  const goCoverage = (r) => { AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); goTab('news'); };
+  const tiles = [
+    ['news', 'NEWS', (data.brief || []).length, 'stories on the wire'],
+    ['conspiracy', 'CONSPIRACY', (data.forecasts || []).length, 'live calls, publicly scored'],
+    ['strategy', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
+    ['decode', 'DECODE', (data.decode || []).length, 'claims interrogated'],
+  ];
+  return (
+    <View style={s.stack}>
+      <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
+      <WhyPosture text={rline} deep={deep} />
+      <ClocksStrip clocks={data.clocks} />
+      <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel}
+        onFilter={goCoverage} goTab={goTab} data={data} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        {tiles.map(([key, label, n, sub]) => (
+          <Pressable key={key} onPress={() => goTab(key)}
+            style={{ width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 12, marginBottom: 10 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 22, fontWeight: '700' }]}>{n}</Text>
+            <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.5, marginTop: 2 }]}>{label}</Text>
+            <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{sub}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {data.quiz && data.quiz.length ? <QuizSection quiz={data.quiz} /> : null}
+      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
+    </View>
+  );
+}
+
+function NewsTab({ data, easy, deep, goTab, goBoard }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
-  const [boardSel, setBoardSel] = useState(null);
   useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
   const choose = (r) => { setRegion(r); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
 
@@ -647,34 +693,22 @@ function NewsTab({ data, easy, deep, goTab }) {
 
   return (
     <View style={s.stack}>
-      <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
-      <WhyPosture text={rline} deep={deep} />
-      <ClocksStrip clocks={data.clocks} />
-      <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel} onFilter={choose} goTab={goTab} data={data} />
+      <View style={s.tabintro}>
+        <Text style={s.tabintroP}>Today's wire, deciphered — each story with the mechanism underneath it, not just the headline.</Text>
+      </View>
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
         <Text style={[s.briefT, MONO]}>LATEST HEADLINES</Text>
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
       </View>
-      {regions.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
-          {chips.map(([val, lab, n]) => {
-            const on = val === active;
-            return (
-              <Pressable key={val} onPress={() => choose(val)} style={[s.rchip, on && s.rchipOn]}>
-                <Text style={[s.rchipTxt, MONO, on && { color: C.ink, fontWeight: '700' }]}>{lab} {n}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
+      {regions.length ? <FilterDrop pairs={chips} active={active} onPick={choose} /> : null}
       {rows.length
         ? rows.map(({ s, i }) => {
             const evIdx = (data.events || []).findIndex((ev) => evRegion(ev) === s.region);
             const calls = regionForecasts(data, s.region).length;
             return (
               <StoryCard key={i} item={s} simpleText={simple[i]} easy={easy} deep={deep}
-                onBoard={evIdx >= 0 ? () => setBoardSel(evIdx) : null}
+                onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
                 callsCount={calls} onCalls={() => goTab('conspiracy')} />
             );
           })
@@ -686,7 +720,6 @@ function NewsTab({ data, easy, deep, goTab }) {
           ))}
         </Section>
       ) : null}
-      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Headlines refresh through the day. Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
@@ -728,7 +761,7 @@ function ConspiracyTab({ data }) {
         <Text style={s.tabintroP}>What we think happens next — falsifiable predictions and hidden-strategy hypotheses. The fun part, and the honest one: every call is scored against reality, misses included.</Text>
       </View>
       <CalibrationTrack track={data.track} forecasts={data.forecasts} />
-      <ChipBar
+      <FilterDrop
         pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
         active={region} onPick={setRegion} />
       {hyps.length ? (
@@ -780,7 +813,7 @@ function StrategyTab({ data, easy }) {
       </View>
       {data.actors && data.actors.length ? (
         <Section title="The players" extra={actors.length + ' tracked'}>
-          <ChipBar pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
+          <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
           {actors.map((a, i) => (
             <View key={i} style={s.actor}>
               <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
@@ -873,7 +906,9 @@ function LegalFooter() {
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [tab, setTab] = useState('news');
+  const [tab, setTab] = useState('home');
+  const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
+  const goBoard = (i) => { setBoardSel(i); setTab('home'); };
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
   const [level, setLevel] = useState('regular');
@@ -925,7 +960,8 @@ export default function App() {
         )}
         {data && (
           <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} />}
+            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
+            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
             {tab === 'decode' && <DecodeTab data={data} easy={easy} deep={deep} goTab={setTab} />}
@@ -940,7 +976,7 @@ export default function App() {
               return (
                 <Pressable key={t.key} onPress={() => setTab(t.key)}
                   style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                  <Text style={[s.modeTxt, MONO, on && { color: C.ink, fontWeight: '700' }]}>{t.label}</Text>
+                  <Text style={[s.modeTxt, MONO, { fontSize: 8.5, letterSpacing: 0.6 }, on && { color: C.ink, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
                 </Pressable>
               );
             })}
