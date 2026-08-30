@@ -20,11 +20,13 @@ const LEGAL = {
 
 // SIGINT terminal — phosphor green on near-black, amber for warnings, typewriter headlines.
 // (Mirrors dashboard.html's dark :root; the old navy "Situation Room" palette is retired.)
+// Black + gold intelligence-agency (per user's reference mockup): near-black field,
+// dark cards, gold as THE accent. Severity stays amber->orange->red.
 const C = {
-  ink: '#040A06', panel: '#0B1710', panel2: '#071009', line: '#1C3B27',
-  text: '#C9F2D2', muted: '#63906F', accent: '#45BE7C', accentDim: '#1F7D4A',
-  calm: '#3BAB6E', elev: '#FFB000', high: '#FF7A1A', crit: '#FF4545',
-  barBg: '#071009', chip: '#122A1B',
+  ink: '#09090B', panel: '#141317', panel2: '#0E0D10', line: '#2E2A20',
+  text: '#EDE7D8', muted: '#8D8574', accent: '#D4AF37', accentDim: '#8A7222',
+  calm: '#4C9A70', elev: '#D99A2B', high: '#E1662E', crit: '#D93B3B',
+  barBg: '#0E0D10', chip: '#221F18',
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
 const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
@@ -96,7 +98,7 @@ const VERDICT_META = {
   false: { c: C.crit, label: 'FALSE' },
 };
 const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
-const SERIF = { fontFamily: 'Courier New', fontWeight: '700' };  // typewriter dossier headlines
+const SERIF = { fontFamily: 'Georgia', fontWeight: '700' };  // refined dossier headlines (gold-agency register)
 
 // Feed strings carry HTML entities (web decodes via innerHTML; RN <Text> shows them literally).
 function decode(s) {
@@ -142,11 +144,12 @@ function fullStamp(ts) {
   return date + ' · ' + hm + rel;
 }
 const TABS = [
-  { key: 'home', label: 'HOME' },
-  { key: 'news', label: 'NEWS' },
-  { key: 'conspiracy', label: 'CONSPIRACY' },
-  { key: 'strategy', label: 'STRATEGY' },
-  { key: 'decode', label: 'DECODE' },
+  { key: 'home', label: 'HOME', g: '⌂' },
+  { key: 'map', label: 'MAP', g: '◈' },
+  { key: 'news', label: 'NEWS', g: '▤' },
+  { key: 'conspiracy', label: 'CONSP.', g: '◉' },
+  { key: 'strategy', label: 'STRAT.', g: '♟' },
+  { key: 'decode', label: 'DECODE', g: '⌖' },
 ];
 
 function Section({ title, extra, children }) {
@@ -203,7 +206,7 @@ function WhyPosture({ text, deep }) {
 
 // The fun scale: same analyst-set level underneath, told the way it feels.
 const KEG = { calm: 'ALL QUIET', elev: 'SPARKS', high: 'FUSE LIT', crit: 'POWDER KEG' };
-const KEG_SCALE = ['QUIET', 'SPARKS', 'FUSE LIT', 'KEG'];
+const KEG_SCALE = ['CALM', 'ELEVATED', 'HIGH', 'CRITICAL'];
 
 function ThreatGauge({ risk, events, forecasts }) {
   const idx = RISK_LEVELS.indexOf(risk.color);
@@ -215,8 +218,8 @@ function ThreatGauge({ risk, events, forecasts }) {
   return (
     <View style={s.gauge}>
       <View style={s.gtop}>
-        <Text style={[s.glabel, MONO]}>POWDER KEG INDEX</Text>
-        <Text style={[s.gstate, SERIF, { color: rc }]}>{KEG[risk.color] || risk.state}</Text>
+        <Text style={[s.glabel, MONO]}>GLOBAL THREAT LEVEL</Text>
+        <Text style={[s.gstate, SERIF, { color: rc }]}>{risk.state}</Text>
       </View>
       <View style={[s.gscale, { marginBottom: 6 }]}>
         <Text style={[s.gscaleTxt, MONO]}>
@@ -661,41 +664,85 @@ function DecodeTab({ data, easy, deep, goTab }) {
             );
           })
         : <Text style={s.foot}>No claims decoded yet — check back after the next run.</Text>}
+      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
 }
 
-// ── HOME — the situation overview: posture, clocks, the board, then doors into each category ──
-function HomeTab({ data, easy, deep, goTab, boardSel, setBoardSel }) {
-  const rline = easy && data.easy ? data.easy.risk : data.risk.line;
-  const goCoverage = (r) => { AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); goTab('news'); };
+// ── HOME — the dashboard (mockup shape): threat level, the $100 test, top developments, analyst tools ──
+function CostCard({ cost }) {
+  if (!cost || !cost.mult) return null;
+  return (
+    <View style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 14 }}>
+      <Text style={[s.glabel, MONO]}>THE $100 TEST</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 6 }}>
+        <Text style={[SERIF, { color: C.text, fontSize: 22 }]}>$100 in 2019 </Text>
+        <Text style={[SERIF, { color: C.accent, fontSize: 26 }]}>{'= $' + Math.round(100 * cost.mult) + ' now'}</Text>
+      </View>
+      <Text style={[MONO, { color: C.muted, fontSize: 10, marginTop: 4 }]}>
+        {'PRICES +' + cost.pct + '% SINCE 2019 · CPI THROUGH ' + cost.asof + ' · FRED'}
+      </Text>
+    </View>
+  );
+}
+
+function HomeTab({ data, easy, deep, goTab }) {
+  const rline = data.risk.line;
   const tiles = [
-    ['news', 'NEWS', (data.brief || []).length, 'stories on the wire'],
-    ['conspiracy', 'CONSPIRACY', (data.forecasts || []).length, 'live calls, publicly scored'],
-    ['strategy', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
-    ['decode', 'DECODE', (data.decode || []).length, 'claims interrogated'],
+    ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
+    ['conspiracy', '◉', 'CONSPIRACY', (data.forecasts || []).length, 'live calls, publicly scored'],
+    ['strategy', '♟', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
+    ['decode', '⌖', 'DECODE', (data.decode || []).length, 'claims interrogated'],
   ];
+  const topDevs = briefSorted(data.brief).slice(0, 3);
   return (
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
       <WhyPosture text={rline} deep={deep} />
-      {/* the categories ARE the homepage - options first, board after */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-        {tiles.map(([key, label, n, sub]) => (
-          <Pressable key={key} onPress={() => goTab(key)}
-            style={{ width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 14, marginBottom: 10 }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 24, fontWeight: '700' }]}>{n}</Text>
-            <Text style={[MONO, { color: C.text, fontSize: 12, letterSpacing: 1.5, marginTop: 3 }]}>{label + ' ›'}</Text>
-            <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{sub}</Text>
+      <CostCard cost={data.cost} />
+      <Section title="Top developments" extra="SEE ALL ›">
+        {topDevs.map(({ s: st }, i) => (
+          <Pressable key={i} onPress={() => goTab('news')}
+            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: i < topDevs.length - 1 ? 1 : 0, borderColor: C.line }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, marginRight: 10, backgroundColor: riskColor[(data.events || []).find((e) => evRegion(e) === st.region)?.sev] || C.elev }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: C.text, fontSize: 13.5 }} numberOfLines={2}>{decode(st.h)}</Text>
+              <Text style={[MONO, { color: C.muted, fontSize: 9, marginTop: 2 }]}>{(st.region || '').toUpperCase() + (st.tag ? ' · ' + decode(st.tag).toUpperCase() : '')}</Text>
+            </View>
+            <Text style={{ color: C.accent, fontSize: 16, marginLeft: 8 }}>›</Text>
           </Pressable>
         ))}
-      </View>
+      </Section>
+      <Section title="Analyst tools">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          {tiles.map(([key, g, label, n, sub]) => (
+            <Pressable key={key} onPress={() => goTab(key)}
+              style={{ width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 13, marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: C.accent, fontSize: 18 }}>{g}</Text>
+                <Text style={[MONO, { color: C.accent, fontSize: 20, fontWeight: '700' }]}>{n}</Text>
+              </View>
+              <Text style={[MONO, { color: C.text, fontSize: 11.5, letterSpacing: 1.2, marginTop: 6 }]}>{label + ' ›'}</Text>
+              <Text style={{ color: C.muted, fontSize: 10.5, marginTop: 2 }}>{sub}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Section>
+      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
+    </View>
+  );
+}
+
+// ── MAP — the board gets its own room (mockup: map is a destination, not homepage furniture) ──
+function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
+  const goCoverage = (r) => { AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); goTab('news'); };
+  return (
+    <View style={s.stack}>
       <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel}
         onFilter={goCoverage} goTab={goTab} data={data} />
       <ClocksStrip clocks={data.clocks} />
-      {data.quiz && data.quiz.length ? <QuizSection quiz={data.quiz} /> : null}
-      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
+      <Text style={s.foot}>Points are analyst-geocoded from the day's brief; rings are live USGS seismic. Analysis and opinion — not advice.</Text>
     </View>
   );
 }
@@ -743,6 +790,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard }) {
           ))}
         </Section>
       ) : null}
+      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Headlines refresh through the day. Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
@@ -822,6 +870,7 @@ function ConspiracyTab({ data }) {
           );
         })}
       </Section>
+      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
   );
@@ -874,6 +923,7 @@ function StrategyTab({ data, easy }) {
           </View>
         </Section>
       ) : null}
+      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Deep analysis and opinion, for information only. Not financial, legal, or safety advice.</Text>
     </View>
   );
@@ -936,7 +986,7 @@ export default function App() {
   const [err, setErr] = useState(null);
   const [tab, setTab] = useState('home');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
-  const goBoard = (i) => { setBoardSel(i); setTab('home'); };
+  const goBoard = (i) => { setBoardSel(i); setTab('map'); };
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
   const [level, setLevel] = useState('regular');
@@ -977,7 +1027,7 @@ export default function App() {
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL<BlinkCursor /></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
-        <ModeToggle level={level} onChange={setMode} />
+        {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -987,7 +1037,8 @@ export default function App() {
         )}
         {data && (
           <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
+            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} />}
+            {tab === 'map' && <MapTab data={data} easy={easy} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
             {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
@@ -1003,7 +1054,8 @@ export default function App() {
               return (
                 <Pressable key={t.key} onPress={() => setTab(t.key)}
                   style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                  <Text style={[s.modeTxt, MONO, { fontSize: 8.5, letterSpacing: 0.6 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
+                  <Text style={{ fontSize: 15, color: on ? C.accent : C.muted, lineHeight: 17 }}>{t.g}</Text>
+                  <Text style={[s.modeTxt, MONO, { fontSize: 7, letterSpacing: 0.5 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
                 </Pressable>
               );
             })}
@@ -1026,7 +1078,7 @@ const s = StyleSheet.create({
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
   modeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center' },
   modeBtnDiv: { borderLeftWidth: 1, borderLeftColor: C.line },
-  modeBtnActive: { backgroundColor: C.accentDim },
+  modeBtnActive: { backgroundColor: C.chip },
   modeTxt: { color: C.muted, fontSize: 10, letterSpacing: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
   retry: { borderWidth: 1, borderColor: C.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 22 },
