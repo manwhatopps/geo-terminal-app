@@ -89,6 +89,13 @@ function WebLink({ label, onPress }) {
     </Pressable>
   );
 }
+// Watchtower grades: how much weight an OSINT observation has earned.
+const GRADE_META = {
+  corroborated: { c: C.calm, label: 'CORROBORATED' },
+  credible: { c: C.elev, label: 'CREDIBLE' },
+  unverified: { c: C.muted, label: 'UNVERIFIED' },
+};
+
 // DECODE tab verdicts. Reuses the risk palette so a verdict badge reads on the same scale as the
 // threat gauge: green = the claim survives, red = it does not. Mirrors dashboard.html's VERDICT_META.
 const VERDICT_META = {
@@ -246,7 +253,7 @@ function ThreatGauge({ risk, events, forecasts }) {
   );
 }
 
-function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls }) {
+function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls, specMatches }) {
   const [open, setOpen] = useState(deep);
   // DEEP's whole effect is auto-expansion — useState only reads `deep` on FIRST render, so
   // without this sync, toggling REGULAR<->DEEP after mount visibly did nothing (user-reported).
@@ -293,6 +300,14 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls 
                   <Text style={s.ctxP}>{decode(item.dec.kill)}</Text>
                 </>
               ) : null}
+              {(specMatches || []).map((sp, i) => (
+                <View key={'sp' + i} style={{ marginTop: 8 }}>
+                  <Text style={[s.ctxlbl, MONO, { color: (GRADE_META[sp.grade] || GRADE_META.unverified).c }]}>
+                    {'WATCHTOWER · ' + (GRADE_META[sp.grade] || GRADE_META.unverified).label}
+                  </Text>
+                  <Text style={s.ctxP}>{decode(sp.obs) + ' — ' + decode(sp.src || '')}</Text>
+                </View>
+              ))}
             </View>
           )}
         </>
@@ -709,6 +724,38 @@ function CostCard({ cost }) {
   );
 }
 
+// ── THE WATCHTOWER — OSINT-tracker observations with no official story yet. Attributed,
+// graded, falsifiable; the fact is that the observation was MADE, never the event itself. ──
+function Watchtower({ items }) {
+  if (!items || !items.length) return null;
+  return (
+    <Section title="The watchtower" extra={items.length + ' sightings'}>
+      {items.map((sp, i) => {
+        const gm = GRADE_META[sp.grade] || GRADE_META.unverified;
+        return (
+          <View key={i} style={s.storycard}>
+            <View style={s.cardmeta}>
+              <Text style={[s.ktag, MONO, { marginBottom: 0, color: gm.c, borderColor: gm.c }]}>{gm.label}</Text>
+              {fullStamp(sp.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(sp.ts)}</Text> : null}
+            </View>
+            <Text style={[s.storyH3, SERIF, { fontSize: 16 }]}>{decode(sp.obs)}</Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 10, marginBottom: 6 }]}>{'SOURCE: ' + decode(sp.src || '—').toUpperCase()}</Text>
+            <Text style={s.storyP}>{decode(sp.read)}</Text>
+            {sp.falsifier ? (
+              <Text style={[s.li, { marginTop: 4 }]}>
+                <Text style={{ color: C.accent }}>› </Text>
+                <Text style={[MONO, { fontSize: 10, color: C.muted }]}>{'CONFIRMS OR KILLS IT: '}</Text>
+                {decode(sp.falsifier)}
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+      <Text style={s.foot}>Observations by outside trackers, reported as claims — not asserted fact. Graded by corroboration.</Text>
+    </Section>
+  );
+}
+
 function HomeTab({ data, easy, deep, goTab }) {
   const rline = data.risk.line;
   const tiles = [
@@ -801,7 +848,8 @@ function NewsTab({ data, easy, deep, goTab, goBoard }) {
             return (
               <StoryCard key={i} item={s} simpleText={simple[i]} easy={easy} deep={deep}
                 onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
-                callsCount={calls} onCalls={() => goTab('conspiracy')} />
+                callsCount={calls} onCalls={() => goTab('conspiracy')}
+                specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === s.region)} />
             );
           })
         : <Text style={s.foot}>No headlines in this filter right now.</Text>}
@@ -848,6 +896,7 @@ function ConspiracyTab({ data }) {
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
+  const specs = (data.speculation || []).filter((sp) => region === 'ALL' || (sp.region || inferRegion(sp.obs + ' ' + sp.read)) === region);
   const movedN = (data.forecasts || []).filter((f) => f.prev != null && f.p !== f.prev).length;
   return (
     <View style={s.stack}>
@@ -860,6 +909,7 @@ function ConspiracyTab({ data }) {
       <FilterDrop
         pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
         active={region} onPick={setRegion} />
+      <Watchtower items={specs} />
       {hyps.length ? (
         <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
           {hyps.map((h, i) => (
