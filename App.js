@@ -159,6 +159,65 @@ function StoryCard({ item, simpleText, easy, deep }) {
   );
 }
 
+// ── QUIZ — optional daily 5-question self-test on the brief; collapsed so it never intrudes ──
+function QuizQuestion({ q, index, onAnswered }) {
+  const [picked, setPicked] = useState(null);
+  const done = picked !== null;
+  return (
+    <View style={s.storycard}>
+      <Text style={[s.storyH3, SERIF, { fontSize: 17 }]}>{(index + 1) + '. ' + decode(q.q)}</Text>
+      {(q.options || []).map((opt, oi) => {
+        const isRight = oi === q.answer;
+        const isPicked = oi === picked;
+        const border = done ? (isRight ? C.calm : isPicked ? C.crit : C.line) : C.line;
+        const color = done ? (isRight ? C.calm : isPicked ? C.crit : C.muted) : C.text;
+        return (
+          <Pressable
+            key={oi}
+            disabled={done}
+            onPress={() => { setPicked(oi); onAnswered(oi === q.answer); }}
+            style={[s.rchip, { alignSelf: 'stretch', marginBottom: 6, borderColor: border }]}
+          >
+            <Text style={{ color, fontSize: 14.5, lineHeight: 21 }}>{decode(opt)}</Text>
+          </Pressable>
+        );
+      })}
+      {done && q.why ? (
+        <View style={s.ctxpanel}>
+          <Text style={s.ctxP}>{decode(q.why)}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function QuizSection({ quiz }) {
+  const [open, setOpen] = useState(false);
+  const [score, setScore] = useState(0);
+  const [answered, setAnswered] = useState(0);
+  if (!quiz || !quiz.length) return null;
+  const onAnswered = (right) => { setAnswered((a) => a + 1); if (right) setScore((v) => v + 1); };
+  const doneAll = answered === quiz.length;
+  return (
+    <Section title="Test yourself" extra={quiz.length + ' questions'}>
+      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + "TAKE TODAY'S QUIZ"}</Text>
+      </Pressable>
+      {open ? (
+        <>
+          {quiz.map((q, i) => <QuizQuestion key={i} q={q} index={i} onAnswered={onAnswered} />)}
+          {doneAll ? (
+            <Text style={[s.ctxlbl, MONO]}>
+              {'SCORE: ' + score + ' / ' + quiz.length +
+                (score === quiz.length ? ' — CLEAN SWEEP' : score >= 3 ? ' — SOLID READ' : " — REREAD TODAY'S BRIEF")}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
 // ── DECODE — a claim, interrogated: announced vs binding, and who gains vs who pays ──
 // NOTE: `decode(...)` here is the HTML-entity helper defined above, unrelated to the DECODE tab.
 function DecodeCard({ item, easy, deep }) {
@@ -307,6 +366,7 @@ function NewsTab({ data, easy, deep }) {
           ))}
         </Section>
       ) : null}
+      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Headlines refresh through the day. Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
