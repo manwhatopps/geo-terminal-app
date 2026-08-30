@@ -128,6 +128,18 @@ function timeLabel(ts) {
     return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
+// Full stamp for article cards: always date + time, plus freshness when recent.
+// "AUG 30 · 04:01 · 2H AGO" — a reader should never have to guess when a read was written.
+function fullStamp(ts) {
+  if (!ts) return '';
+  const t = Date.parse(ts); if (isNaN(t)) return '';
+  const d = new Date(t);
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase();
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const hrs = Math.round((Date.now() - t) / 3600000);
+  const rel = hrs >= 0 && hrs < 24 ? ' · ' + (hrs < 1 ? 'JUST NOW' : hrs + 'H AGO') : '';
+  return date + ' · ' + hm + rel;
+}
 const TABS = [
   { key: 'news', label: 'NEWS' },
   { key: 'conspiracy', label: 'CONSPIRACY' },
@@ -171,6 +183,7 @@ function PlainLead({ text }) {
 // the gauge answers "how bad", the reader chooses whether to ask "why".
 function WhyPosture({ text, deep }) {
   const [open, setOpen] = useState(deep);
+  useEffect(() => { setOpen(deep); }, [deep]);   // keep expansion in sync with the level toggle
   if (!text) return null;
   return (
     <View>
@@ -227,13 +240,16 @@ function ThreatGauge({ risk, events, forecasts }) {
 
 function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls }) {
   const [open, setOpen] = useState(deep);
+  // DEEP's whole effect is auto-expansion — useState only reads `deep` on FIRST render, so
+  // without this sync, toggling REGULAR<->DEEP after mount visibly did nothing (user-reported).
+  useEffect(() => { setOpen(deep); }, [deep]);
   const body = easy && simpleText ? simpleText : item.t;
   return (
     <View style={s.storycard}>
       <View style={s.spine} />
       <View style={s.cardmeta}>
         {item.tag ? <Text style={[s.ktag, MONO, { marginBottom: 0 }]}>{decode(item.tag).toUpperCase()}</Text> : <View />}
-        {timeLabel(item.ts) ? <Text style={[s.stime, MONO]}>{timeLabel(item.ts)}</Text> : null}
+        {fullStamp(item.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(item.ts)}</Text> : null}
       </View>
       <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.h)}</Text>
       <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
@@ -480,6 +496,7 @@ function QuizSection({ quiz }) {
 // NOTE: `decode(...)` here is the HTML-entity helper defined above, unrelated to the DECODE tab.
 function DecodeCard({ item, easy, deep, coverageRegion, onCoverage }) {
   const [open, setOpen] = useState(deep);
+  useEffect(() => { setOpen(deep); }, [deep]);   // keep expansion in sync with the level toggle
   const vm = VERDICT_META[item.verdict] || VERDICT_META.partly;
   const angles = item.angles || [];
   const watch = item.watch || [];
@@ -491,7 +508,7 @@ function DecodeCard({ item, easy, deep, coverageRegion, onCoverage }) {
       <View style={[s.spine, { backgroundColor: vm.c }]} />
       <View style={s.cardmeta}>
         <Text style={[s.ktag, MONO, { marginBottom: 0, color: vm.c, borderColor: vm.c }]}>{vm.label}</Text>
-        {timeLabel(item.ts) ? <Text style={[s.stime, MONO]}>{timeLabel(item.ts)}</Text> : null}
+        {fullStamp(item.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(item.ts)}</Text> : null}
       </View>
       <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.claim)}</Text>
       {item.source ? <Text style={[s.stime, MONO, { marginBottom: 6 }]}>{decode(item.source).toUpperCase()}</Text> : null}
@@ -907,13 +924,17 @@ export default function App() {
           </ScrollView>
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
-          <View style={s.nav}>
-            {TABS.map((t) => (
-              <Pressable key={t.key} onPress={() => setTab(t.key)} style={s.navBtn}>
-                <Text style={[s.navTxt, MONO, tab === t.key && { color: C.accent }]}>{t.label}</Text>
-                {tab === t.key && <View style={s.navUnder} />}
-              </Pressable>
-            ))}
+          {/* segmented pill, same organizing bubble as the READING LEVEL selector up top */}
+          <View style={[s.modetog, { marginHorizontal: 12, marginVertical: 8, flex: 0 }]}>
+            {TABS.map((t, i) => {
+              const on = tab === t.key;
+              return (
+                <Pressable key={t.key} onPress={() => setTab(t.key)}
+                  style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
+                  <Text style={[s.modeTxt, MONO, on && { color: C.ink, fontWeight: '700' }]}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </SafeAreaView>
       </SafeAreaView>
