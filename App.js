@@ -27,6 +27,41 @@ const C = {
 };
 const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
 const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
+// ── THE WEB — region is the connective key across board / stories / calls / decode ──
+// (mirrors dashboard.html's REGION_RX; brief cards carry `region` explicitly, everything
+// else gets its theater inferred from text until the analyst authors it)
+const REGION_RX = {
+  Iran: /iran|hormuz|tehran|kharg|irgc|persian gulf|esfahan|isfahan|natanz|bushehr/i,
+  Israel: /israel|west bank|gaza|idf|jerusalem/i,
+  Ukraine: /ukrain|kyiv|zaporizh|dnipro|donbas|kharkiv|crimea|pokrovsk|kupiansk|avdiivka/i,
+  Russia: /russia|moscow|kremlin|putin/i,
+  China: /china|taiwan|beijing|pla\b|taipei|south china sea/i,
+  US: /\bus\b|united states|washington|white house|pentagon|congress|treasury/i,
+  'Middle East': /saudi|yemen|houthi|iraq|syria|lebanon|hezbollah|gulf|oman|muscat|kuwait|qatar|uae/i,
+  Europe: /europe|\beu\b|nato|germany|france|\buk\b|britain|poland|iceland/i,
+  Africa: /africa|niger|sahel|sudan|mali|congo|ethiopia|niamey/i,
+  Asia: /asia|korea|japan|india|pakistan|nepal|myanmar|kashmir|himalaya/i,
+  'Latin America': /venezuela|brazil|mexico|argentina|colombia|caracas|latin/i,
+};
+function inferRegion(text) {
+  for (const r of Object.keys(REGION_RX)) if (REGION_RX[r].test(text || '')) return r;
+  return null;
+}
+function evRegion(e) { return e.region || inferRegion(e.label + ' ' + (e.note || '')); }
+function regionForecasts(data, r) {
+  const rx = REGION_RX[r];
+  return rx ? (data.forecasts || []).filter((f) => rx.test(f.q || '')) : [];
+}
+// Small dotted-underline link, the app's version of the dashboard's .weblink
+function WebLink({ label, onPress }) {
+  return (
+    <Pressable onPress={onPress} style={{ marginTop: 8, marginRight: 12, alignSelf: 'flex-start' }}>
+      <Text style={[MONO, { color: C.elev, fontSize: 12, letterSpacing: 0.8, borderBottomWidth: 1, borderColor: C.elev, borderStyle: 'dotted' }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 // DECODE tab verdicts. Reuses the risk palette so a verdict badge reads on the same scale as the
 // threat gauge: green = the claim survives, red = it does not. Mirrors dashboard.html's VERDICT_META.
 const VERDICT_META = {
@@ -132,7 +167,7 @@ function ThreatGauge({ risk }) {
   );
 }
 
-function StoryCard({ item, simpleText, easy, deep }) {
+function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls }) {
   const [open, setOpen] = useState(deep);
   const body = easy && simpleText ? simpleText : item.t;
   return (
@@ -157,15 +192,23 @@ function StoryCard({ item, simpleText, easy, deep }) {
           )}
         </>
       ) : null}
+      {!easy && (onBoard || callsCount > 0) ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {onBoard ? <WebLink label="◉ ON THE BOARD ↑" onPress={onBoard} /> : null}
+          {callsCount > 0 ? (
+            <WebLink label={'OUR CALLS ON ' + (item.region || 'THIS').toUpperCase() + ' (' + callsCount + ') →'} onPress={onCalls} />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 // ── THE BOARD — the situation-room wall map. Tap a point, get the read. Learning is invited
 // (every dot is a question), never forced (the brief below works without touching it). ──
-function WorldMap({ events }) {
-  const [sel, setSel] = useState(null);
+function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
   if (!events || !events.length) return null;
+  const setSel = onSelect;
   const X = (lon) => ((lon + 180) / 360) * 1000;
   const Y = (lat) => ((90 - lat) / 180) * 500;
   const grid = [];
@@ -217,6 +260,20 @@ function WorldMap({ events }) {
               {'■ ' + decode(e.label).toUpperCase() + '  · ' + coords + ' · ' + (e.sev || 'elev').toUpperCase()}
             </Text>
             <Text style={s.ctxP}>{decode(e.note)}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {(() => {
+                const r = evRegion(e);
+                if (!r) return null;
+                const n = (data.brief || []).filter((c) => c.region === r).length;
+                const calls = regionForecasts(data, r).length;
+                return (
+                  <>
+                    {n ? <WebLink label={'READ THE COVERAGE · ' + r.toUpperCase() + ' (' + n + ') ↓'} onPress={() => onFilter(r)} /> : null}
+                    {calls ? <WebLink label={'OUR CALLS ON THIS (' + calls + ') →'} onPress={() => goTab('conspiracy')} /> : null}
+                  </>
+                );
+              })()}
+            </View>
           </>
         ) : (
           <>
@@ -290,7 +347,7 @@ function QuizSection({ quiz }) {
 
 // ── DECODE — a claim, interrogated: announced vs binding, and who gains vs who pays ──
 // NOTE: `decode(...)` here is the HTML-entity helper defined above, unrelated to the DECODE tab.
-function DecodeCard({ item, easy, deep }) {
+function DecodeCard({ item, easy, deep, coverageRegion, onCoverage }) {
   const [open, setOpen] = useState(deep);
   const vm = VERDICT_META[item.verdict] || VERDICT_META.partly;
   const angles = item.angles || [];
@@ -364,14 +421,23 @@ function DecodeCard({ item, easy, deep }) {
               ) : null}
             </View>
           )}
+          {coverageRegion ? (
+            <WebLink label={'SEE THE COVERAGE · ' + coverageRegion.toUpperCase() + ' →'} onPress={() => onCoverage(coverageRegion)} />
+          ) : null}
         </>
       )}
     </View>
   );
 }
 
-function DecodeTab({ data, easy, deep }) {
+function DecodeTab({ data, easy, deep, goTab }) {
   const items = data.decode || [];
+  // claim -> the news coverage of the same theater: pre-set the region filter (NewsTab reads
+  // it from storage on mount - tabs remount on switch), then jump
+  const seeCoverage = (r) => {
+    AsyncStorage.setItem(REGION_KEY, r).catch(() => {});
+    goTab('news');
+  };
   return (
     <View style={s.stack}>
       <View style={s.tabintro}>
@@ -385,17 +451,25 @@ function DecodeTab({ data, easy, deep }) {
         <Text style={[s.briefD, MONO]}>{data.updated}</Text>
       </View>
       {items.length
-        ? items.map((d, i) => <DecodeCard key={i} item={d} easy={easy} deep={deep} />)
+        ? items.map((d, i) => {
+            const dr = inferRegion((d.claim || '') + ' ' + (d.source || ''));
+            const hasCoverage = dr && (data.brief || []).some((c) => c.region === dr);
+            return (
+              <DecodeCard key={i} item={d} easy={easy} deep={deep}
+                coverageRegion={hasCoverage ? dr : null} onCoverage={seeCoverage} />
+            );
+          })
         : <Text style={s.foot}>No claims decoded yet — check back after the next run.</Text>}
       <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
     </View>
   );
 }
 
-function NewsTab({ data, easy, deep }) {
+function NewsTab({ data, easy, deep, goTab }) {
   const rline = easy && data.easy ? data.easy.risk : data.risk.line;
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
+  const [boardSel, setBoardSel] = useState(null);
   useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
   const choose = (r) => { setRegion(r); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
 
@@ -409,7 +483,7 @@ function NewsTab({ data, easy, deep }) {
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} />
       <Text style={s.gline}>{decode(rline)}</Text>
-      <WorldMap events={data.events} />
+      <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel} onFilter={choose} goTab={goTab} data={data} />
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
         <Text style={[s.briefT, MONO]}>LATEST HEADLINES</Text>
@@ -428,7 +502,15 @@ function NewsTab({ data, easy, deep }) {
         </ScrollView>
       ) : null}
       {rows.length
-        ? rows.map(({ s, i }) => <StoryCard key={i} item={s} simpleText={simple[i]} easy={easy} deep={deep} />)
+        ? rows.map(({ s, i }) => {
+            const evIdx = (data.events || []).findIndex((ev) => evRegion(ev) === s.region);
+            const calls = regionForecasts(data, s.region).length;
+            return (
+              <StoryCard key={i} item={s} simpleText={simple[i]} easy={easy} deep={deep}
+                onBoard={evIdx >= 0 ? () => setBoardSel(evIdx) : null}
+                callsCount={calls} onCalls={() => goTab('conspiracy')} />
+            );
+          })
         : <Text style={s.foot}>No headlines in this filter right now.</Text>}
       {data.watch && data.watch.length ? (
         <Section title="What to watch next">
@@ -664,10 +746,10 @@ export default function App() {
         )}
         {data && (
           <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} />}
+            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
-            {tab === 'decode' && <DecodeTab data={data} easy={easy} deep={deep} />}
+            {tab === 'decode' && <DecodeTab data={data} easy={easy} deep={deep} goTab={setTab} />}
             <LegalFooter />
           </ScrollView>
         )}
