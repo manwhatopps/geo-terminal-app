@@ -143,6 +143,25 @@ function PlainLead({ text }) {
   );
 }
 
+// The WHY behind the posture is a drop-down, not a wall of text on the front door —
+// the gauge answers "how bad", the reader chooses whether to ask "why".
+function WhyPosture({ text, deep }) {
+  const [open, setOpen] = useState(deep);
+  if (!text) return null;
+  return (
+    <View>
+      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'WHY THIS POSTURE'}</Text>
+      </Pressable>
+      {open ? (
+        <View style={s.ctxpanel}>
+          <Text style={s.gline}>{decode(text)}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function ThreatGauge({ risk }) {
   const idx = RISK_LEVELS.indexOf(risk.color);
   const rc = riskColor[risk.color] || C.elev;
@@ -482,7 +501,7 @@ function NewsTab({ data, easy, deep, goTab }) {
   return (
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} />
-      <Text style={s.gline}>{decode(rline)}</Text>
+      <WhyPosture text={rline} deep={deep} />
       <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel} onFilter={choose} goTab={goTab} data={data} />
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
