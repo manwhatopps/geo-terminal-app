@@ -262,11 +262,56 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls 
   );
 }
 
+const SPARK = '▁▂▃▄▅▆▇█';
+function sparkline(sArr) { return (sArr || []).map((v) => SPARK[Math.max(0, Math.min(7, v))]).join(''); }
+
+// ── CLOCKS — the calendars that price the board. Countdown chips; tap for which file the clock runs on. ──
+function ClocksStrip({ clocks }) {
+  const [sel, setSel] = useState(null);
+  const cs = (clocks || []).filter((c) => c.date)
+    .map((c) => ({ ...c, days: Math.ceil((new Date(c.date + 'T00:00') - Date.now()) / 86400000) }))
+    .filter((c) => c.days >= -1);
+  if (!cs.length) return null;
+  const col = (d) => (d <= 7 ? C.crit : d <= 30 ? C.high : C.elev);
+  return (
+    <View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+        {cs.map((c, i) => (
+          <Pressable key={i} onPress={() => setSel(sel === i ? null : i)}
+            style={[s.rchip, { borderColor: col(c.days) }]}>
+            <Text style={[s.rchipTxt, MONO, { color: col(c.days) }]}>
+              {c.label + ' −' + Math.max(c.days, 0) + 'd'}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {sel != null && cs[sel] ? (
+        <View style={s.ctxpanel}>
+          <Text style={[s.ctxlbl, MONO, { color: col(cs[sel].days) }]}>
+            {cs[sel].label + ' · ' + cs[sel].date + ' (' + cs[sel].days + ' DAYS)'}
+          </Text>
+          <Text style={s.ctxP}>{decode(cs[sel].why || '')}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // ── THE BOARD — the situation-room wall map. Tap a point, get the read. Learning is invited
 // (every dot is a question), never forced (the brief below works without touching it). ──
 function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
+  // LIVE HAZARD LAYER — USGS quakes M5+/48h (keyless, best-effort; the board never depends on it)
+  const [quakes, setQuakes] = useState([]);
+  const [selQ, setSelQ] = useState(null);
+  useEffect(() => {
+    const since = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+    fetch(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${since}&minmagnitude=5&orderby=magnitude&limit=25`)
+      .then((r) => r.json())
+      .then((gj) => setQuakes(gj.features || []))
+      .catch(() => {});
+  }, []);
   if (!events || !events.length) return null;
-  const setSel = onSelect;
+  const setSel = (i) => { setSelQ(null); onSelect(i); };
   const X = (lon) => ((lon + 180) / 360) * 1000;
   const Y = (lat) => ((90 - lat) / 180) * 500;
   const grid = [];
@@ -298,6 +343,14 @@ function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
               <Line x1="0" y1={Y(e.lat)} x2="1000" y2={Y(e.lat)} stroke={selC} strokeWidth="0.8" opacity="0.5" strokeDasharray="4 3" />
             </>
           ) : null}
+          {quakes.map((f, i) => {
+            const [qlon, qlat] = f.geometry.coordinates;
+            return (
+              <Circle key={'q' + i} cx={X(qlon)} cy={Y(qlat)} r={2 + (f.properties.mag - 4)}
+                fill="none" stroke={C.muted} strokeWidth="1" opacity="0.8"
+                onPress={() => { onSelect(null); setSelQ(i); }} />
+            );
+          })}
           {events.map((ev, i) => {
             const c = riskColor[ev.sev] || C.elev;
             return (
@@ -312,12 +365,32 @@ function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
         </Svg>
       </View>
       <View style={s.ctxpanel}>
-        {e ? (
+        {selQ != null && quakes[selQ] ? (
+          <>
+            <Text style={[s.ctxlbl, MONO]}>
+              {'◌ SEISMIC · M' + quakes[selQ].properties.mag.toFixed(1) + ' · '
+                + Math.round((Date.now() - quakes[selQ].properties.time) / 3600000) + 'H AGO · USGS LIVE'}
+            </Text>
+            <Text style={s.ctxP}>
+              {(quakes[selQ].properties.place || '—')
+                + '. Sensor data, not analyst judgment — shown because disasters move politics (relief logistics, grid failures, border crossings, blame).'}
+            </Text>
+          </>
+        ) : e ? (
           <>
             <Text style={[s.ctxlbl, MONO, { color: selC }]}>
               {'■ ' + decode(e.label).toUpperCase() + '  · ' + coords + ' · ' + (e.sev || 'elev').toUpperCase()}
             </Text>
             <Text style={s.ctxP}>{decode(e.note)}</Text>
+            {(() => {
+              const ar = evRegion(e);
+              const att = ar && (data.attention || {})[ar];
+              return att ? (
+                <Text style={[MONO, { color: C.muted, fontSize: 12, marginTop: 4 }]}>
+                  {sparkline(att.s) + '  WORLD ATTENTION ' + att.r + 'x 14-DAY BASELINE (GDELT)'}
+                </Text>
+              ) : null;
+            })()}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
               {(() => {
                 const r = evRegion(e);
@@ -551,6 +624,7 @@ function NewsTab({ data, easy, deep, goTab }) {
     <View style={s.stack}>
       <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
       <WhyPosture text={rline} deep={deep} />
+      <ClocksStrip clocks={data.clocks} />
       <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel} onFilter={choose} goTab={goTab} data={data} />
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       <View style={s.briefhead}>
