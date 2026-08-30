@@ -154,7 +154,7 @@ const TABS = [
   { key: 'home', label: 'HOME', g: '⌂' },
   { key: 'map', label: 'MAP', g: '◈' },
   { key: 'news', label: 'NEWS', g: '▤' },
-  { key: 'conspiracy', label: 'CONSP.', g: '◉' },
+  { key: 'conspiracy', label: 'ANALYSIS', g: '◉' },
   { key: 'strategy', label: 'STRATEGY', g: '♟' },
 ];
 
@@ -268,6 +268,16 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls,
       </View>
       <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.h)}</Text>
       <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
+      {item.srcs && item.srcs.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginRight: 8 }]}>SOURCES:</Text>
+          {item.srcs.map((sc, i) => (
+            <Pressable key={i} onPress={() => sc.u && Linking.openURL(sc.u)} style={{ marginRight: 10 }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 10.5, textDecorationLine: 'underline' }]}>{decode(sc.n || 'link')}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       {item.context && !easy ? (
         <>
           <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
@@ -316,7 +326,7 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls,
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
           {onBoard ? <WebLink label="◉ ON THE BOARD ↑" onPress={onBoard} /> : null}
           {callsCount > 0 ? (
-            <WebLink label={'OUR CALLS ON ' + (item.region || 'THIS').toUpperCase() + ' (' + callsCount + ') →'} onPress={onCalls} />
+            <WebLink label={'ANALYSIS ON ' + (item.region || 'THIS').toUpperCase() + ' (' + callsCount + ') →'} onPress={onCalls} />
           ) : null}
         </View>
       ) : null}
@@ -739,7 +749,9 @@ function Watchtower({ items }) {
               {fullStamp(sp.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(sp.ts)}</Text> : null}
             </View>
             <Text style={[s.storyH3, SERIF, { fontSize: 16 }]}>{decode(sp.obs)}</Text>
-            <Text style={[MONO, { color: C.muted, fontSize: 10, marginBottom: 6 }]}>{'SOURCE: ' + decode(sp.src || '—').toUpperCase()}</Text>
+            <Pressable disabled={!sp.u} onPress={() => sp.u && Linking.openURL(sp.u)}>
+              <Text style={[MONO, { color: sp.u ? C.accent : C.muted, fontSize: 10, marginBottom: 6, textDecorationLine: sp.u ? 'underline' : 'none' }]}>{'SOURCE: ' + decode(sp.src || '—').toUpperCase()}</Text>
+            </Pressable>
             <Text style={s.storyP}>{decode(sp.read)}</Text>
             {sp.falsifier ? (
               <Text style={[s.li, { marginTop: 4 }]}>
@@ -760,13 +772,37 @@ function HomeTab({ data, easy, deep, goTab }) {
   const rline = data.risk.line;
   const tiles = [
     ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
-    ['conspiracy', '◉', 'CONSPIRACY', (data.forecasts || []).length, 'live calls, publicly scored'],
+    ['conspiracy', '◉', 'ANALYSIS', (data.forecasts || []).length, 'live calls, publicly scored'],
     ['strategy', '♟', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
     ['map', '◈', 'THE BOARD', (data.events || []).length, 'live pressure points'],
   ];
   const topDevs = briefSorted(data.brief).slice(0, 3);
   return (
     <View style={s.stack}>
+      {/* mini board strip (mockup: map leads) - tap opens MAP */}
+      <Pressable onPress={() => goTab('map')} style={{ borderWidth: 1, borderColor: C.line, borderRadius: 8, overflow: 'hidden' }}>
+        <Svg viewBox="120 60 760 300" width="100%" height={undefined} style={{ aspectRatio: 3.2, backgroundColor: C.panel2 }}>
+          <SvgPath d={LAND_PATH} fill={C.chip} stroke={C.line} strokeWidth="0.6" />
+          {(data.events || []).map((ev, i) => (
+            <Circle key={i} cx={((ev.lon + 180) / 360) * 1000} cy={((90 - ev.lat) / 180) * 500} r="5"
+              fill={riskColor[ev.sev] || C.elev} opacity="0.9" />
+          ))}
+        </Svg>
+        <View style={{ position: 'absolute', bottom: 6, right: 10 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1 }]}>{(data.events || []).length + ' ACTIVE · OPEN MAP ›'}</Text>
+        </View>
+      </Pressable>
+      {/* daily intelligence brief door (mockup: START) */}
+      <Pressable onPress={() => goTab('news')}
+        style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderRadius: 8, padding: 13, flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.5 }]}>DAILY INTELLIGENCE BRIEF</Text>
+          <Text style={{ color: C.muted, fontSize: 11, marginTop: 3 }}>{(data.brief || []).length + ' developments · updated ' + (data.updated || '')}</Text>
+        </View>
+        <View style={{ backgroundColor: C.accent, borderRadius: 5, paddingVertical: 7, paddingHorizontal: 14 }}>
+          <Text style={[MONO, { color: C.ink, fontWeight: '700', fontSize: 11 }]}>START ›</Text>
+        </View>
+      </Pressable>
       <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
       <WhyPosture text={rline} deep={deep} />
       <CostCard cost={data.cost} />
