@@ -255,10 +255,15 @@ function ThreatGauge({ risk, events, forecasts }) {
 
 function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls, specMatches }) {
   const [open, setOpen] = useState(deep);
-  // DEEP's whole effect is auto-expansion — useState only reads `deep` on FIRST render, so
-  // without this sync, toggling REGULAR<->DEEP after mount visibly did nothing (user-reported).
   useEffect(() => { setOpen(deep); }, [deep]);
-  const body = easy && simpleText ? simpleText : item.t;
+  // Three genuinely different reads (user: "deep and regular are the same text"):
+  //   SIMPLE  = plain-language version · REGULAR = the analyst read (item.t)
+  //   DEEP    = the analyst read + the full context flowed inline, so the paragraph itself grows
+  const body = easy && simpleText
+    ? simpleText
+    : deep && item.context
+      ? item.t + '\n\n' + item.context
+      : item.t;
   return (
     <View style={s.storycard}>
       <View style={s.spine} />
@@ -281,7 +286,7 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls,
       {item.context && !easy ? (
         <>
           <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
-            <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'WHY THIS IS HAPPENING'}</Text>
+            <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
           </Pressable>
           {open && (
             <View style={s.ctxpanel}>
@@ -290,8 +295,12 @@ function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls,
                   {'CLAIM: ' + (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label}
                 </Text>
               ) : null}
-              <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
-              <Text style={s.ctxP}>{decode(item.context)}</Text>
+              {!deep ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
+                  <Text style={s.ctxP}>{decode(item.context)}</Text>
+                </>
+              ) : null}
               {item.dec && item.dec.angles && item.dec.angles.length ? (
                 <>
                   <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHO GAINS, WHO PAYS</Text>
