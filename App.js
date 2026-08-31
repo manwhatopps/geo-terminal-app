@@ -734,6 +734,30 @@ function CostCard({ cost }) {
   );
 }
 
+// ── THE CHATTER — raw narrative monitoring: what the boards are saying. Unverified BY DESIGN. ──
+function Chatter({ items }) {
+  if (!items || !items.length) return null;
+  return (
+    <Section title="The chatter" extra={items.length + ' circulating'}>
+      <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.8, marginBottom: 8 }]}>
+        UNVERIFIED PUBLIC SPECULATION · REPORTED AS BELIEF DATA, NOT FACT
+      </Text>
+      {items.map((c, i) => (
+        <View key={i} style={s.storycard}>
+          <View style={s.cardmeta}>
+            <Text style={[s.ktag, MONO, { marginBottom: 0, color: C.muted, borderColor: C.muted }]}>CIRCULATING</Text>
+            {fullStamp(c.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(c.ts)}</Text> : null}
+          </View>
+          <Text style={[s.storyH3, SERIF, { fontSize: 15.5 }]}>{decode(c.claim)}</Text>
+          {c.spread ? <Text style={[MONO, { color: C.muted, fontSize: 10, marginBottom: 5 }]}>{'SPREAD: ' + decode(c.spread).toUpperCase()}</Text> : null}
+          <Text style={s.storyP}>{decode(c.read || '')}</Text>
+        </View>
+      ))}
+      <Text style={s.foot}>What anonymous boards and social feeds are circulating — monitored so you can see the narratives forming, never endorsed.</Text>
+    </Section>
+  );
+}
+
 // ── THE WATCHTOWER — OSINT-tracker observations with no official story yet. Attributed,
 // graded, falsifiable; the fact is that the observation was MADE, never the event itself. ──
 function Watchtower({ items }) {
@@ -954,6 +978,7 @@ function ConspiracyTab({ data }) {
       <FilterDrop
         pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
         active={region} onPick={setRegion} />
+      <Chatter items={(data.chatter || []).filter((c) => region === 'ALL' || inferRegion(c.claim + ' ' + (c.read || '')) === region)} />
       <Watchtower items={specs} />
       <Watchlist tripwires={data.tripwires} />
       {hyps.length ? (
