@@ -805,6 +805,15 @@ function HomeTab({ data, easy, deep, goTab }) {
       </Pressable>
       <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
       <WhyPosture text={rline} deep={deep} />
+      <Pressable onPress={() => Linking.openURL('https://t.me/Claudeyyybot')}
+        style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 13, flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ fontSize: 18, marginRight: 10 }}>🗨</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.5 }]}>ASK THE ANALYST</Text>
+          <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Chat with the desk — ask anything on the board, or paste any article link for a decode</Text>
+        </View>
+        <Text style={{ color: C.accent, fontSize: 16 }}>›</Text>
+      </Pressable>
       <CostCard cost={data.cost} />
       <Section title="Top developments" extra="SEE ALL ›">
         {topDevs.map(({ s: st }, i) => (
@@ -1242,7 +1251,14 @@ export default function App() {
         <View style={s.header}>
           <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL<BlinkCursor /></Text>
-          <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[s.stamp, MONO, { marginRight: 10 }]}>{data ? data.updated : ''}</Text>
+            {/* AI chat: deep-links into the Telegram analyst (same brain, subscription-funded) */}
+            <Pressable onPress={() => Linking.openURL('https://t.me/Claudeyyybot')}
+              style={{ backgroundColor: C.accent, borderRadius: 5, paddingVertical: 5, paddingHorizontal: 10 }}>
+              <Text style={[MONO, { color: C.ink, fontSize: 10, fontWeight: '700', letterSpacing: 1 }]}>🗨 ANALYST</Text>
+            </Pressable>
+          </View>
         </View>
         {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
