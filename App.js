@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView,
-  StyleSheet, Text, View,
+  Share, StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -115,6 +115,21 @@ function decode(s) {
 }
 // ── news region filter + chronological ordering ──
 const REGION_KEY = 'geo-region';
+// NYT dims a headline once you've opened it and keeps a Saved list. Both key off a
+// stable-ish id derived from the headline text, because feed indices shuffle on every
+// refresh while the words don't.
+const READ_KEY = 'geo-read-v1', SAVED_KEY = 'geo-saved-v1';
+function storyId(item) {
+  return decode(item.head || item.h || '').slice(0, 70).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+// keep the remembered sets from growing without bound across months of feeds
+function prune(map, cap) {
+  const k = Object.keys(map);
+  if (k.length <= cap) return map;
+  const out = {};
+  for (const key of k.slice(k.length - cap)) out[key] = map[key];
+  return out;
+}
 const REGION_ORDER = ['US', 'China', 'Russia', 'Ukraine', 'Iran', 'Israel', 'Middle East', 'Europe', 'Asia', 'Africa', 'Latin America', 'Global'];
 function regionsPresent(brief) {
   const set = new Set((brief || []).map((s) => s.region).filter(Boolean));
@@ -325,7 +340,7 @@ function DayRule({ label }) {
 }
 
 // ── LEAD — the one story above the fold. Big serif headline, three lines of dek. ──
-function LeadStory({ item, simpleText, easy, deep, onOpen }) {
+function LeadStory({ item, simpleText, easy, deep, onOpen, isRead, isSaved }) {
   const { head, stand, longHead } = articleParts(item);
   const dek = stand || firstSentences(bodyFor(item, simpleText, easy, deep), 2);
   const nsrc = (item.srcs || []).length;
@@ -335,10 +350,11 @@ function LeadStory({ item, simpleText, easy, deep, onOpen }) {
         <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(item)}</Text>
         <Text style={[s.idxtime, MONO]}>{timeOnly(item.ts)}</Text>
       </View>
-      <Text style={[s.leadH, SERIF]} numberOfLines={4}>{longHead || head}</Text>
+      <Text style={[s.leadH, SERIF, isRead && s.readH]} numberOfLines={4}>{longHead || head}</Text>
       <Text style={s.leadDek} numberOfLines={3}>{dek}</Text>
       <View style={s.idxfoot}>
-        <Text style={[s.readmore, MONO]}>READ THE FULL BRIEF ›</Text>
+        <Text style={[s.readmore, MONO, isRead && { color: C.muted }]}>{isRead ? 'READ AGAIN ›' : 'READ THE FULL BRIEF ›'}</Text>
+        {isSaved ? <Text style={[s.idxsrc, MONO, { color: C.accent, marginLeft: 10 }]}>★ SAVED</Text> : null}
         {nsrc ? <Text style={[s.idxsrc, MONO]}>{nsrc + (nsrc === 1 ? ' SOURCE' : ' SOURCES')}</Text> : null}
       </View>
     </Pressable>
@@ -347,19 +363,23 @@ function LeadStory({ item, simpleText, easy, deep, onOpen }) {
 
 // ── INDEX ROW — everything after the lead. Headline-first, hairline-separated. ──
 // `dense` rows drop the dek entirely: further down the page you are scanning titles.
-function IndexRow({ item, simpleText, easy, deep, dense, onOpen }) {
+function IndexRow({ item, simpleText, easy, deep, dense, onOpen, isRead, isSaved }) {
   const { head, stand } = articleParts(item);
   const dek = stand || firstSentences(bodyFor(item, simpleText, easy, deep), 1);
   const nsrc = (item.srcs || []).length;
   return (
     <Pressable onPress={onOpen} style={s.idxrow}>
       <View style={s.idxmeta}>
-        <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(item)}</Text>
+        <Text style={[s.kick, MONO, isRead && { color: C.accentDim }]} numberOfLines={1}>{kickerOf(item)}</Text>
         <Text style={[s.idxtime, MONO]}>{timeOnly(item.ts)}</Text>
       </View>
-      <Text style={[s.idxH, SERIF]} numberOfLines={3}>{head}</Text>
+      <Text style={[s.idxH, SERIF, isRead && s.readH]} numberOfLines={3}>{head}</Text>
       {!dense ? <Text style={s.idxDek} numberOfLines={2}>{dek}</Text> : null}
-      {nsrc && !dense ? <Text style={[s.idxsrc, MONO, { marginTop: 7 }]}>{nsrc + (nsrc === 1 ? ' SOURCE' : ' SOURCES') + ' · READ ›'}</Text> : null}
+      {!dense ? (
+        <Text style={[s.idxsrc, MONO, { marginTop: 7, marginLeft: 0 }]}>
+          {(isSaved ? '★ SAVED · ' : '') + (isRead ? 'READ · ' : '') + (nsrc ? nsrc + (nsrc === 1 ? ' SOURCE · ' : ' SOURCES · ') : '') + 'OPEN ›'}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -419,15 +439,119 @@ function ContextPanel({ item, deep, specMatches }) {
   );
 }
 
+// ── THE CONSPIRACY — what the boards are saying about THIS story. ─────────────
+// Sits beside the decode as the article's second door. The feed already monitors
+// belief: the news pass fetches /pol/'s catalog and searches X/reddit, and writes
+// what it finds into `chatter` ({claim, spread, read}). Until now that only lived
+// on the ANALYSIS tab, unattached to the story it was about. Two ways in, so it
+// works on today's feed and gets sharper on tomorrow's:
+//   item.consp  — the analyst attaching the theory to this specific card (new)
+//   data.chatter — anything circulating in the same theater (matched here)
+// The bar is LOWER here than anywhere else in the app on purpose: this is a record
+// of what people believe, not of what is true, and the panel says so first.
+// 4 letters, not 5: the words that actually discriminate between stories are short proper
+// nouns — Iran, Gaza, Iraq, NATO, oil. A five-letter floor throws away exactly the signal.
+const STOP = new Set(['about','after','again','against','also','around','because','been','before','being','between','both','could','does','during','each','every','from','have','into','just','like','more','most','only','other','over','said','same','should','since','some','such','than','that','their','them','then','there','these','they','this','those','through','under','until','very','were','what','when','where','which','while','will','with','would','your']);
+function tokens(str) {
+  const out = new Set();
+  for (const w of String(str || '').toLowerCase().match(/[a-z]{4,}/g) ?? []) if (!STOP.has(w)) out.add(w);
+  return out;
+}
+// How much a circulating narrative actually has to do with THIS story. Same theater is
+// necessary but nowhere near sufficient — a surveillance-camera theory is not about a
+// Venezuela oil deal just because both got filed under Latin America. Count the real
+// words they share and make the narrative clear the bar before it goes under an article.
+function chatterScore(item, c) {
+  const a = tokens(decode(item.head || '') + ' ' + decode(item.h || '') + ' ' + decode(item.tag || ''));
+  const b = tokens(c.claim + ' ' + (c.spread || '') + ' ' + (c.read || ''));
+  let n = 0;
+  for (const w of a) if (b.has(w)) n++;
+  return n;
+}
+function chatterFor(item, chatter) {
+  // The analyst attaching a theory to this specific card always wins outright.
+  if (item.consp) return (Array.isArray(item.consp) ? item.consp : [item.consp]).map((c) => ({ ...c, own: true }));
+  if (!item.region || item.region === 'Global') return [];   // too broad a bucket to match on
+  return (chatter || [])
+    .filter((c) => (c.region || inferRegion(c.claim + ' ' + (c.spread || '') + ' ' + (c.read || ''))) === item.region)
+    .map((c) => ({ ...c, score: chatterScore(item, c) }))
+    .filter((c) => c.score >= 1)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+}
+
+function ConspiracyPanel({ items }) {
+  const [open, setOpen] = useState(false);
+  if (!items || !items.length) return null;
+  return (
+    <>
+      <Pressable style={[s.ctxbtn, { borderColor: C.high }]} onPress={() => setOpen((o) => !o)}>
+        <Text style={[s.ctxbtnTxt, MONO, { color: C.high }]}>
+          {(open ? '− ' : '＋ ') + 'THE CONSPIRACY (' + items.length + ')'}
+        </Text>
+      </Pressable>
+      {open ? (
+        <View style={[s.ctxpanel, { borderLeftColor: C.high }]}>
+          <Text style={[s.conspWarn, MONO]}>
+            UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED
+          </Text>
+          <Text style={s.conspIntro}>
+            {(items[0] && items[0].own
+              ? 'What 4chan, Reddit and X are saying about this story.'
+              : 'What 4chan, Reddit and X are saying in this theater — matched to the story, not written about it.')
+              + ' Logged because who believes what is itself intelligence, not because anyone here has checked it.'}
+          </Text>
+          {items.map((c, i) => (
+            <View key={i} style={[s.consp, i > 0 && { borderTopWidth: 1, borderTopColor: C.line, marginTop: 14, paddingTop: 14 }]}>
+              <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE CLAIM</Text>
+              <Text style={s.ctxP}>{decode(c.claim)}</Text>
+              {c.spread ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO, { marginTop: 10 }]}>WHERE IT'S SPREADING</Text>
+                  <Text style={[s.ctxP, { color: C.muted, fontSize: 13 }]}>{decode(c.spread)}</Text>
+                </>
+              ) : null}
+              {c.read ? (
+                <>
+                  <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
+                  <Text style={s.ctxP}>{decode(c.read)}</Text>
+                </>
+              ) : null}
+              {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </>
+  );
+}
+
 // ── ARTICLE — the page you land on after tapping a headline. One story, nothing else. ──
-function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount, onCalls, specMatches, prev, next, onOpen }) {
+function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount, onCalls,
+                       specMatches, chatter, prev, next, onOpen, isSaved, onSave }) {
   const { head, stand, longHead } = articleParts(item);
   const body = bodyFor(item, simpleText, easy, deep);
+  // NYT's article furniture: back to the section, save it, send it to someone.
+  const share = () => {
+    const url = (item.srcs || []).find((sc) => sc.u);
+    Share.share({ message: decode(head) + (url ? '\n\n' + url.u : '') + '\n\nvia GEO/TERMINAL' })
+      .catch(() => {});
+  };
   return (
     <View style={s.stack}>
-      <Pressable onPress={onBack} style={s.backbtn}>
-        <Text style={[s.backtxt, MONO]}>‹ ALL HEADLINES</Text>
-      </Pressable>
+      <View style={s.artbar}>
+        <Pressable onPress={onBack} hitSlop={8}><Text style={[s.backtxt, MONO]}>‹ ALL HEADLINES</Text></Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginLeft: 'auto' }}>
+          <Pressable onPress={onSave} hitSlop={8}>
+            <Text style={[MONO, { color: isSaved ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2 }]}>
+              {(isSaved ? '★ SAVED' : '☆ SAVE')}
+            </Text>
+          </Pressable>
+          <Pressable onPress={share} hitSlop={8}>
+            <Text style={[MONO, { color: C.muted, fontSize: 11, letterSpacing: 1.2 }]}>↗ SHARE</Text>
+          </Pressable>
+        </View>
+      </View>
       <View style={s.article}>
         <Text style={[s.kick, MONO, { marginBottom: 10 }]}>{kickerOf(item)}</Text>
         <Text style={[stand ? s.artH : s.artHLong, SERIF]}>{stand ? head : longHead}</Text>
@@ -446,6 +570,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount
           </View>
         ) : null}
         {!easy ? <ContextPanel item={item} deep={deep} specMatches={specMatches} /> : null}
+        <ConspiracyPanel items={chatterFor(item, chatter)} />
         {!easy && (onBoard || callsCount > 0) ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
             {onBoard ? <WebLink label="◉ ON THE BOARD ↑" onPress={onBoard} /> : null}
@@ -931,7 +1056,7 @@ function Watchtower({ items }) {
   );
 }
 
-function HomeTab({ data, easy, deep, goTab, goArticle }) {
+function HomeTab({ data, easy, deep, goTab, goArticle, read }) {
   const rline = data.risk.line;
   const tiles = [
     ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
@@ -988,7 +1113,7 @@ function HomeTab({ data, easy, deep, goTab, goArticle }) {
                 <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(st)}</Text>
                 <Text style={[s.idxtime, MONO]}>{timeOnly(st.ts)}</Text>
               </View>
-              <Text style={[s.teaseH, SERIF]} numberOfLines={3}>{articleParts(st).head}</Text>
+              <Text style={[s.teaseH, SERIF, read && read[storyId(st)] && s.readH]} numberOfLines={3}>{articleParts(st).head}</Text>
             </View>
           </Pressable>
         ))}
@@ -1030,19 +1155,31 @@ function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
 // Two states share the tab: the INDEX (scan) and an ARTICLE (read). Order stays
 // strictly newest-first inside day sections, so the chronology is never violated;
 // hierarchy comes from position, not from re-ranking.
-function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop }) {
+function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
+                   read, saved, markRead, toggleSave }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
   useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
   const choose = (r) => { setRegion(r); setArticle(null); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
 
   const regions = regionsPresent(data.brief);
-  const active = region === 'ALL' || regions.includes(region) ? region : 'ALL';
-  const counts = {}; for (const s of (data.brief || [])) if (s.region) counts[s.region] = (counts[s.region] || 0) + 1;
-  const chips = [['ALL', 'All', (data.brief || []).length]].concat(regions.map((r) => [r, r, counts[r] || 0]));
-  const rows = briefSorted(data.brief).filter(({ s }) => active === 'ALL' || s.region === active);
+  const nsaved = (data.brief || []).filter((st) => saved[storyId(st)]).length;
+  const valid = region === 'ALL' || region === 'SAVED' || regions.includes(region);
+  const active = valid ? region : 'ALL';
+  const counts = {}; for (const st of (data.brief || [])) if (st.region) counts[st.region] = (counts[st.region] || 0) + 1;
+  // "Saved" is a section front of its own, exactly where NYT puts it — in the filter bar.
+  const chips = [['ALL', 'All', (data.brief || []).length]]
+    .concat(nsaved ? [['SAVED', '★ Saved', nsaved]] : [])
+    .concat(regions.map((r) => [r, r, counts[r] || 0]));
+  const rows = briefSorted(data.brief).filter(({ s: st }) =>
+    active === 'ALL' ? true : active === 'SAVED' ? !!saved[storyId(st)] : st.region === active);
 
-  const open = (i) => { setArticle(i); if (scrollTop) scrollTop(); };
+  const open = (i) => {
+    const hit = (data.brief || [])[i];
+    if (hit) markRead(storyId(hit));
+    setArticle(i);
+    if (scrollTop) scrollTop();
+  };
   const back = () => { setArticle(null); if (scrollTop) scrollTop(); };
 
   // ARTICLE STATE — one story, plus the stories either side of it in the run.
@@ -1050,6 +1187,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
   if (at >= 0) {
     const { s: item, i } = rows[at];
     const evIdx = (data.events || []).findIndex((ev) => evRegion(ev) === item.region);
+    const id = storyId(item);
     return (
       <ArticlePage
         item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open}
@@ -1057,6 +1195,8 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         callsCount={regionForecasts(data, item.region).length}
         onCalls={() => goTab('conspiracy')}
         specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
+        chatter={data.chatter}
+        isSaved={!!saved[id]} onSave={() => toggleSave(id)}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
       />
@@ -1078,15 +1218,19 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         const rule = k !== seen ? <DayRule key={'d' + k} label={dayLabel(st.ts)} /> : null;
         const first = k !== seen;
         seen = k;
+        const id = storyId(st);
+        const props = { item: st, simpleText: simple[i], easy, deep, onOpen: () => open(i), isRead: !!read[id], isSaved: !!saved[id] };
         return (
           <View key={i}>
             {rule}
-            {first && n === 0
-              ? <LeadStory item={st} simpleText={simple[i]} easy={easy} deep={deep} onOpen={() => open(i)} />
-              : <IndexRow item={st} simpleText={simple[i]} easy={easy} deep={deep} dense={n >= 6} onOpen={() => open(i)} />}
+            {first && n === 0 ? <LeadStory {...props} /> : <IndexRow {...props} dense={n >= 6} />}
           </View>
         );
-      }) : <Text style={s.foot}>No headlines in this filter right now.</Text>}
+      }) : (
+        <Text style={s.foot}>
+          {active === 'SAVED' ? 'Nothing saved yet — tap ☆ SAVE on any article to keep it here.' : 'No headlines in this filter right now.'}
+        </Text>
+      )}
       {data.watch && data.watch.length ? (
         <Section title="What to watch next">
           {data.watch.map((w, i) => (
@@ -1408,7 +1552,26 @@ export default function App() {
   const [article, setArticle] = useState(null);
   const scrollRef = useRef(null);
   const scrollTop = () => { if (scrollRef.current) scrollRef.current.scrollTo({ y: 0, animated: false }); };
-  const goArticle = (i) => { setArticle(i); setTab('news'); scrollTop(); };
+  const goArticle = (i) => {
+    const hit = data && (data.brief || [])[i];
+    if (hit) markRead(storyId(hit));
+    setArticle(i); setTab('news'); scrollTop();
+  };
+  // What you've opened and what you've kept. Both are per-device and never leave it.
+  const [read, setRead] = useState({});
+  const [saved, setSaved] = useState({});
+  const markRead = useCallback((id) => setRead((r) => {
+    if (r[id]) return r;
+    const next = prune({ ...r, [id]: 1 }, 300);
+    AsyncStorage.setItem(READ_KEY, JSON.stringify(next)).catch(() => {});
+    return next;
+  }), []);
+  const toggleSave = useCallback((id) => setSaved((sv) => {
+    const next = { ...sv };
+    if (next[id]) delete next[id]; else next[id] = 1;
+    AsyncStorage.setItem(SAVED_KEY, JSON.stringify(prune(next, 200))).catch(() => {});
+    return next;
+  }), []);
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
   const [level, setLevel] = useState('regular');
@@ -1416,6 +1579,10 @@ export default function App() {
 
   useEffect(() => {
     AsyncStorage.getItem(ACK_KEY).then((v) => setAcked(v === '1')).catch(() => setAcked(false));
+    AsyncStorage.multiGet([READ_KEY, SAVED_KEY]).then(([r, sv]) => {
+      try { if (r[1]) setRead(JSON.parse(r[1])); } catch (e) {}
+      try { if (sv[1]) setSaved(JSON.parse(sv[1])); } catch (e) {}
+    }).catch(() => {});
     AsyncStorage.getItem(MODE_KEY).then((v) => {
       if (v === 'simple' || v === 'regular' || v === 'deep') setLevel(v);
       else if (v === 'easy') setLevel('simple'); // migrate old two-way toggle
@@ -1466,9 +1633,9 @@ export default function App() {
         )}
         {data && (
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} />}
+            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} read={read} />}
             {tab === 'map' && <MapTab data={data} easy={easy} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
-            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} article={article} setArticle={setArticle} scrollTop={scrollTop} />}
+            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
             <LegalFooter />
@@ -1560,8 +1727,12 @@ const s = StyleSheet.create({
   idxH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700' },
   idxDek: { color: C.muted, fontSize: 13, lineHeight: 20, marginTop: 6 },
   teaseH: { color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '700', marginTop: 1 },
+  readH: { color: C.muted, fontWeight: '600' },
+  conspWarn: { color: C.high, fontSize: 9, letterSpacing: 1.5, fontWeight: '700', marginBottom: 8 },
+  conspIntro: { color: C.muted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
+  consp: {},
+  artbar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   // ── ARTICLE ──
-  backbtn: { alignSelf: 'flex-start', paddingVertical: 4 },
   backtxt: { color: C.accent, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '700' },
   article: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, padding: 20 },
   artH: { color: C.text, fontSize: 26, lineHeight: 33, fontWeight: '700' },
