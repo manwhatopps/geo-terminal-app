@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, View,
@@ -253,91 +253,221 @@ function ThreatGauge({ risk, events, forecasts }) {
   );
 }
 
-function StoryCard({ item, simpleText, easy, deep, onBoard, callsCount, onCalls, specMatches }) {
+// ── THE FRONT PAGE MODEL (NYT) ────────────────────────────────────────────────
+// A newspaper never hands you five equal slabs of text. It hands you an INDEX you
+// scan — kicker, headline, one line of standfirst, a rule — and you choose what to
+// open. Weight carries importance: the lead runs big, the rest step down. Body copy
+// does not appear until you tap in. Everything below implements that split.
+
+// Headline vs. standfirst. New feeds carry a short scannable `head`; older ones only
+// have `h`, a full summary sentence, so we cut one at the first clause break.
+function clipHead(h) {
+  if (h.length <= 88) return h;
+  const brk = h.search(/\s+[-–—]\s+|:\s|;\s/);
+  if (brk > 24 && brk <= 110) return h.slice(0, brk).trim();
+  const cut = h.lastIndexOf(' ', 84);
+  return h.slice(0, cut > 40 ? cut : 84).trim() + '…';
+}
+function articleParts(item) {
+  const full = decode(item.h || '');
+  return item.head
+    ? { head: decode(item.head), stand: full }
+    : { head: clipHead(full), stand: '', longHead: full };
+}
+// First n sentences — the dek under an index headline. Written without lookbehind
+// so it holds on Hermes.
+function firstSentences(txt, n) {
+  const str = decode(txt || '').replace(/\s+/g, ' ').trim();
+  const re = /[.?!]["')\]]?\s/g;
+  let out = '', count = 0, m;
+  while (count < n && (m = re.exec(str))) { out = str.slice(0, m.index + m[0].length).trim(); count++; }
+  return out || str;
+}
+function kickerOf(item) {
+  const parts = [];
+  if (item.region) parts.push(String(item.region).toUpperCase());
+  if (item.tag) parts.push(decode(item.tag).toUpperCase());
+  return parts.join(' · ');
+}
+function timeOnly(ts) {
+  const t = Date.parse(ts); if (isNaN(t)) return '';
+  const d = new Date(t);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+// Day dividers: the reader should never have to work out what day they're reading.
+function dayKey(ts) {
+  const t = Date.parse(ts); if (isNaN(t)) return 'undated';
+  const d = new Date(t);
+  return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+}
+function dayLabel(ts) {
+  const t = Date.parse(ts); if (isNaN(t)) return 'EARLIER';
+  const d = new Date(t), now = new Date(), y = new Date(); y.setDate(y.getDate() - 1);
+  const stamp = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+  if (dayKey(ts) === dayKey(now.toISOString())) return 'TODAY · ' + stamp;
+  if (dayKey(ts) === dayKey(y.toISOString())) return 'YESTERDAY · ' + stamp;
+  return stamp;
+}
+// The body a given reading level should see (unchanged rules, moved off the card).
+function bodyFor(item, simpleText, easy, deep) {
+  return easy && simpleText ? simpleText
+    : deep && item.context ? item.t + '\n\n' + item.context
+      : item.t;
+}
+
+function DayRule({ label }) {
+  return (
+    <View style={s.dayrule}>
+      <Text style={[s.daytxt, MONO]}>{label}</Text>
+      <View style={s.dayline} />
+    </View>
+  );
+}
+
+// ── LEAD — the one story above the fold. Big serif headline, three lines of dek. ──
+function LeadStory({ item, simpleText, easy, deep, onOpen }) {
+  const { head, stand, longHead } = articleParts(item);
+  const dek = stand || firstSentences(bodyFor(item, simpleText, easy, deep), 2);
+  const nsrc = (item.srcs || []).length;
+  return (
+    <Pressable onPress={onOpen} style={s.lead}>
+      <View style={s.idxmeta}>
+        <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(item)}</Text>
+        <Text style={[s.idxtime, MONO]}>{timeOnly(item.ts)}</Text>
+      </View>
+      <Text style={[s.leadH, SERIF]} numberOfLines={4}>{longHead || head}</Text>
+      <Text style={s.leadDek} numberOfLines={3}>{dek}</Text>
+      <View style={s.idxfoot}>
+        <Text style={[s.readmore, MONO]}>READ THE FULL BRIEF ›</Text>
+        {nsrc ? <Text style={[s.idxsrc, MONO]}>{nsrc + (nsrc === 1 ? ' SOURCE' : ' SOURCES')}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+// ── INDEX ROW — everything after the lead. Headline-first, hairline-separated. ──
+// `dense` rows drop the dek entirely: further down the page you are scanning titles.
+function IndexRow({ item, simpleText, easy, deep, dense, onOpen }) {
+  const { head, stand } = articleParts(item);
+  const dek = stand || firstSentences(bodyFor(item, simpleText, easy, deep), 1);
+  const nsrc = (item.srcs || []).length;
+  return (
+    <Pressable onPress={onOpen} style={s.idxrow}>
+      <View style={s.idxmeta}>
+        <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(item)}</Text>
+        <Text style={[s.idxtime, MONO]}>{timeOnly(item.ts)}</Text>
+      </View>
+      <Text style={[s.idxH, SERIF]} numberOfLines={3}>{head}</Text>
+      {!dense ? <Text style={s.idxDek} numberOfLines={2}>{dek}</Text> : null}
+      {nsrc && !dense ? <Text style={[s.idxsrc, MONO, { marginTop: 7 }]}>{nsrc + (nsrc === 1 ? ' SOURCE' : ' SOURCES') + ' · READ ›'}</Text> : null}
+    </Pressable>
+  );
+}
+
+// ── THE CONTEXT PANEL — the decode that used to live inline on every card. ──
+function ContextPanel({ item, deep, specMatches }) {
   const [open, setOpen] = useState(deep);
   useEffect(() => { setOpen(deep); }, [deep]);
-  // Three genuinely different reads (user: "deep and regular are the same text"):
-  //   SIMPLE  = plain-language version · REGULAR = the analyst read (item.t)
-  //   DEEP    = the analyst read + the full context flowed inline, so the paragraph itself grows
-  const body = easy && simpleText
-    ? simpleText
-    : deep && item.context
-      ? item.t + '\n\n' + item.context
-      : item.t;
+  if (!item.context) return null;
   return (
-    <View style={s.storycard}>
-      <View style={s.spine} />
-      <View style={s.cardmeta}>
-        {item.tag ? <Text style={[s.ktag, MONO, { marginBottom: 0 }]}>{decode(item.tag).toUpperCase()}</Text> : <View />}
-        {fullStamp(item.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(item.ts)}</Text> : null}
-      </View>
-      <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.h)}</Text>
-      <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
-      {item.srcs && item.srcs.length ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
-          <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginRight: 8 }]}>SOURCES:</Text>
-          {item.srcs.map((sc, i) => (
-            <Pressable key={i} onPress={() => sc.u && Linking.openURL(sc.u)} style={{ marginRight: 10 }}>
-              <Text style={[MONO, { color: C.accent, fontSize: 10.5, textDecorationLine: 'underline' }]}>{decode(sc.n || 'link')}</Text>
-            </Pressable>
+    <>
+      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
+      </Pressable>
+      {open && (
+        <View style={s.ctxpanel}>
+          {item.dec && item.dec.verdict ? (
+            <Text style={[s.ktag, MONO, { color: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, borderColor: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, alignSelf: 'flex-start', marginBottom: 8 }]}>
+              {'CLAIM: ' + (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label}
+            </Text>
+          ) : null}
+          {!deep ? (
+            <>
+              <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
+              <Text style={s.ctxP}>{decode(item.context)}</Text>
+            </>
+          ) : null}
+          {item.dec && item.dec.angles && item.dec.angles.length ? (
+            <>
+              <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHO GAINS, WHO PAYS</Text>
+              {item.dec.angles.map((a, i) => (
+                <Text key={i} style={s.li}>
+                  <Text style={{ color: C.accent }}>› </Text>
+                  <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
+                  {' — ' + decode(a.effect)}
+                </Text>
+              ))}
+            </>
+          ) : null}
+          {item.dec && item.dec.kill ? (
+            <>
+              <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHAT WOULD CHANGE THIS READ</Text>
+              <Text style={s.ctxP}>{decode(item.dec.kill)}</Text>
+            </>
+          ) : null}
+          {(specMatches || []).map((sp, i) => (
+            <View key={'sp' + i} style={{ marginTop: 8 }}>
+              <Text style={[s.ctxlbl, MONO, { color: (GRADE_META[sp.grade] || GRADE_META.unverified).c }]}>
+                {'WATCHTOWER · ' + (GRADE_META[sp.grade] || GRADE_META.unverified).label}
+              </Text>
+              <Text style={s.ctxP}>{decode(sp.obs) + ' — ' + decode(sp.src || '')}</Text>
+            </View>
           ))}
         </View>
-      ) : null}
-      {item.context && !easy ? (
-        <>
-          <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
-            <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
-          </Pressable>
-          {open && (
-            <View style={s.ctxpanel}>
-              {item.dec && item.dec.verdict ? (
-                <Text style={[s.ktag, MONO, { color: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, borderColor: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, alignSelf: 'flex-start', marginBottom: 8 }]}>
-                  {'CLAIM: ' + (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label}
-                </Text>
-              ) : null}
-              {!deep ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
-                  <Text style={s.ctxP}>{decode(item.context)}</Text>
-                </>
-              ) : null}
-              {item.dec && item.dec.angles && item.dec.angles.length ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHO GAINS, WHO PAYS</Text>
-                  {item.dec.angles.map((a, i) => (
-                    <Text key={i} style={s.li}>
-                      <Text style={{ color: C.accent }}>› </Text>
-                      <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
-                      {' — ' + decode(a.effect)}
-                    </Text>
-                  ))}
-                </>
-              ) : null}
-              {item.dec && item.dec.kill ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHAT WOULD CHANGE THIS READ</Text>
-                  <Text style={s.ctxP}>{decode(item.dec.kill)}</Text>
-                </>
-              ) : null}
-              {(specMatches || []).map((sp, i) => (
-                <View key={'sp' + i} style={{ marginTop: 8 }}>
-                  <Text style={[s.ctxlbl, MONO, { color: (GRADE_META[sp.grade] || GRADE_META.unverified).c }]}>
-                    {'WATCHTOWER · ' + (GRADE_META[sp.grade] || GRADE_META.unverified).label}
-                  </Text>
-                  <Text style={s.ctxP}>{decode(sp.obs) + ' — ' + decode(sp.src || '')}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </>
-      ) : null}
-      {!easy && (onBoard || callsCount > 0) ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          {onBoard ? <WebLink label="◉ ON THE BOARD ↑" onPress={onBoard} /> : null}
-          {callsCount > 0 ? (
-            <WebLink label={'ANALYSIS ON ' + (item.region || 'THIS').toUpperCase() + ' (' + callsCount + ') →'} onPress={onCalls} />
-          ) : null}
-        </View>
+      )}
+    </>
+  );
+}
+
+// ── ARTICLE — the page you land on after tapping a headline. One story, nothing else. ──
+function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount, onCalls, specMatches, prev, next, onOpen }) {
+  const { head, stand, longHead } = articleParts(item);
+  const body = bodyFor(item, simpleText, easy, deep);
+  return (
+    <View style={s.stack}>
+      <Pressable onPress={onBack} style={s.backbtn}>
+        <Text style={[s.backtxt, MONO]}>‹ ALL HEADLINES</Text>
+      </Pressable>
+      <View style={s.article}>
+        <Text style={[s.kick, MONO, { marginBottom: 10 }]}>{kickerOf(item)}</Text>
+        <Text style={[stand ? s.artH : s.artHLong, SERIF]}>{stand ? head : longHead}</Text>
+        {stand ? <Text style={s.artStand}>{stand}</Text> : null}
+        <View style={s.artrule} />
+        <Text style={[s.stime, MONO, { marginBottom: 16 }]}>{fullStamp(item.ts)}</Text>
+        <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
+        {item.srcs && item.srcs.length ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 14 }}>
+            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginRight: 8 }]}>SOURCES:</Text>
+            {item.srcs.map((sc, i) => (
+              <Pressable key={i} onPress={() => sc.u && Linking.openURL(sc.u)} style={{ marginRight: 10 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 10.5, textDecorationLine: 'underline' }]}>{decode(sc.n || 'link')}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {!easy ? <ContextPanel item={item} deep={deep} specMatches={specMatches} /> : null}
+        {!easy && (onBoard || callsCount > 0) ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {onBoard ? <WebLink label="◉ ON THE BOARD ↑" onPress={onBoard} /> : null}
+            {callsCount > 0 ? (
+              <WebLink label={'ANALYSIS ON ' + (item.region || 'THIS').toUpperCase() + ' (' + callsCount + ') →'} onPress={onCalls} />
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+      {/* keep reading — the paper hands you the next story rather than a dead end */}
+      {next || prev ? (
+        <Section title="Keep reading">
+          {[prev, next].filter(Boolean).map((n, i) => (
+            <Pressable key={i} onPress={() => onOpen(n.i)} style={s.nextrow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(n.s)}</Text>
+                <Text style={[s.nextH, SERIF]} numberOfLines={2}>{articleParts(n.s).head}</Text>
+              </View>
+              <Text style={{ color: C.accent, fontSize: 16, marginLeft: 10 }}>›</Text>
+            </Pressable>
+          ))}
+        </Section>
       ) : null}
     </View>
   );
@@ -801,7 +931,7 @@ function Watchtower({ items }) {
   );
 }
 
-function HomeTab({ data, easy, deep, goTab }) {
+function HomeTab({ data, easy, deep, goTab, goArticle }) {
   const rline = data.risk.line;
   const tiles = [
     ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
@@ -849,15 +979,17 @@ function HomeTab({ data, easy, deep, goTab }) {
       </Pressable>
       <CostCard cost={data.cost} />
       <Section title="Top developments" extra="SEE ALL ›">
-        {topDevs.map(({ s: st }, i) => (
-          <Pressable key={i} onPress={() => goTab('news')}
-            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: i < topDevs.length - 1 ? 1 : 0, borderColor: C.line }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, marginRight: 10, backgroundColor: riskColor[(data.events || []).find((e) => evRegion(e) === st.region)?.sev] || C.elev }} />
+        {topDevs.map(({ s: st, i: bi }, n) => (
+          <Pressable key={bi} onPress={() => goArticle(bi)}
+            style={{ flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: n < topDevs.length - 1 ? 1 : 0, borderColor: C.line }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, marginRight: 10, marginTop: 6, backgroundColor: riskColor[(data.events || []).find((e) => evRegion(e) === st.region)?.sev] || C.elev }} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: C.text, fontSize: 13.5 }} numberOfLines={2}>{decode(st.h)}</Text>
-              <Text style={[MONO, { color: C.muted, fontSize: 9, marginTop: 2 }]}>{(st.region || '').toUpperCase() + (st.tag ? ' · ' + decode(st.tag).toUpperCase() : '')}</Text>
+              <View style={s.idxmeta}>
+                <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(st)}</Text>
+                <Text style={[s.idxtime, MONO]}>{timeOnly(st.ts)}</Text>
+              </View>
+              <Text style={[s.teaseH, SERIF]} numberOfLines={3}>{articleParts(st).head}</Text>
             </View>
-            <Text style={{ color: C.accent, fontSize: 16, marginLeft: 8 }}>›</Text>
           </Pressable>
         ))}
       </Section>
@@ -894,11 +1026,15 @@ function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
   );
 }
 
-function NewsTab({ data, easy, deep, goTab, goBoard }) {
+// ── NEWS — a front page, not a stack of slabs. ──────────────────────────────
+// Two states share the tab: the INDEX (scan) and an ARTICLE (read). Order stays
+// strictly newest-first inside day sections, so the chronology is never violated;
+// hierarchy comes from position, not from re-ranking.
+function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
   useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
-  const choose = (r) => { setRegion(r); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
+  const choose = (r) => { setRegion(r); setArticle(null); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
 
   const regions = regionsPresent(data.brief);
   const active = region === 'ALL' || regions.includes(region) ? region : 'ALL';
@@ -906,31 +1042,51 @@ function NewsTab({ data, easy, deep, goTab, goBoard }) {
   const chips = [['ALL', 'All', (data.brief || []).length]].concat(regions.map((r) => [r, r, counts[r] || 0]));
   const rows = briefSorted(data.brief).filter(({ s }) => active === 'ALL' || s.region === active);
 
+  const open = (i) => { setArticle(i); if (scrollTop) scrollTop(); };
+  const back = () => { setArticle(null); if (scrollTop) scrollTop(); };
+
+  // ARTICLE STATE — one story, plus the stories either side of it in the run.
+  const at = article == null ? -1 : rows.findIndex(({ i }) => i === article);
+  if (at >= 0) {
+    const { s: item, i } = rows[at];
+    const evIdx = (data.events || []).findIndex((ev) => evRegion(ev) === item.region);
+    return (
+      <ArticlePage
+        item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open}
+        onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
+        callsCount={regionForecasts(data, item.region).length}
+        onCalls={() => goTab('conspiracy')}
+        specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
+        prev={at > 0 ? rows[at - 1] : null}
+        next={at < rows.length - 1 ? rows[at + 1] : null}
+      />
+    );
+  }
+
+  // INDEX STATE — masthead, filter, then day sections: lead, secondaries, dense tail.
+  let seen = null;
   return (
     <View style={s.stack}>
-      <StatStrip stats={[
-        [(data.brief || []).length, 'STORIES'],
-        [regions.length, 'THEATERS'],
-        [(data.updated || '').split(' ')[1] || '—', 'UPDATED'],
-      ]} />
-      <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
-      <View style={s.briefhead}>
-        <Text style={[s.briefT, MONO]}>LATEST HEADLINES</Text>
-        <Text style={[s.briefD, MONO]}>{data.updated}</Text>
+      <View style={s.masthead}>
+        <Text style={[s.mastT, MONO]}>THE WIRE</Text>
+        <Text style={[s.mastD, MONO]}>{(data.brief || []).length + ' STORIES · ' + (data.updated || '')}</Text>
       </View>
+      <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
       {regions.length ? <FilterDrop pairs={chips} active={active} onPick={choose} /> : null}
-      {rows.length
-        ? rows.map(({ s, i }) => {
-            const evIdx = (data.events || []).findIndex((ev) => evRegion(ev) === s.region);
-            const calls = regionForecasts(data, s.region).length;
-            return (
-              <StoryCard key={i} item={s} simpleText={simple[i]} easy={easy} deep={deep}
-                onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
-                callsCount={calls} onCalls={() => goTab('conspiracy')}
-                specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === s.region)} />
-            );
-          })
-        : <Text style={s.foot}>No headlines in this filter right now.</Text>}
+      {rows.length ? rows.map(({ s: st, i }, n) => {
+        const k = dayKey(st.ts);
+        const rule = k !== seen ? <DayRule key={'d' + k} label={dayLabel(st.ts)} /> : null;
+        const first = k !== seen;
+        seen = k;
+        return (
+          <View key={i}>
+            {rule}
+            {first && n === 0
+              ? <LeadStory item={st} simpleText={simple[i]} easy={easy} deep={deep} onOpen={() => open(i)} />
+              : <IndexRow item={st} simpleText={simple[i]} easy={easy} deep={deep} dense={n >= 6} onOpen={() => open(i)} />}
+          </View>
+        );
+      }) : <Text style={s.foot}>No headlines in this filter right now.</Text>}
       {data.watch && data.watch.length ? (
         <Section title="What to watch next">
           {data.watch.map((w, i) => (
@@ -1247,6 +1403,12 @@ export default function App() {
   const [tab, setTab] = useState('home');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
   const goBoard = (i) => { setBoardSel(i); setTab('map'); };
+  // Which story NEWS is showing as an article (null = the index). Lives up here so HOME
+  // can hand the reader straight into a story, the way a front-page teaser does.
+  const [article, setArticle] = useState(null);
+  const scrollRef = useRef(null);
+  const scrollTop = () => { if (scrollRef.current) scrollRef.current.scrollTo({ y: 0, animated: false }); };
+  const goArticle = (i) => { setArticle(i); setTab('news'); scrollTop(); };
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
   const [level, setLevel] = useState('regular');
@@ -1303,10 +1465,10 @@ export default function App() {
           </View>
         )}
         {data && (
-          <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} />}
+          <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
+            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} />}
             {tab === 'map' && <MapTab data={data} easy={easy} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
-            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} />}
+            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} article={article} setArticle={setArticle} scrollTop={scrollTop} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
             <LegalFooter />
@@ -1318,7 +1480,7 @@ export default function App() {
             {TABS.map((t, i) => {
               const on = tab === t.key;
               return (
-                <Pressable key={t.key} onPress={() => setTab(t.key)}
+                <Pressable key={t.key} onPress={() => { setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}
                   style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
                   <Text style={{ fontSize: 15, color: on ? C.accent : C.muted, lineHeight: 17 }}>{t.g}</Text>
                   <Text style={[s.modeTxt, MONO, { fontSize: 7, letterSpacing: 0.5 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
@@ -1375,6 +1537,39 @@ const s = StyleSheet.create({
   briefhead: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 4, paddingTop: 2 },
   briefT: { fontSize: 11, fontWeight: '700', letterSpacing: 2.4, color: C.muted },
   briefD: { marginLeft: 'auto', fontSize: 10, color: C.accent, letterSpacing: 0.6 },
+  // ── FRONT PAGE ──────────────────────────────────────────────────────────────
+  // A newspaper's grid is made of type weight and hairlines, not boxes. The index
+  // rows have no card chrome at all: a rule separates them, and size says rank.
+  masthead: { flexDirection: 'row', alignItems: 'baseline', borderBottomWidth: 2, borderBottomColor: C.accentDim, paddingBottom: 8, paddingHorizontal: 2 },
+  mastT: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 3.5 },
+  mastD: { marginLeft: 'auto', color: C.muted, fontSize: 9.5, letterSpacing: 1 },
+  dayrule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: -6 },
+  daytxt: { color: C.accent, fontSize: 9.5, fontWeight: '700', letterSpacing: 2.2 },
+  dayline: { flex: 1, height: 1, backgroundColor: C.line },
+  kick: { color: C.accent, fontSize: 9, letterSpacing: 1.6, flex: 1 },
+  idxmeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
+  idxtime: { color: C.muted, fontSize: 9.5, letterSpacing: 0.6 },
+  // the lead is the only story on the page that gets a panel — that IS its emphasis
+  lead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderTopWidth: 3, borderTopColor: C.accent, borderRadius: 5, padding: 16 },
+  leadH: { color: C.text, fontSize: 24, lineHeight: 30, fontWeight: '700' },
+  leadDek: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
+  idxfoot: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  readmore: { color: C.accent, fontSize: 10, letterSpacing: 1.4, fontWeight: '700' },
+  idxsrc: { marginLeft: 'auto', color: C.muted, fontSize: 9, letterSpacing: 1 },
+  idxrow: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14, paddingBottom: 2, paddingHorizontal: 2 },
+  idxH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700' },
+  idxDek: { color: C.muted, fontSize: 13, lineHeight: 20, marginTop: 6 },
+  teaseH: { color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '700', marginTop: 1 },
+  // ── ARTICLE ──
+  backbtn: { alignSelf: 'flex-start', paddingVertical: 4 },
+  backtxt: { color: C.accent, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '700' },
+  article: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, padding: 20 },
+  artH: { color: C.text, fontSize: 26, lineHeight: 33, fontWeight: '700' },
+  artHLong: { color: C.text, fontSize: 21, lineHeight: 28, fontWeight: '700' },
+  artStand: { color: C.muted, fontSize: 15, lineHeight: 23, marginTop: 12 },
+  artrule: { height: 1, backgroundColor: C.line, marginTop: 16, marginBottom: 10 },
+  nextrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.line },
+  nextH: { color: C.text, fontSize: 14.5, lineHeight: 20, fontWeight: '700', marginTop: 1 },
   storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
   spine: { position: 'absolute', left: 12, top: 22, bottom: 20, width: 2, borderRadius: 2, backgroundColor: C.accentDim },
   ktag: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.8, color: C.muted, marginBottom: 11 },
