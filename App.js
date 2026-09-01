@@ -469,20 +469,31 @@ function chatterScore(item, c) {
   return n;
 }
 function chatterFor(item, chatter) {
-  // The analyst attaching a theory to this specific card always wins outright.
-  if (item.consp) return (Array.isArray(item.consp) ? item.consp : [item.consp]).map((c) => ({ ...c, own: true }));
-  if (!item.region || item.region === 'Global') return [];   // too broad a bucket to match on
-  return (chatter || [])
-    .filter((c) => (c.region || inferRegion(c.claim + ' ' + (c.spread || '') + ' ' + (c.read || ''))) === item.region)
-    .map((c) => ({ ...c, score: chatterScore(item, c) }))
-    .filter((c) => c.score >= 1)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2);
+  const own = item.consp
+    ? (Array.isArray(item.consp) ? item.consp : [item.consp]).map((c) => ({ ...c, tier: 'own' }))
+    : [];
+  const rest = (chatter || []).map((c) => ({
+    ...c, r: c.region || inferRegion(c.claim + ' ' + (c.spread || '') + ' ' + (c.read || '')),
+  }));
+  // Score ORDERS but never filters. Nothing circulating gets withheld from the reader —
+  // the most story-relevant just surfaces first.
+  const by = (x, y) => chatterScore(item, y) - chatterScore(item, x);
+  const theater = rest.filter((c) => c.r === item.region).sort(by).map((c) => ({ ...c, tier: 'theater' }));
+  const board = rest.filter((c) => c.r !== item.region).sort(by).map((c) => ({ ...c, tier: 'board' }));
+  return own.concat(theater, board);
 }
 
 function ConspiracyPanel({ items }) {
   const [open, setOpen] = useState(false);
   if (!items || !items.length) return null;
+  // Tier headers, not tier gates. Everything the sweep caught is in here; the labels
+  // only tell the reader how close to this story each one sits.
+  const HEAD = {
+    own: 'ON THIS STORY',
+    theater: 'ON THIS THEATER',
+    board: 'ELSEWHERE ON THE BOARDS',
+  };
+  let tier = null;
   return (
     <>
       <Pressable style={[s.ctxbtn, { borderColor: C.high }]} onPress={() => setOpen((o) => !o)}>
@@ -496,30 +507,41 @@ function ConspiracyPanel({ items }) {
             UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED
           </Text>
           <Text style={s.conspIntro}>
-            {(items[0] && items[0].own
-              ? 'What 4chan, Reddit and X are saying about this story.'
-              : 'What 4chan, Reddit and X are saying in this theater — matched to the story, not written about it.')
-              + ' Logged because who believes what is itself intelligence, not because anyone here has checked it.'}
+            Everything the desk caught circulating on 4chan, Reddit and X — nothing filtered out for
+            being far-fetched, because that is the point of the section. Logged as a record of what
+            people believe, not of what is true. Nobody here has checked any of it.
           </Text>
-          {items.map((c, i) => (
-            <View key={i} style={[s.consp, i > 0 && { borderTopWidth: 1, borderTopColor: C.line, marginTop: 14, paddingTop: 14 }]}>
-              <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE CLAIM</Text>
-              <Text style={s.ctxP}>{decode(c.claim)}</Text>
-              {c.spread ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO, { marginTop: 10 }]}>WHERE IT'S SPREADING</Text>
-                  <Text style={[s.ctxP, { color: C.muted, fontSize: 13 }]}>{decode(c.spread)}</Text>
-                </>
-              ) : null}
-              {c.read ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
-                  <Text style={s.ctxP}>{decode(c.read)}</Text>
-                </>
-              ) : null}
-              {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
-            </View>
-          ))}
+          {items.map((c, i) => {
+            const label = c.tier !== tier ? HEAD[c.tier] : null;
+            tier = c.tier;
+            return (
+              <View key={i}>
+                {label ? (
+                  <View style={s.conspTier}>
+                    <Text style={[s.conspTierTxt, MONO]}>{label}</Text>
+                    <View style={s.dayline} />
+                  </View>
+                ) : null}
+                <View style={[s.consp, !label && i > 0 && { borderTopWidth: 1, borderTopColor: C.line, marginTop: 14, paddingTop: 14 }]}>
+                  <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE CLAIM</Text>
+                  <Text style={s.ctxP}>{decode(c.claim)}</Text>
+                  {c.spread ? (
+                    <>
+                      <Text style={[s.ctxlbl, MONO, { marginTop: 10 }]}>WHERE IT'S SPREADING</Text>
+                      <Text style={[s.ctxP, { color: C.muted, fontSize: 13 }]}>{decode(c.spread)}</Text>
+                    </>
+                  ) : null}
+                  {c.read ? (
+                    <>
+                      <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
+                      <Text style={s.ctxP}>{decode(c.read)}</Text>
+                    </>
+                  ) : null}
+                  {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
+                </View>
+              </View>
+            );
+          })}
         </View>
       ) : null}
     </>
@@ -1729,6 +1751,8 @@ const s = StyleSheet.create({
   teaseH: { color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '700', marginTop: 1 },
   readH: { color: C.muted, fontWeight: '600' },
   conspWarn: { color: C.high, fontSize: 9, letterSpacing: 1.5, fontWeight: '700', marginBottom: 8 },
+  conspTier: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 10 },
+  conspTierTxt: { color: C.high, fontSize: 9, letterSpacing: 1.8, fontWeight: '700' },
   conspIntro: { color: C.muted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
   consp: {},
   artbar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
