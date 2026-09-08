@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView,
+  ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView,
   Share, StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,8 @@ import { LAND_PATH } from './worldmap';
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
 const ACK_KEY = 'geo-disclaimer-ack-v1';
 const MODE_KEY = 'geo-mode';
+const FEED_CACHE_KEY = 'geo-feed-cache-v1'; // last good feed: the app opens on it, then refreshes
+const STALE_MS = 10 * 60 * 1000;             // re-pull on foreground if the last pull is older than this
 const LEGAL = {
   terms: 'https://manwhatopps.github.io/geo-terminal-feed/terms.html',
   privacy: 'https://manwhatopps.github.io/geo-terminal-feed/privacy.html',
@@ -1020,6 +1022,93 @@ function CostCard({ cost }) {
   );
 }
 
+// ── MONEY PRINTER RED BOARD — Tier-0 prints vs stated thresholds (mirrors dashboard plumbing tab).
+// `board` is script-owned (data_feeds.py redboard apply): colour, lines, crisis channels A-D. ──
+const BOARD_COLOR = { RED: C.crit, YELLOW: C.elev, GREEN: C.calm };
+function RedBoard({ board, compact, onPress }) {
+  if (!board || !board.color) return null;
+  const col = BOARD_COLOR[board.color] || C.muted;
+  const hit = (board.lines || []).filter((l) => l.hit).length;
+  const tripped = (board.channels || []).filter((c) => c.status === 'TRIPPED');
+  const since = (board.since ? board.color.toLowerCase() + ' since ' + board.since : '')
+    + (board.days ? ' · ' + board.days + ' business day' + (board.days === 1 ? '' : 's') : '');
+  if (compact) {
+    return (
+      <Pressable onPress={onPress}
+        style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderLeftWidth: 4, borderLeftColor: col, borderRadius: 8, padding: 13, flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.5 }]}>MONEY PRINTER RED BOARD</Text>
+          <Text style={{ color: C.muted, fontSize: 11, marginTop: 3 }}>
+            {hit + ' of ' + (board.lines || []).length + ' lines crossed · ' + (tripped.length ? tripped.length + ' CHANNEL TRIPPED' : 'no channel tripped') + (board.asof ? ' · as of ' + board.asof : '')}
+          </Text>
+        </View>
+        <View style={{ borderWidth: 1, borderColor: col, borderRadius: 5, paddingVertical: 6, paddingHorizontal: 12 }}>
+          <Text style={[MONO, { color: col, fontWeight: '700', fontSize: 12, letterSpacing: 1 }]}>{board.color}</Text>
+        </View>
+      </Pressable>
+    );
+  }
+  return (
+    <Section title="Money printer red board" extra={board.color}>
+      <View style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderLeftWidth: 4, borderLeftColor: col, borderRadius: 8, padding: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <View style={{ borderWidth: 1, borderColor: col, borderRadius: 5, paddingVertical: 4, paddingHorizontal: 10, marginRight: 10 }}>
+            <Text style={[MONO, { color: col, fontWeight: '700', fontSize: 13, letterSpacing: 1.5 }]}>{board.color}</Text>
+          </View>
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, flex: 1 }]}>{since.toUpperCase()}</Text>
+        </View>
+        {(board.lines || []).map((l, i) => (
+          <View key={'l' + i} style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 4, borderTopWidth: 1, borderTopColor: C.line }}>
+            <Text style={[MONO, { color: l.hit ? C.crit : C.muted, fontSize: 11, width: 18 }]}>{l.hit ? '✕' : '·'}</Text>
+            <Text style={[MONO, { color: l.hit ? C.text : C.muted, fontSize: 11.5, flex: 1 }]}>{decode(l.k)}</Text>
+            <Text style={[MONO, { color: l.hit ? C.crit : C.text, fontSize: 12.5, fontWeight: '700' }]}>{l.v}</Text>
+            {l.src ? <Text style={[MONO, { color: C.muted, fontSize: 8.5, marginLeft: 6, width: 78, textAlign: 'right' }]}>{String(l.src).toUpperCase()}</Text> : null}
+          </View>
+        ))}
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.8, marginTop: 10, marginBottom: 4 }]}>CRISIS CHANNELS · WHERE A SQUEEZE WOULD EXIT</Text>
+        {(board.channels || []).map((c, i) => {
+          const cc = c.status === 'TRIPPED' ? C.crit : c.status === 'not tripped' ? C.calm : C.elev;
+          return (
+            <View key={'c' + i} style={{ paddingVertical: 5, borderTopWidth: 1, borderTopColor: C.line }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 11, width: 18 }]}>{c.id}</Text>
+                <Text style={[MONO, { color: C.text, fontSize: 11.5, flex: 1 }]}>{decode(c.name)}</Text>
+                <Text style={[MONO, { color: cc, fontSize: 9.5, letterSpacing: 0.8 }]}>{String(c.status).toUpperCase()}</Text>
+              </View>
+              {c.detail ? <Text style={{ color: C.muted, fontSize: 11, marginLeft: 18, marginTop: 2 }}>{decode(c.detail)}</Text> : null}
+            </View>
+          );
+        })}
+        <Text style={[s.foot, { marginTop: 8 }]}>
+          {'Rule: ' + decode(board.rule || 'RED 3+ lines, YELLOW 1-2, GREEN 0') + '. Non-events score: ' + (board.nonevents || 0) + ' red-board day' + (board.nonevents === 1 ? '' : 's') + ' with no channel tripped, counted against the crisis read.'}
+        </Text>
+      </View>
+    </Section>
+  );
+}
+
+// ── LIVE WATCHLIST — the prints the economic read is built on (plumbing.series) ──
+const TREND_C = { up: C.high, dn: C.calm, flat: C.muted };
+function LiveWatchlist({ items }) {
+  if (!items || !items.length) return null;
+  return (
+    <Section title="Live watchlist" extra={items.length + ' prints'}>
+      {items.map((x, i) => (
+        <View key={i} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.line }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text style={[MONO, { color: C.text, fontSize: 12, flex: 1 }]}>{decode(x.k)}</Text>
+            <Text style={[MONO, { color: C.accent, fontSize: 14, fontWeight: '700' }]}>{x.v}</Text>
+            <Text style={[MONO, { color: TREND_C[x.t] || C.muted, fontSize: 10.5, marginLeft: 8, minWidth: 54, textAlign: 'right' }]}>
+              {(x.t === 'up' ? '▲ ' : x.t === 'dn' ? '▼ ' : '· ') + (x.c || '')}
+            </Text>
+          </View>
+          {x.note ? <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{decode(x.note)}</Text> : null}
+        </View>
+      ))}
+    </Section>
+  );
+}
+
 // ── THE CHATTER — raw narrative monitoring: what the boards are saying. Unverified BY DESIGN. ──
 function Chatter({ items }) {
   if (!items || !items.length) return null;
@@ -1125,6 +1214,7 @@ function HomeTab({ data, easy, deep, goTab, goArticle, read }) {
         <Text style={{ color: C.accent, fontSize: 16 }}>›</Text>
       </Pressable>
       <CostCard cost={data.cost} />
+      {data.plumbing ? <RedBoard board={data.plumbing.board} compact onPress={() => goTab('strategy')} /> : null}
       <Section title="Top developments" extra="SEE ALL ›">
         {topDevs.map(({ s: st, i: bi }, n) => (
           <Pressable key={bi} onPress={() => goArticle(bi)}
@@ -1467,6 +1557,7 @@ function StrategyTab({ data, easy }) {
         [(data.actors || []).length, 'PLAYERS'],
         [data.lecture ? (data.lecture.date || 'LIVE') : '—', 'DEEP DIVE'],
         [data.plumbing ? (data.plumbing.stage || 'LIVE') : '—', 'ECON READ'],
+        [data.plumbing && data.plumbing.board ? data.plumbing.board.color : '—', 'RED BOARD'],
       ]} />
       {data.actors && data.actors.length ? (
         <Section title="The players" extra={actors.length + ' tracked'}>
@@ -1505,6 +1596,8 @@ function StrategyTab({ data, easy }) {
           </View>
         </Section>
       ) : null}
+      {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
+      {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Deep analysis and opinion, for information only. Not financial, legal, or safety advice.</Text>
     </View>
@@ -1613,14 +1706,29 @@ export default function App() {
   const accept = useCallback(() => { AsyncStorage.setItem(ACK_KEY, '1').catch(() => {}); setAcked(true); }, []);
   const setMode = useCallback((v) => { setLevel(v); AsyncStorage.setItem(MODE_KEY, v).catch(() => {}); }, []);
 
+  const lastPull = useRef(0);
   const load = useCallback(async () => {
     try {
       const r = await fetch(`${FEED}?t=${Date.now()}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setData(await r.json()); setErr(null);
+      const j = await r.json();
+      setData(j); setErr(null); lastPull.current = Date.now();
+      AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(j)).catch(() => {});
     } catch (e) { setErr(String(e.message || e)); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  // open on the cached feed (no spinner, works offline), then pull the live one
+  useEffect(() => {
+    AsyncStorage.getItem(FEED_CACHE_KEY).then((v) => {
+      try { if (v) setData((cur) => cur || JSON.parse(v)); } catch (e) {}
+    }).catch(() => {}).finally(load);
+  }, [load]);
+  // the desk refreshes the wire several times a day: re-pull when the app comes back to the foreground
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active' && Date.now() - lastPull.current > STALE_MS) load();
+    });
+    return () => sub.remove();
+  }, [load]);
   const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
 
   if (acked === null) {
@@ -1653,6 +1761,11 @@ export default function App() {
             <Pressable onPress={load} style={s.retry}><Text style={[s.retryTxt, MONO]}>RETRY</Text></Pressable>
           </View>
         )}
+        {data && err ? (
+          <Pressable onPress={load} style={{ backgroundColor: C.panel2, borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 4, alignItems: 'center' }}>
+            <Text style={[MONO, { color: C.elev, fontSize: 9, letterSpacing: 1 }]}>{'OFFLINE · SHOWING LAST SAVED BRIEF · TAP TO RETRY'}</Text>
+          </Pressable>
+        ) : null}
         {data && (
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} read={read} />}
