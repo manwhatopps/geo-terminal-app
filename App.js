@@ -1546,13 +1546,31 @@ function Watchlist({ tripwires }) {
   );
 }
 
-function StrategyTab({ data, easy }) {
+function StrategyTab({ data, easy, deep, goArticle, read, saved }) {
   const lec = data.lecture;
+  // The desk opens on the wire, not the roster: newest stories first, same index
+  // furniture as NEWS (lead panel + hairline rows), then the players below.
+  const simple = (easy && data.easy && data.easy.brief) || [];
+  const latest = briefSorted(data.brief).slice(0, 5);
   const [region, setRegion] = useState('ALL');
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
   const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
+      {latest.length ? (
+        <View>
+          <View style={s.masthead}>
+            <Text style={[s.mastT, MONO]}>LATEST FROM THE WIRE</Text>
+            <Text style={[s.mastD, MONO]}>{(data.brief || []).length + ' STORIES · ' + (data.updated || '')}</Text>
+          </View>
+          {latest.map(({ s: st, i }, n) => {
+            const id = storyId(st);
+            const props = { item: st, simpleText: simple[i], easy, deep, onOpen: () => goArticle && goArticle(i),
+                            isRead: !!(read && read[id]), isSaved: !!(saved && saved[id]) };
+            return n === 0 ? <LeadStory key={i} {...props} /> : <IndexRow key={i} {...props} dense={n >= 3} />;
+          })}
+        </View>
+      ) : null}
       <StatStrip stats={[
         [(data.actors || []).length, 'PLAYERS'],
         [data.lecture ? (data.lecture.date || 'LIVE') : '—', 'DEEP DIVE'],
@@ -1772,7 +1790,7 @@ export default function App() {
             {tab === 'map' && <MapTab data={data} easy={easy} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
             {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
-            {tab === 'strategy' && <StrategyTab data={data} easy={easy} />}
+            {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
             <LegalFooter />
           </ScrollView>
         )}
