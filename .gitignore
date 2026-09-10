@@ -44,3 +44,6 @@ ci/*.b64
 # generated native folders
 /ios
 /android
+
+# signing keys and ASC API key - never commit
+ci/
