@@ -326,6 +326,18 @@ function dayLabel(ts) {
   return stamp;
 }
 // The body a given reading level should see (unchanged rules, moved off the card).
+// Split a 2-4 sentence block into paragraphs of ~2 sentences so the page has air in it.
+function paragraphs(txt) {
+  const sents = String(txt || '').match(/[^.!?]+[.!?]+["')\]]*\s*/g) || [String(txt || '')];
+  const out = [];
+  for (let i = 0; i < sents.length; i += 2) out.push(sents.slice(i, i + 2).join('').trim());
+  return out.filter(Boolean);
+}
+function readTime(body, context) {
+  const words = String(body || '').split(/\s+/).length + String(context || '').split(/\s+/).length;
+  return Math.max(1, Math.round(words / 200)) + ' MIN READ';
+}
+
 function bodyFor(item, simpleText, easy, deep) {
   return easy && simpleText ? simpleText
     : deep && item.context ? item.t + '\n\n' + item.context
@@ -388,32 +400,37 @@ function IndexRow({ item, simpleText, easy, deep, dense, onOpen, isRead, isSaved
 
 // ── THE CONTEXT PANEL — the decode that used to live inline on every card. ──
 function ContextPanel({ item, deep, specMatches }) {
-  const [open, setOpen] = useState(deep);
-  useEffect(() => { setOpen(deep); }, [deep]);
+  const [open, setOpen] = useState(true);   // 2026-09-12: open by default — readers were not finding the decode
+  useEffect(() => { setOpen(true); }, [deep]);
   if (!item.context) return null;
   return (
     <>
-      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+      <Pressable style={[s.ctxbtn, s.ctxbtnWide]} onPress={() => setOpen((o) => !o)}>
         <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
       </Pressable>
       {open && (
         <View style={s.ctxpanel}>
           {item.dec && item.dec.verdict ? (
-            <Text style={[s.ktag, MONO, { color: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, borderColor: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, alignSelf: 'flex-start', marginBottom: 8 }]}>
-              {'CLAIM: ' + (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label}
-            </Text>
+            <View style={[s.verdict, { borderColor: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c }]}>
+              <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.6 }]}>THE CLAIM IS</Text>
+              <Text style={[MONO, { color: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, fontSize: 18, fontWeight: '800', letterSpacing: 2, marginTop: 2 }]}>
+                {(VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label.toUpperCase()}
+              </Text>
+            </View>
           ) : null}
           {!deep ? (
             <>
               <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
-              <Text style={s.ctxP}>{decode(item.context)}</Text>
+              {paragraphs(decode(item.context)).map((para, i) => (
+                <Text key={i} style={[s.ctxP, T(17, 28), i > 0 && { marginTop: 12 }]}>{para}</Text>
+              ))}
             </>
           ) : null}
           {item.dec && item.dec.angles && item.dec.angles.length ? (
             <>
               <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHO GAINS, WHO PAYS</Text>
               {item.dec.angles.map((a, i) => (
-                <Text key={i} style={s.li}>
+                <Text key={i} style={[s.li, T(16, 24)]}>
                   <Text style={{ color: C.accent }}>› </Text>
                   <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
                   {' — ' + decode(a.effect)}
@@ -424,7 +441,7 @@ function ContextPanel({ item, deep, specMatches }) {
           {item.dec && item.dec.kill ? (
             <>
               <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHAT WOULD CHANGE THIS READ</Text>
-              <Text style={s.ctxP}>{decode(item.dec.kill)}</Text>
+              <Text style={[s.ctxP, T(17, 28)]}>{decode(item.dec.kill)}</Text>
             </>
           ) : null}
           {(specMatches || []).map((sp, i) => (
@@ -498,9 +515,12 @@ function ConspiracyPanel({ items }) {
   let tier = null;
   return (
     <>
-      <Pressable style={[s.ctxbtn, { borderColor: C.high }]} onPress={() => setOpen((o) => !o)}>
+      <Pressable style={[s.ctxbtn, s.ctxbtnWide, { borderColor: C.high }]} onPress={() => setOpen((o) => !o)}>
         <Text style={[s.ctxbtnTxt, MONO, { color: C.high }]}>
-          {(open ? '− ' : '＋ ') + 'THE CONSPIRACY (' + items.length + ')'}
+          {(open ? '− ' : '＋ ') + 'THE CONSPIRACY'}
+        </Text>
+        <Text style={[MONO, { color: C.muted, fontSize: 11, marginLeft: 'auto' }]}>
+          {items.length + (items.length === 1 ? ' claim circulating' : ' claims circulating')}
         </Text>
       </Pressable>
       {open ? (
@@ -526,17 +546,17 @@ function ConspiracyPanel({ items }) {
                 ) : null}
                 <View style={[s.consp, !label && i > 0 && { borderTopWidth: 1, borderTopColor: C.line, marginTop: 14, paddingTop: 14 }]}>
                   <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE CLAIM</Text>
-                  <Text style={s.ctxP}>{decode(c.claim)}</Text>
+                  <Text style={[s.ctxP, T(17, 28)]}>{decode(c.claim)}</Text>
                   {c.spread ? (
                     <>
                       <Text style={[s.ctxlbl, MONO, { marginTop: 10 }]}>WHERE IT'S SPREADING</Text>
-                      <Text style={[s.ctxP, { color: C.muted, fontSize: 13 }]}>{decode(c.spread)}</Text>
+                      <Text style={[s.ctxP, T(15, 24), { color: C.muted }]}>{decode(c.spread)}</Text>
                     </>
                   ) : null}
                   {c.read ? (
                     <>
                       <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
-                      <Text style={s.ctxP}>{decode(c.read)}</Text>
+                      <Text style={[s.ctxP, T(17, 28)]}>{decode(c.read)}</Text>
                     </>
                   ) : null}
                   {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
@@ -577,18 +597,24 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount
         </View>
       </View>
       <View style={s.article}>
-        <Text style={[s.kick, MONO, { marginBottom: 10 }]}>{kickerOf(item)}</Text>
-        <Text style={[stand ? s.artH : s.artHLong, SERIF]}>{stand ? head : longHead}</Text>
-        {stand ? <Text style={s.artStand}>{stand}</Text> : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+          <Text style={[s.kick, MONO, { flex: 0, marginRight: 10 }]}>{kickerOf(item)}</Text>
+          <Text style={[s.readtime, MONO]}>{readTime(body, item.context)}</Text>
+        </View>
+        <Text style={[stand ? s.artH : s.artHLong, SERIF, T(stand ? 30 : 25, stand ? 37 : 32)]}>{stand ? head : longHead}</Text>
+        {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
-        <Text style={[s.stime, MONO, { marginBottom: 16 }]}>{fullStamp(item.ts)}</Text>
-        <Text style={[s.storyP, easy && { fontSize: 16.5, lineHeight: 27 }]}>{decode(body)}</Text>
+        <Text style={[s.stime, MONO, { marginBottom: 18 }]}>{fullStamp(item.ts)}</Text>
+        <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{easy ? 'IN PLAIN ENGLISH' : 'THE READ'}</Text>
+        {paragraphs(decode(body)).map((para, i) => (
+          <Text key={i} style={[s.storyP, T(easy ? 19 : 18, easy ? 32 : 30), i > 0 && { marginTop: 14 }]}>{para}</Text>
+        ))}
         {item.srcs && item.srcs.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 14 }}>
-            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginRight: 8 }]}>SOURCES:</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 18, gap: 8 }}>
+            <Text style={[MONO, { color: C.muted, fontSize: 10.5, letterSpacing: 1, marginRight: 2 }]}>SOURCES</Text>
             {item.srcs.map((sc, i) => (
-              <Pressable key={i} onPress={() => sc.u && Linking.openURL(sc.u)} style={{ marginRight: 10 }}>
-                <Text style={[MONO, { color: C.accent, fontSize: 10.5, textDecorationLine: 'underline' }]}>{decode(sc.n || 'link')}</Text>
+              <Pressable key={i} onPress={() => sc.u && Linking.openURL(sc.u)} style={s.srcchip}>
+                <Text style={[MONO, { color: C.accent, fontSize: 12 }]}>{decode(sc.n || 'link') + ' ↗'}</Text>
               </Pressable>
             ))}
           </View>
@@ -1623,10 +1649,15 @@ function StrategyTab({ data, easy, deep, goArticle, read, saved }) {
 }
 
 const LEVELS = [['simple', 'SIMPLE'], ['regular', 'REGULAR'], ['deep', 'DEEP']];
-function ModeToggle({ level, onChange }) {
+// Text size is the reader's, not the designer's. Three stops; the article/prose styles multiply by it.
+const SIZES = [['S', 'S', 0.92], ['M', 'M', 1], ['L', 'L', 1.15]];
+const TEXT_KEY = 'geo-textsize';
+let TSCALE = 1;
+const T = (fs, lh) => ({ fontSize: Math.round(fs * TSCALE * 10) / 10, lineHeight: lh ? Math.round(lh * TSCALE) : undefined });
+function ModeToggle({ level, onChange, tsize, onSize }) {
   return (
     <View style={s.levelbar}>
-      <Text style={[s.levelLbl, MONO]}>READING LEVEL</Text>
+      <Text style={[s.levelLbl, MONO]}>LEVEL</Text>
       <View style={s.modetog}>
         {LEVELS.map(([v, lab], i) => {
           const active = v === level;
@@ -1637,6 +1668,18 @@ function ModeToggle({ level, onChange }) {
           );
         })}
       </View>
+      {onSize ? (
+        <View style={[s.modetog, { marginLeft: 8 }]}>
+          {SIZES.map(([v, lab], i) => {
+            const active = v === tsize;
+            return (
+              <Pressable key={v} onPress={() => onSize(v)} style={[s.modeBtn, i > 0 && s.modeBtnDiv, active && s.modeBtnActive]}>
+                <Text style={[s.modeTxt, MONO, active && { color: C.text, fontWeight: '700' }, { fontSize: 10 + i * 1.5 }]}>{'A'}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1708,6 +1751,9 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [acked, setAcked] = useState(null);
   const [level, setLevel] = useState('regular');
+  const [tsize, setTsize] = useState('M');
+  useEffect(() => { AsyncStorage.getItem(TEXT_KEY).then((v) => { if (SIZES.some(([k]) => k === v)) { TSCALE = SIZES.find(([k]) => k === v)[2]; setTsize(v); } }).catch(() => {}); }, []);
+  const setSize = useCallback((v) => { TSCALE = SIZES.find(([k]) => k === v)[2]; setTsize(v); AsyncStorage.setItem(TEXT_KEY, v).catch(() => {}); }, []);
   const easy = level === 'simple', deep = level === 'deep';
 
   useEffect(() => {
@@ -1771,7 +1817,7 @@ export default function App() {
             </Pressable>
           </View>
         </View>
-        {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} /> : null}
+        {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -1822,12 +1868,12 @@ const s = StyleSheet.create({
   classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
   stamp: { color: C.muted, fontSize: 10, marginLeft: 'auto', letterSpacing: 0.5 },
   levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel2 },
-  levelLbl: { color: C.muted, fontSize: 9, letterSpacing: 1.5 },
+  levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
   modeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center' },
   modeBtnDiv: { borderLeftWidth: 1, borderLeftColor: C.line },
   modeBtnActive: { backgroundColor: C.chip },
-  modeTxt: { color: C.muted, fontSize: 10, letterSpacing: 1 },
+  modeTxt: { color: C.muted, fontSize: 11, letterSpacing: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
   retry: { borderWidth: 1, borderColor: C.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 22 },
   retryTxt: { color: C.accent, letterSpacing: 2, fontSize: 13 },
@@ -1835,9 +1881,9 @@ const s = StyleSheet.create({
   stack: { gap: 18 },
   section: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
   h2row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.panel2, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  h2: { color: C.muted, fontSize: 10, fontWeight: '700', letterSpacing: 2.2, fontFamily: 'Menlo' },
+  h2: { color: C.muted, fontSize: 11, fontWeight: '700', letterSpacing: 2.2, fontFamily: 'Menlo' },
   h2rule: { flex: 1, height: 1, backgroundColor: C.line },
-  h2extra: { color: C.accent, fontSize: 10, letterSpacing: 0.6 },
+  h2extra: { color: C.accent, fontSize: 11, letterSpacing: 0.6 },
   // gauge
   gauge: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 18 },
   gtop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 13 },
@@ -1848,11 +1894,11 @@ const s = StyleSheet.create({
   needle: { position: 'absolute', top: -4, width: 12, height: 17, backgroundColor: C.accent, borderRadius: 2, borderWidth: 2, borderColor: C.panel },
   gscale: { flexDirection: 'row', justifyContent: 'space-between' },
   gscaleTxt: { fontSize: 8, letterSpacing: 0.5, color: C.muted },
-  gline: { color: C.text, fontSize: 14.5, lineHeight: 22, marginTop: -8, paddingHorizontal: 4 },
+  gline: { color: C.text, fontSize: 16, lineHeight: 23, marginTop: -8, paddingHorizontal: 4 },
   // plain lead
   plainLead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 6, padding: 14 },
   plainLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: C.accent },
-  plainP: { color: C.text, fontSize: 14.5, lineHeight: 22, marginTop: 6 },
+  plainP: { color: C.text, fontSize: 16.5, lineHeight: 25, marginTop: 6 },
   // brief / story
   briefhead: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 4, paddingTop: 2 },
   briefT: { fontSize: 11, fontWeight: '700', letterSpacing: 2.4, color: C.muted },
@@ -1861,68 +1907,72 @@ const s = StyleSheet.create({
   // A newspaper's grid is made of type weight and hairlines, not boxes. The index
   // rows have no card chrome at all: a rule separates them, and size says rank.
   masthead: { flexDirection: 'row', alignItems: 'baseline', borderBottomWidth: 2, borderBottomColor: C.accentDim, paddingBottom: 8, paddingHorizontal: 2 },
-  mastT: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 3.5 },
-  mastD: { marginLeft: 'auto', color: C.muted, fontSize: 9.5, letterSpacing: 1 },
+  mastT: { color: C.text, fontSize: 15, fontWeight: '800', letterSpacing: 3.5 },
+  mastD: { marginLeft: 'auto', color: C.muted, fontSize: 11, letterSpacing: 1 },
   dayrule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: -6 },
-  daytxt: { color: C.accent, fontSize: 9.5, fontWeight: '700', letterSpacing: 2.2 },
+  daytxt: { color: C.accent, fontSize: 11, fontWeight: '700', letterSpacing: 2.2 },
   dayline: { flex: 1, height: 1, backgroundColor: C.line },
-  kick: { color: C.accent, fontSize: 9, letterSpacing: 1.6, flex: 1 },
+  kick: { color: C.accent, fontSize: 10.5, letterSpacing: 1.6, flex: 1 },
   idxmeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
-  idxtime: { color: C.muted, fontSize: 9.5, letterSpacing: 0.6 },
+  idxtime: { color: C.muted, fontSize: 11, letterSpacing: 0.6 },
   // the lead is the only story on the page that gets a panel — that IS its emphasis
   lead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderTopWidth: 3, borderTopColor: C.accent, borderRadius: 5, padding: 16 },
-  leadH: { color: C.text, fontSize: 24, lineHeight: 30, fontWeight: '700' },
-  leadDek: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
+  leadH: { color: C.text, fontSize: 28, lineHeight: 34, fontWeight: '700' },
+  leadDek: { color: C.text, opacity: 0.85, fontSize: 16.5, lineHeight: 24, marginTop: 12 },
   idxfoot: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  readmore: { color: C.accent, fontSize: 10, letterSpacing: 1.4, fontWeight: '700' },
-  idxsrc: { marginLeft: 'auto', color: C.muted, fontSize: 9, letterSpacing: 1 },
-  idxrow: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14, paddingBottom: 2, paddingHorizontal: 2 },
-  idxH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700' },
-  idxDek: { color: C.muted, fontSize: 13, lineHeight: 20, marginTop: 6 },
-  teaseH: { color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '700', marginTop: 1 },
+  readmore: { color: C.accent, fontSize: 11.5, letterSpacing: 1.4, fontWeight: '700' },
+  idxsrc: { marginLeft: 'auto', color: C.muted, fontSize: 10.5, letterSpacing: 1 },
+  idxrow: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 18, paddingBottom: 6, paddingHorizontal: 2 },
+  idxH: { color: C.text, fontSize: 21, lineHeight: 27, fontWeight: '700' },
+  idxDek: { color: C.muted, fontSize: 15, lineHeight: 22, marginTop: 8 },
+  teaseH: { color: C.text, fontSize: 17, lineHeight: 23, fontWeight: '700', marginTop: 1 },
   readH: { color: C.muted, fontWeight: '600' },
-  conspWarn: { color: C.high, fontSize: 9, letterSpacing: 1.5, fontWeight: '700', marginBottom: 8 },
+  conspWarn: { color: C.high, fontSize: 10.5, letterSpacing: 1.5, fontWeight: '700', marginBottom: 8 },
   conspTier: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 10 },
-  conspTierTxt: { color: C.high, fontSize: 9, letterSpacing: 1.8, fontWeight: '700' },
-  conspIntro: { color: C.muted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
+  conspTierTxt: { color: C.high, fontSize: 10.5, letterSpacing: 1.8, fontWeight: '700' },
+  conspIntro: { color: C.muted, fontSize: 14.5, lineHeight: 22, marginBottom: 16 },
   consp: {},
   artbar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   // ── ARTICLE ──
-  backtxt: { color: C.accent, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '700' },
-  article: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, padding: 20 },
-  artH: { color: C.text, fontSize: 26, lineHeight: 33, fontWeight: '700' },
-  artHLong: { color: C.text, fontSize: 21, lineHeight: 28, fontWeight: '700' },
-  artStand: { color: C.muted, fontSize: 15, lineHeight: 23, marginTop: 12 },
+  backtxt: { color: C.accent, fontSize: 12, letterSpacing: 1.6, fontWeight: '700' },
+  article: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderTopWidth: 3, borderTopColor: C.accent, borderRadius: 5, padding: 22 },
+  readtime: { color: C.muted, fontSize: 10.5, letterSpacing: 1.2 },
+  srcchip: { borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 7, paddingHorizontal: 11 },
+  verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
+  ctxbtnWide: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
+  artH: { color: C.text, fontSize: 30, lineHeight: 37, fontWeight: '700' },
+  artHLong: { color: C.text, fontSize: 25, lineHeight: 32, fontWeight: '700' },
+  artStand: { color: C.text, opacity: 0.85, fontSize: 17.5, lineHeight: 26, marginTop: 14 },
   artrule: { height: 1, backgroundColor: C.line, marginTop: 16, marginBottom: 10 },
-  nextrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.line },
-  nextH: { color: C.text, fontSize: 14.5, lineHeight: 20, fontWeight: '700', marginTop: 1 },
+  nextrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.line },
+  nextH: { color: C.text, fontSize: 17, lineHeight: 23, fontWeight: '700', marginTop: 1 },
   storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
   spine: { position: 'absolute', left: 12, top: 22, bottom: 20, width: 2, borderRadius: 2, backgroundColor: C.accentDim },
   ktag: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.8, color: C.muted, marginBottom: 11 },
   cardmeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
-  stime: { fontSize: 10.5, color: C.muted, letterSpacing: 0.6 },
+  stime: { fontSize: 12, color: C.muted, letterSpacing: 0.6 },
   rfilter: { flexDirection: 'row', gap: 7, paddingHorizontal: 4, paddingVertical: 4 },
   rchip: { backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 13 },
   rchipOn: { backgroundColor: C.accentDim, borderColor: C.accentDim },
   rchipTxt: { fontSize: 11, letterSpacing: 0.6, color: C.muted },
   storyH3: { fontSize: 22, lineHeight: 27, fontWeight: '700', color: C.text, marginBottom: 12 },
-  storyP: { fontSize: 15, lineHeight: 25, color: C.text },
+  storyP: { fontSize: 18, lineHeight: 30, color: C.text },
   ctxbtn: { marginTop: 15, alignSelf: 'flex-start', borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
-  ctxbtnTxt: { color: C.accent, fontSize: 10.5, fontWeight: '600', letterSpacing: 1.4 },
-  ctxpanel: { marginTop: 14, padding: 15, backgroundColor: C.panel2, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 7 },
-  ctxlbl: { fontSize: 9.5, letterSpacing: 1.6, color: C.muted, marginBottom: 8 },
-  ctxP: { fontSize: 14, lineHeight: 24, color: C.text },
-  li: { color: C.text, fontSize: 13.5, lineHeight: 19, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line },
-  foot: { color: C.muted, fontSize: 11, lineHeight: 17, paddingHorizontal: 6 },
+  ctxbtnTxt: { color: C.accent, fontSize: 12, fontWeight: '600', letterSpacing: 1.4 },
+  ctxpanel: { marginTop: 14, padding: 18, backgroundColor: C.panel2, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 7 },
+  ctxlbl: { fontSize: 11, letterSpacing: 1.6, color: C.muted, marginBottom: 10 },
+  ctxP: { fontSize: 17, lineHeight: 28, color: C.text },
+  li: { color: C.text, fontSize: 16, lineHeight: 24, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  foot: { color: C.muted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 6 },
   // tab intro
   tabintro: { paddingHorizontal: 6 },
-  tabintroP: { color: C.muted, fontSize: 13.5, lineHeight: 22 },
+  tabintroP: { color: C.muted, fontSize: 15.5, lineHeight: 24 },
   // calibration
   cal: { padding: 16 },
   calbig: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
   calnum: { fontSize: 34, fontWeight: '800', color: C.accent },
   callab: { fontSize: 9.5, letterSpacing: 1.4, color: C.muted },
-  calsay: { fontSize: 12.5, color: C.muted, lineHeight: 19, marginTop: 10, marginBottom: 12 },
+  calsay: { fontSize: 14.5, color: C.muted, lineHeight: 22, marginTop: 10, marginBottom: 12 },
   calstrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   caldot: { width: 11, height: 11, borderRadius: 6 },
   caldotHit: { backgroundColor: C.calm },
@@ -1930,33 +1980,33 @@ const s = StyleSheet.create({
   caldotPend: { borderWidth: 1.5, borderColor: C.accentDim },
   // hypotheses
   hyp: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  hypP: { color: C.accent, fontWeight: '700', minWidth: 44, fontSize: 15 },
-  hypName: { color: C.text, fontWeight: '600', fontSize: 13.5 },
-  hypD: { color: C.muted, fontSize: 12.5, marginTop: 3, lineHeight: 18 },
+  hypP: { color: C.accent, fontWeight: '700', minWidth: 48, fontSize: 17 },
+  hypName: { color: C.text, fontWeight: '600', fontSize: 15.5 },
+  hypD: { color: C.muted, fontSize: 14.5, marginTop: 4, lineHeight: 21 },
   // predictions
   pred: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.line },
   predtop: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
-  predq: { flex: 1, fontSize: 14.5, fontWeight: '600', color: C.text, lineHeight: 19 },
+  predq: { flex: 1, fontSize: 16.5, fontWeight: '600', color: C.text, lineHeight: 22 },
   predp: { fontSize: 21, fontWeight: '800', color: C.accent },
   predpS: { fontSize: 12, fontWeight: '400', color: C.muted },
   predmeta: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 4 },
   chip: { backgroundColor: C.chip, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1, fontSize: 11 },
   predmetaTxt: { color: C.muted, fontSize: 11 },
-  prednote: { color: C.muted, fontSize: 12.5, marginTop: 7, lineHeight: 19 },
+  prednote: { color: C.muted, fontSize: 14.5, marginTop: 8, lineHeight: 21 },
   bar: { height: 5, borderRadius: 3, backgroundColor: C.barBg, marginTop: 11, marginBottom: 8 },
   fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: C.accent },
   tick: { position: 'absolute', top: -3, width: 2, height: 11, backgroundColor: C.muted },
   // actors
   actor: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  actorName: { color: C.text, fontSize: 16, fontWeight: '700' },
-  actorRole: { color: C.accent, fontSize: 10, letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
-  actorRow: { color: C.text, fontSize: 12.5, lineHeight: 18, marginVertical: 2 },
+  actorName: { color: C.text, fontSize: 18.5, fontWeight: '700' },
+  actorRole: { color: C.accent, fontSize: 11.5, letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
+  actorRow: { color: C.text, fontSize: 15, lineHeight: 22, marginVertical: 3 },
   actorK: { color: C.muted, fontWeight: '600' },
   // prose
   prose: { paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4 },
-  h3: { color: C.text, fontSize: 19, fontWeight: '700', marginTop: 12, marginBottom: 6 },
-  kicker: { color: C.muted, fontSize: 11, letterSpacing: 2.5, marginTop: 14, marginBottom: 3 },
-  p: { color: C.text, fontSize: 14, lineHeight: 22, marginVertical: 5 },
+  h3: { color: C.text, fontSize: 22, fontWeight: '700', marginTop: 12, marginBottom: 6 },
+  kicker: { color: C.muted, fontSize: 12, letterSpacing: 2.5, marginTop: 14, marginBottom: 3 },
+  p: { color: C.text, fontSize: 16.5, lineHeight: 26, marginVertical: 6 },
   // gate
   gateScroll: { padding: 26, paddingTop: 60, flexGrow: 1, justifyContent: 'center' },
   gateH: { color: C.text, fontSize: 22, fontWeight: '700', marginBottom: 14 },
