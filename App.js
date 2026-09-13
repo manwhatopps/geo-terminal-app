@@ -24,13 +24,38 @@ const LEGAL = {
 // (Mirrors dashboard.html's dark :root; the old navy "Situation Room" palette is retired.)
 // Black + gold intelligence-agency (per user's reference mockup): near-black field,
 // dark cards, gold as THE accent. Severity stays amber->orange->red.
-const C = {
-  ink: '#09090B', panel: '#141317', panel2: '#0E0D10', line: '#2E2A20',
-  text: '#EDE7D8', muted: '#8D8574', accent: '#D4AF37', accentDim: '#8A7222',
-  calm: '#4C9A70', elev: '#D99A2B', high: '#E1662E', crit: '#D93B3B',
-  barBg: '#0E0D10', chip: '#221F18',
+// Two palettes, one key set. LIGHT is the default: dark-on-light (positive polarity) reads faster and more
+// accurately for normal vision at every size (Piepenbrock et al.; NN/g), and the effect grows as type gets
+// smaller. Newsprint, not white: a warm off-white ground, near-black ink, gold darkened until it clears 4.5:1
+// on white. DARK is the original black+gold agency look, kept behind a toggle for night reading.
+const THEMES = {
+  light: {
+    ink: '#F6F4EE', panel: '#FFFFFF', panel2: '#F0EDE5', line: '#DDD8CC',
+    text: '#17171A', muted: '#63626B', accent: '#8A6300', accentDim: '#C9A64A',
+    calm: '#2E7D5B', elev: '#B07316', high: '#C24D1E', crit: '#B42323',
+    barBg: '#E9E5DB', chip: '#ECE8DE',
+  },
+  dark: {
+    ink: '#09090B', panel: '#141317', panel2: '#0E0D10', line: '#2E2A20',
+    text: '#EDE7D8', muted: '#8D8574', accent: '#D4AF37', accentDim: '#8A7222',
+    calm: '#4C9A70', elev: '#D99A2B', high: '#E1662E', crit: '#D93B3B',
+    barBg: '#0E0D10', chip: '#221F18',
+  },
 };
-const riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
+const THEME_KEY = 'geo-theme';
+let THEME = 'light';
+let C = THEMES[THEME];
+let riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
+// Every component reads C and s at render time, so a theme change is: swap the palette, rebuild the
+// stylesheet, re-render from the root. (buildStyles is defined with the styles at the bottom of the file.)
+function applyTheme(name) {
+  THEME = THEMES[name] ? name : 'light';
+  C = THEMES[THEME];
+  riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
+  s = buildStyles();
+  GRADE_META = mkGradeMeta();
+  VERDICT_META = mkVerdictMeta();
+}
 const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
 // ── THE WEB — region is the connective key across board / stories / calls / decode ──
 // (mirrors dashboard.html's REGION_RX; brief cards carry `region` explicitly, everything
@@ -92,20 +117,26 @@ function WebLink({ label, onPress }) {
   );
 }
 // Watchtower grades: how much weight an OSINT observation has earned.
-const GRADE_META = {
-  corroborated: { c: C.calm, label: 'CORROBORATED' },
-  credible: { c: C.elev, label: 'CREDIBLE' },
-  unverified: { c: C.muted, label: 'UNVERIFIED' },
-};
+function mkGradeMeta() {
+  return {
+    corroborated: { c: C.calm, label: 'CORROBORATED' },
+    credible: { c: C.elev, label: 'CREDIBLE' },
+    unverified: { c: C.muted, label: 'UNVERIFIED' },
+    };
+}
+let GRADE_META = mkGradeMeta();
 
 // DECODE tab verdicts. Reuses the risk palette so a verdict badge reads on the same scale as the
 // threat gauge: green = the claim survives, red = it does not. Mirrors dashboard.html's VERDICT_META.
-const VERDICT_META = {
-  true: { c: C.calm, label: 'TRUE' },
-  partly: { c: C.elev, label: 'PARTLY TRUE' },
-  framing: { c: C.high, label: 'FRAMING' },
-  false: { c: C.crit, label: 'FALSE' },
-};
+function mkVerdictMeta() {
+  return {
+    true: { c: C.calm, label: 'TRUE' },
+    partly: { c: C.elev, label: 'PARTLY TRUE' },
+    framing: { c: C.high, label: 'FRAMING' },
+    false: { c: C.crit, label: 'FALSE' },
+    };
+}
+let VERDICT_META = mkVerdictMeta();
 const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
 const SERIF = { fontFamily: 'Georgia', fontWeight: '700' };  // refined dossier headlines (gold-agency register)
 
@@ -1050,10 +1081,10 @@ function CostCard({ cost }) {
 
 // ── MONEY PRINTER RED BOARD — Tier-0 prints vs stated thresholds (mirrors dashboard plumbing tab).
 // `board` is script-owned (data_feeds.py redboard apply): colour, lines, crisis channels A-D. ──
-const BOARD_COLOR = { RED: C.crit, YELLOW: C.elev, GREEN: C.calm };
+const boardColor = () => ({ RED: C.crit, YELLOW: C.elev, GREEN: C.calm });   // read at render so the theme can change
 function RedBoard({ board, compact, onPress }) {
   if (!board || !board.color) return null;
-  const col = BOARD_COLOR[board.color] || C.muted;
+  const col = boardColor()[board.color] || C.muted;
   const hit = (board.lines || []).filter((l) => l.hit).length;
   const tripped = (board.channels || []).filter((c) => c.status === 'TRIPPED');
   const since = (board.since ? board.color.toLowerCase() + ' since ' + board.since : '')
@@ -1114,7 +1145,7 @@ function RedBoard({ board, compact, onPress }) {
 }
 
 // ── LIVE WATCHLIST — the prints the economic read is built on (plumbing.series) ──
-const TREND_C = { up: C.high, dn: C.calm, flat: C.muted };
+const trendC = () => ({ up: C.high, dn: C.calm, flat: C.muted });
 function LiveWatchlist({ items }) {
   if (!items || !items.length) return null;
   return (
@@ -1124,7 +1155,7 @@ function LiveWatchlist({ items }) {
           <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
             <Text style={[MONO, { color: C.text, fontSize: 12, flex: 1 }]}>{decode(x.k)}</Text>
             <Text style={[MONO, { color: C.accent, fontSize: 14, fontWeight: '700' }]}>{x.v}</Text>
-            <Text style={[MONO, { color: TREND_C[x.t] || C.muted, fontSize: 10.5, marginLeft: 8, minWidth: 54, textAlign: 'right' }]}>
+            <Text style={[MONO, { color: trendC()[x.t] || C.muted, fontSize: 10.5, marginLeft: 8, minWidth: 54, textAlign: 'right' }]}>
               {(x.t === 'up' ? '▲ ' : x.t === 'dn' ? '▼ ' : '· ') + (x.c || '')}
             </Text>
           </View>
@@ -1654,7 +1685,7 @@ const SIZES = [['S', 'S', 0.92], ['M', 'M', 1], ['L', 'L', 1.15]];
 const TEXT_KEY = 'geo-textsize';
 let TSCALE = 1;
 const T = (fs, lh) => ({ fontSize: Math.round(fs * TSCALE * 10) / 10, lineHeight: lh ? Math.round(lh * TSCALE) : undefined });
-function ModeToggle({ level, onChange, tsize, onSize }) {
+function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme }) {
   return (
     <View style={s.levelbar}>
       <Text style={[s.levelLbl, MONO]}>LEVEL</Text>
@@ -1668,6 +1699,12 @@ function ModeToggle({ level, onChange, tsize, onSize }) {
           );
         })}
       </View>
+      {onTheme ? (
+        <Pressable onPress={() => onTheme(theme === 'light' ? 'dark' : 'light')} hitSlop={8}
+          style={{ borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingVertical: 5, paddingHorizontal: 9, marginLeft: 6 }}>
+          <Text style={{ color: C.muted, fontSize: 13 }}>{theme === 'light' ? '☾' : '☀'}</Text>
+        </Pressable>
+      ) : null}
       {onSize ? (
         <View style={[s.modetog, { marginLeft: 8 }]}>
           {SIZES.map(([v, lab], i) => {
@@ -1687,7 +1724,7 @@ function ModeToggle({ level, onChange, tsize, onSize }) {
 function DisclaimerGate({ onAccept }) {
   return (
     <SafeAreaView style={s.root}>
-      <StatusBar style="light" />
+      <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
       <ScrollView contentContainerStyle={s.gateScroll}>
         <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
         <Text style={[s.gateH, SERIF]}>Before you begin</Text>
@@ -1752,6 +1789,9 @@ export default function App() {
   const [acked, setAcked] = useState(null);
   const [level, setLevel] = useState('regular');
   const [tsize, setTsize] = useState('M');
+  const [theme, setThemeState] = useState(THEME);
+  useEffect(() => { AsyncStorage.getItem(THEME_KEY).then((v) => { if (v && THEMES[v] && v !== THEME) { applyTheme(v); setThemeState(v); } }).catch(() => {}); }, []);
+  const setTheme = useCallback((v) => { applyTheme(v); setThemeState(v); AsyncStorage.setItem(THEME_KEY, v).catch(() => {}); }, []);
   useEffect(() => { AsyncStorage.getItem(TEXT_KEY).then((v) => { if (SIZES.some(([k]) => k === v)) { TSCALE = SIZES.find(([k]) => k === v)[2]; setTsize(v); } }).catch(() => {}); }, []);
   const setSize = useCallback((v) => { TSCALE = SIZES.find(([k]) => k === v)[2]; setTsize(v); AsyncStorage.setItem(TEXT_KEY, v).catch(() => {}); }, []);
   const easy = level === 'simple', deep = level === 'deep';
@@ -1804,7 +1844,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={s.root} edges={['top']}>
-        <StatusBar style="light" />
+        <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
         <View style={s.header}>
           <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL<BlinkCursor /></Text>
@@ -1817,7 +1857,7 @@ export default function App() {
             </Pressable>
           </View>
         </View>
-        {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} /> : null}
+        {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -1860,14 +1900,15 @@ export default function App() {
   );
 }
 
-const s = StyleSheet.create({
+function buildStyles() {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
   header: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
   wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 14, textShadowColor: C.accent, textShadowRadius: 8 },
   classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
   stamp: { color: C.muted, fontSize: 10, marginLeft: 'auto', letterSpacing: 0.5 },
-  levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel2 },
+  levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel },
   levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
   modeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center' },
@@ -1935,7 +1976,7 @@ const s = StyleSheet.create({
   artbar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   // ── ARTICLE ──
   backtxt: { color: C.accent, fontSize: 12, letterSpacing: 1.6, fontWeight: '700' },
-  article: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderTopWidth: 3, borderTopColor: C.accent, borderRadius: 5, padding: 22 },
+  article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 10.5, letterSpacing: 1.2 },
   srcchip: { borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 7, paddingHorizontal: 11 },
   verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
@@ -1943,7 +1984,7 @@ const s = StyleSheet.create({
   artH: { color: C.text, fontSize: 30, lineHeight: 37, fontWeight: '700' },
   artHLong: { color: C.text, fontSize: 25, lineHeight: 32, fontWeight: '700' },
   artStand: { color: C.text, opacity: 0.85, fontSize: 17.5, lineHeight: 26, marginTop: 14 },
-  artrule: { height: 1, backgroundColor: C.line, marginTop: 16, marginBottom: 10 },
+  artrule: { height: 2, backgroundColor: C.accent, width: 56, marginTop: 18, marginBottom: 12 },   // a short accent rule, newspaper-style
   nextrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.line },
   nextH: { color: C.text, fontSize: 17, lineHeight: 23, fontWeight: '700', marginTop: 1 },
   storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
@@ -1959,7 +2000,7 @@ const s = StyleSheet.create({
   storyP: { fontSize: 18, lineHeight: 30, color: C.text },
   ctxbtn: { marginTop: 15, alignSelf: 'flex-start', borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
   ctxbtnTxt: { color: C.accent, fontSize: 12, fontWeight: '600', letterSpacing: 1.4 },
-  ctxpanel: { marginTop: 14, padding: 18, backgroundColor: C.panel2, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 7 },
+  ctxpanel: { marginTop: 14, padding: 18, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 8 },
   ctxlbl: { fontSize: 11, letterSpacing: 1.6, color: C.muted, marginBottom: 10 },
   ctxP: { fontSize: 17, lineHeight: 28, color: C.text },
   li: { color: C.text, fontSize: 16, lineHeight: 24, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
@@ -2025,3 +2066,5 @@ const s = StyleSheet.create({
   navTxt: { color: C.muted, fontSize: 11, letterSpacing: 1.4 },
   navUnder: { marginTop: 5, width: 16, height: 2, borderRadius: 2, backgroundColor: C.accent },
 });
+}
+let s = buildStyles();
