@@ -137,8 +137,14 @@ function mkVerdictMeta() {
     };
 }
 let VERDICT_META = mkVerdictMeta();
-const MONO = { fontFamily: 'Menlo', fontVariant: ['tabular-nums'] };
-const SERIF = { fontFamily: 'Georgia', fontWeight: '700' };  // refined dossier headlines (gold-agency register)
+// Three faces, copied from the readers people actually finish articles in:
+//   MONO  — was Menlo on every label; now the system face with tabular numerals (Apple News). Numbers line up,
+//           labels stop shouting. The name stays so the 200 call sites don't change.
+//   SERIF — the headline face: heavy system sans, tight tracking (Apple News / SF Display register).
+//   BODY  — Charter, the serif Medium runs its articles in (ships with iOS). Generous x-height, open forms.
+const MONO = { fontVariant: ['tabular-nums'] };
+const SERIF = { fontWeight: '800', letterSpacing: -0.4 };
+const BODY = { fontFamily: 'Charter' };
 
 // Feed strings carry HTML entities (web decodes via innerHTML; RN <Text> shows them literally).
 function decode(s) {
@@ -210,7 +216,7 @@ function Section({ title, extra, children }) {
   return (
     <View style={s.section}>
       <View style={s.h2row}>
-        <Text style={s.h2}>{title.toUpperCase()}</Text>
+        <Text style={s.h2}>{title}</Text>
         <View style={s.h2rule} />
         {extra ? <Text style={[s.h2extra, MONO]}>{extra}</Text> : null}
       </View>
@@ -615,7 +621,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount
   return (
     <View style={s.stack}>
       <View style={s.artbar}>
-        <Pressable onPress={onBack} hitSlop={8}><Text style={[s.backtxt, MONO]}>‹ ALL HEADLINES</Text></Pressable>
+        <Pressable onPress={onBack} hitSlop={8}><Text style={s.backtxt}>‹ All headlines</Text></Pressable>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginLeft: 'auto' }}>
           <Pressable onPress={onSave} hitSlop={8}>
             <Text style={[MONO, { color: isSaved ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2 }]}>
@@ -1377,7 +1383,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
   return (
     <View style={s.stack}>
       <View style={s.masthead}>
-        <Text style={[s.mastT, MONO]}>THE WIRE</Text>
+        <Text style={s.mastT}>The Wire</Text>
         <Text style={[s.mastD, MONO]}>{(data.brief || []).length + ' STORIES · ' + (data.updated || '')}</Text>
       </View>
       <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
@@ -1617,7 +1623,7 @@ function StrategyTab({ data, easy, deep, goArticle, read, saved }) {
       {latest.length ? (
         <View>
           <View style={s.masthead}>
-            <Text style={[s.mastT, MONO]}>LATEST FROM THE WIRE</Text>
+            <Text style={s.mastT}>Latest</Text>
             <Text style={[s.mastD, MONO]}>{(data.brief || []).length + ' STORIES · ' + (data.updated || '')}</Text>
           </View>
           {latest.map(({ s: st, i }, n) => {
@@ -1847,13 +1853,13 @@ export default function App() {
         <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
         <View style={s.header}>
           <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
-          <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL<BlinkCursor /></Text>
+          <Text style={s.wordmark}>GEO <Text style={{ fontWeight: '400', color: C.muted }}>Terminal</Text></Text>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[s.stamp, MONO, { marginRight: 10 }]}>{data ? data.updated : ''}</Text>
             {/* AI chat: deep-links into the Telegram analyst (same brain, subscription-funded) */}
             <Pressable onPress={() => Linking.openURL('https://t.me/Claudeyyybot')}
-              style={{ backgroundColor: C.accent, borderRadius: 5, paddingVertical: 5, paddingHorizontal: 10 }}>
-              <Text style={[MONO, { color: C.ink, fontSize: 10, fontWeight: '700', letterSpacing: 1 }]}>🗨 ANALYST</Text>
+              style={{ backgroundColor: C.accent, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 }}>
+              <Text style={{ color: C.panel, fontSize: 12.5, fontWeight: '700' }}>Ask the analyst</Text>
             </Pressable>
           </View>
         </View>
@@ -1882,14 +1888,14 @@ export default function App() {
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
           {/* segmented pill, same organizing bubble as the READING LEVEL selector up top */}
-          <View style={[s.modetog, { marginHorizontal: 12, marginVertical: 8, flex: 0 }]}>
+          <View style={[s.modetog, { marginHorizontal: 12, marginVertical: 8, flex: 0, borderRadius: 14 }]}>
             {TABS.map((t, i) => {
               const on = tab === t.key;
               return (
                 <Pressable key={t.key} onPress={() => { setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}
                   style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                  <Text style={{ fontSize: 15, color: on ? C.accent : C.muted, lineHeight: 17 }}>{t.g}</Text>
-                  <Text style={[s.modeTxt, MONO, { fontSize: 7, letterSpacing: 0.5 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
+                  <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
+                  <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
                 </Pressable>
               );
             })}
@@ -1903,28 +1909,28 @@ export default function App() {
 function buildStyles() {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
-  wordmark: { color: C.text, fontWeight: '800', letterSpacing: 3, fontSize: 14, textShadowColor: C.accent, textShadowRadius: 8 },
+  wordmark: { color: C.text, fontWeight: '800', letterSpacing: -0.5, fontSize: 22 },
   classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
-  stamp: { color: C.muted, fontSize: 10, marginLeft: 'auto', letterSpacing: 0.5 },
+  stamp: { color: C.muted, fontSize: 12, marginLeft: 'auto' },
   levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel },
   levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
-  modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
-  modeBtn: { flex: 1, paddingVertical: 6, alignItems: 'center' },
+  modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 10, overflow: 'hidden' },
+  modeBtn: { flex: 1, paddingVertical: 7, alignItems: 'center' },
   modeBtnDiv: { borderLeftWidth: 1, borderLeftColor: C.line },
   modeBtnActive: { backgroundColor: C.chip },
   modeTxt: { color: C.muted, fontSize: 11, letterSpacing: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 14 },
   retry: { borderWidth: 1, borderColor: C.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 22 },
   retryTxt: { color: C.accent, letterSpacing: 2, fontSize: 13 },
-  scroll: { padding: 15, gap: 18 },
-  stack: { gap: 18 },
-  section: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, overflow: 'hidden' },
-  h2row: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.panel2, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  h2: { color: C.muted, fontSize: 11, fontWeight: '700', letterSpacing: 2.2, fontFamily: 'Menlo' },
-  h2rule: { flex: 1, height: 1, backgroundColor: C.line },
-  h2extra: { color: C.accent, fontSize: 11, letterSpacing: 0.6 },
+  scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 24 },
+  stack: { gap: 24 },
+  section: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 14, overflow: 'hidden' },
+  h2row: { flexDirection: 'row', alignItems: 'baseline', gap: 12, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10 },
+  h2: { color: C.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
+  h2rule: { flex: 1 },
+  h2extra: { color: C.accent, fontSize: 13, fontWeight: '600' },
   // gauge
   gauge: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 18 },
   gtop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 13 },
@@ -1935,7 +1941,7 @@ function buildStyles() {
   needle: { position: 'absolute', top: -4, width: 12, height: 17, backgroundColor: C.accent, borderRadius: 2, borderWidth: 2, borderColor: C.panel },
   gscale: { flexDirection: 'row', justifyContent: 'space-between' },
   gscaleTxt: { fontSize: 8, letterSpacing: 0.5, color: C.muted },
-  gline: { color: C.text, fontSize: 16, lineHeight: 23, marginTop: -8, paddingHorizontal: 4 },
+  gline: { color: C.text, fontFamily: 'Charter', fontSize: 17, lineHeight: 25, marginTop: -8, paddingHorizontal: 4 },
   // plain lead
   plainLead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 6, padding: 14 },
   plainLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: C.accent },
@@ -1947,73 +1953,73 @@ function buildStyles() {
   // ── FRONT PAGE ──────────────────────────────────────────────────────────────
   // A newspaper's grid is made of type weight and hairlines, not boxes. The index
   // rows have no card chrome at all: a rule separates them, and size says rank.
-  masthead: { flexDirection: 'row', alignItems: 'baseline', borderBottomWidth: 2, borderBottomColor: C.accentDim, paddingBottom: 8, paddingHorizontal: 2 },
-  mastT: { color: C.text, fontSize: 15, fontWeight: '800', letterSpacing: 3.5 },
-  mastD: { marginLeft: 'auto', color: C.muted, fontSize: 11, letterSpacing: 1 },
+  masthead: { flexDirection: 'row', alignItems: 'baseline', borderBottomWidth: 1, borderBottomColor: C.line, paddingBottom: 10, paddingHorizontal: 2 },
+  mastT: { color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.4 },
+  mastD: { marginLeft: 'auto', color: C.muted, fontSize: 12 },
   dayrule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: -6 },
-  daytxt: { color: C.accent, fontSize: 11, fontWeight: '700', letterSpacing: 2.2 },
+  daytxt: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
   dayline: { flex: 1, height: 1, backgroundColor: C.line },
-  kick: { color: C.accent, fontSize: 10.5, letterSpacing: 1.6, flex: 1 },
+  kick: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, flex: 1 },
   idxmeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
-  idxtime: { color: C.muted, fontSize: 11, letterSpacing: 0.6 },
+  idxtime: { color: C.muted, fontSize: 12 },
   // the lead is the only story on the page that gets a panel — that IS its emphasis
-  lead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderTopWidth: 3, borderTopColor: C.accent, borderRadius: 5, padding: 16 },
-  leadH: { color: C.text, fontSize: 28, lineHeight: 34, fontWeight: '700' },
-  leadDek: { color: C.text, opacity: 0.85, fontSize: 16.5, lineHeight: 24, marginTop: 12 },
+  lead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 18 },
+  leadH: { color: C.text, fontSize: 30, lineHeight: 35, fontWeight: '700' },
+  leadDek: { color: C.muted, fontFamily: 'Charter', fontSize: 17, lineHeight: 25, marginTop: 12 },
   idxfoot: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  readmore: { color: C.accent, fontSize: 11.5, letterSpacing: 1.4, fontWeight: '700' },
-  idxsrc: { marginLeft: 'auto', color: C.muted, fontSize: 10.5, letterSpacing: 1 },
-  idxrow: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 18, paddingBottom: 6, paddingHorizontal: 2 },
-  idxH: { color: C.text, fontSize: 21, lineHeight: 27, fontWeight: '700' },
-  idxDek: { color: C.muted, fontSize: 15, lineHeight: 22, marginTop: 8 },
-  teaseH: { color: C.text, fontSize: 17, lineHeight: 23, fontWeight: '700', marginTop: 1 },
+  readmore: { color: C.accent, fontSize: 13, fontWeight: '700' },
+  idxsrc: { marginLeft: 'auto', color: C.muted, fontSize: 12 },
+  idxrow: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 20, paddingBottom: 8, paddingHorizontal: 2 },
+  idxH: { color: C.text, fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  idxDek: { color: C.muted, fontFamily: 'Charter', fontSize: 16, lineHeight: 23, marginTop: 8 },
+  teaseH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700', marginTop: 1 },
   readH: { color: C.muted, fontWeight: '600' },
   conspWarn: { color: C.high, fontSize: 10.5, letterSpacing: 1.5, fontWeight: '700', marginBottom: 8 },
   conspTier: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 10 },
   conspTierTxt: { color: C.high, fontSize: 10.5, letterSpacing: 1.8, fontWeight: '700' },
-  conspIntro: { color: C.muted, fontSize: 14.5, lineHeight: 22, marginBottom: 16 },
+  conspIntro: { color: C.muted, fontFamily: 'Charter', fontSize: 15.5, lineHeight: 23, marginBottom: 16 },
   consp: {},
   artbar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   // ── ARTICLE ──
-  backtxt: { color: C.accent, fontSize: 12, letterSpacing: 1.6, fontWeight: '700' },
+  backtxt: { color: C.accent, fontSize: 14, fontWeight: '600' },
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
-  readtime: { color: C.muted, fontSize: 10.5, letterSpacing: 1.2 },
-  srcchip: { borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 7, paddingHorizontal: 11 },
-  verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
+  readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
+  srcchip: { borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13 },
+  verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
   ctxbtnWide: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
-  artH: { color: C.text, fontSize: 30, lineHeight: 37, fontWeight: '700' },
-  artHLong: { color: C.text, fontSize: 25, lineHeight: 32, fontWeight: '700' },
-  artStand: { color: C.text, opacity: 0.85, fontSize: 17.5, lineHeight: 26, marginTop: 14 },
+  artH: { color: C.text, fontSize: 32, lineHeight: 38, fontWeight: '700' },
+  artHLong: { color: C.text, fontSize: 26, lineHeight: 32, fontWeight: '700' },
+  artStand: { color: C.muted, fontFamily: 'Charter', fontStyle: 'italic', fontSize: 19, lineHeight: 27, marginTop: 14 },
   artrule: { height: 2, backgroundColor: C.accent, width: 56, marginTop: 18, marginBottom: 12 },   // a short accent rule, newspaper-style
   nextrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.line },
-  nextH: { color: C.text, fontSize: 17, lineHeight: 23, fontWeight: '700', marginTop: 1 },
+  nextH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700', marginTop: 1 },
   storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
   spine: { position: 'absolute', left: 12, top: 22, bottom: 20, width: 2, borderRadius: 2, backgroundColor: C.accentDim },
   ktag: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.8, color: C.muted, marginBottom: 11 },
   cardmeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
-  stime: { fontSize: 12, color: C.muted, letterSpacing: 0.6 },
+  stime: { fontSize: 13, color: C.muted, letterSpacing: 0.6 },
   rfilter: { flexDirection: 'row', gap: 7, paddingHorizontal: 4, paddingVertical: 4 },
-  rchip: { backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 13 },
+  rchip: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
   rchipOn: { backgroundColor: C.accentDim, borderColor: C.accentDim },
-  rchipTxt: { fontSize: 11, letterSpacing: 0.6, color: C.muted },
+  rchipTxt: { fontSize: 13, fontWeight: '600', color: C.muted },
   storyH3: { fontSize: 22, lineHeight: 27, fontWeight: '700', color: C.text, marginBottom: 12 },
-  storyP: { fontSize: 18, lineHeight: 30, color: C.text },
-  ctxbtn: { marginTop: 15, alignSelf: 'flex-start', borderWidth: 1, borderColor: C.accentDim, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
-  ctxbtnTxt: { color: C.accent, fontSize: 12, fontWeight: '600', letterSpacing: 1.4 },
-  ctxpanel: { marginTop: 14, padding: 18, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 8 },
-  ctxlbl: { fontSize: 11, letterSpacing: 1.6, color: C.muted, marginBottom: 10 },
-  ctxP: { fontSize: 17, lineHeight: 28, color: C.text },
-  li: { color: C.text, fontSize: 16, lineHeight: 24, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  storyP: { fontFamily: 'Charter', fontSize: 19, lineHeight: 30, color: C.text },
+  ctxbtn: { marginTop: 16, alignSelf: 'flex-start', borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
+  ctxbtnTxt: { color: C.accent, fontSize: 13, fontWeight: '600', letterSpacing: 1.4 },
+  ctxpanel: { marginTop: 14, padding: 18, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 12 },
+  ctxlbl: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2, color: C.muted, marginBottom: 10 },
+  ctxP: { fontFamily: 'Charter', fontSize: 18, lineHeight: 28, color: C.text },
+  li: { color: C.text, fontFamily: 'Charter', fontSize: 17, lineHeight: 25, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   foot: { color: C.muted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 6 },
   // tab intro
   tabintro: { paddingHorizontal: 6 },
-  tabintroP: { color: C.muted, fontSize: 15.5, lineHeight: 24 },
+  tabintroP: { color: C.muted, fontFamily: 'Charter', fontSize: 16.5, lineHeight: 25 },
   // calibration
   cal: { padding: 16 },
   calbig: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
   calnum: { fontSize: 34, fontWeight: '800', color: C.accent },
   callab: { fontSize: 9.5, letterSpacing: 1.4, color: C.muted },
-  calsay: { fontSize: 14.5, color: C.muted, lineHeight: 22, marginTop: 10, marginBottom: 12 },
+  calsay: { fontFamily: 'Charter', fontSize: 15.5, color: C.muted, lineHeight: 23, marginTop: 10, marginBottom: 12 },
   calstrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   caldot: { width: 11, height: 11, borderRadius: 6 },
   caldotHit: { backgroundColor: C.calm },
@@ -2023,7 +2029,7 @@ function buildStyles() {
   hyp: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   hypP: { color: C.accent, fontWeight: '700', minWidth: 48, fontSize: 17 },
   hypName: { color: C.text, fontWeight: '600', fontSize: 15.5 },
-  hypD: { color: C.muted, fontSize: 14.5, marginTop: 4, lineHeight: 21 },
+  hypD: { color: C.muted, fontFamily: 'Charter', fontSize: 15.5, marginTop: 4, lineHeight: 22 },
   // predictions
   pred: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.line },
   predtop: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
@@ -2033,21 +2039,21 @@ function buildStyles() {
   predmeta: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 4 },
   chip: { backgroundColor: C.chip, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1, fontSize: 11 },
   predmetaTxt: { color: C.muted, fontSize: 11 },
-  prednote: { color: C.muted, fontSize: 14.5, marginTop: 8, lineHeight: 21 },
+  prednote: { color: C.muted, fontFamily: 'Charter', fontSize: 15.5, marginTop: 8, lineHeight: 22 },
   bar: { height: 5, borderRadius: 3, backgroundColor: C.barBg, marginTop: 11, marginBottom: 8 },
   fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: C.accent },
   tick: { position: 'absolute', top: -3, width: 2, height: 11, backgroundColor: C.muted },
   // actors
   actor: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  actorName: { color: C.text, fontSize: 18.5, fontWeight: '700' },
-  actorRole: { color: C.accent, fontSize: 11.5, letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
-  actorRow: { color: C.text, fontSize: 15, lineHeight: 22, marginVertical: 3 },
+  actorName: { color: C.text, fontSize: 19, letterSpacing: -0.2, fontWeight: '700' },
+  actorRole: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
+  actorRow: { color: C.text, fontFamily: 'Charter', fontSize: 16, lineHeight: 23, marginVertical: 3 },
   actorK: { color: C.muted, fontWeight: '600' },
   // prose
   prose: { paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4 },
-  h3: { color: C.text, fontSize: 22, fontWeight: '700', marginTop: 12, marginBottom: 6 },
-  kicker: { color: C.muted, fontSize: 12, letterSpacing: 2.5, marginTop: 14, marginBottom: 3 },
-  p: { color: C.text, fontSize: 16.5, lineHeight: 26, marginVertical: 6 },
+  h3: { color: C.text, fontSize: 24, letterSpacing: -0.3, fontWeight: '700', marginTop: 12, marginBottom: 6 },
+  kicker: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 14, marginBottom: 3 },
+  p: { color: C.text, fontFamily: 'Charter', fontSize: 17.5, lineHeight: 27, marginVertical: 6 },
   // gate
   gateScroll: { padding: 26, paddingTop: 60, flexGrow: 1, justifyContent: 'center' },
   gateH: { color: C.text, fontSize: 22, fontWeight: '700', marginBottom: 14 },
@@ -2060,7 +2066,7 @@ function buildStyles() {
   legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
   legalDot: { color: C.line },
   // nav
-  navWrap: { backgroundColor: C.panel2, borderTopWidth: 1, borderTopColor: C.line },
+  navWrap: { backgroundColor: C.panel, borderTopWidth: 1, borderTopColor: C.line },
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 9, paddingHorizontal: 4 },
   navBtn: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10 },
   navTxt: { color: C.muted, fontSize: 11, letterSpacing: 1.4 },
