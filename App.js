@@ -1438,9 +1438,6 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
   const stories = (data.brief || []).map((b, i) => ({ b, i })).filter(({ b }) => hit(b.head + ' ' + b.h + ' ' + b.t + ' ' + b.region + ' ' + b.tag));
   const boards = (data.chatter || []).filter((c) => hit(c.claim + ' ' + (c.read || '')));
   const calls = (data.forecasts || []).filter((f) => hit(f.q));
-  const posts = [...((data.social || {}).x || []).map((p) => ({ who: '@' + p.account, text: p.text, url: p.url })),
-                 ...((data.social || {}).reddit || []).map((p) => ({ who: 'r/' + p.sub, text: p.title + ' ' + (p.body || ''), url: p.url }))]
-    .filter((p) => hit(p.who + ' ' + p.text));
   return (
     <View>
       <View style={s.searchbox}>
@@ -1462,13 +1459,6 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
           <Text style={[s.ctxP, T(16, 23)]}>{decode(c.claim)}</Text>
         </Pressable>
       ))}
-      {posts.length ? <Text style={[s.searchH, { color: C.high }]}>X AND REDDIT</Text> : null}
-      {posts.slice(0, 12).map((p, i) => (
-        <Pressable key={'p' + i} onPress={() => p.url && Linking.openURL(p.url)} style={s.hrow}>
-          <Text style={[s.hrowMeta, { marginTop: 0, marginBottom: 6 }]}>{p.who}</Text>
-          <Text style={[s.ctxP, T(16, 23)]} numberOfLines={4}>{decode(p.text)}</Text>
-        </Pressable>
-      ))}
       {calls.length ? <Text style={s.searchH}>CALLS</Text> : null}
       {calls.map((f, i) => (
         <Pressable key={'c' + i} onPress={() => goTab('conspiracy')} style={[s.hrow, { flexDirection: 'row', gap: 14, alignItems: 'baseline' }]}>
@@ -1476,7 +1466,7 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
           <Text style={[s.predq, { flex: 1 }]}>{decode(f.q)}</Text>
         </Pressable>
       ))}
-      {q.length >= 2 && !stories.length && !boards.length && !calls.length && !posts.length ? <Text style={[s.foot, { marginTop: 18 }]}>Nothing matches in today's brief.</Text> : null}
+      {q.length >= 2 && !stories.length && !boards.length && !calls.length ? <Text style={[s.foot, { marginTop: 18 }]}>Nothing matches in today's brief.</Text> : null}
     </View>
   );
 }
@@ -1521,12 +1511,11 @@ function BoardsTab({ data, goArticle }) {
     <View style={s.stack}>
       <View style={s.tabintro}>
         <Text style={s.tabintroP}>
-          Everything the desk caught circulating on the boards and social feeds today — nothing withheld for being
+          Everything the desk caught circulating today on 4chan, X and Reddit — nothing withheld for being
           far-fetched. A record of what people believe, not of what is true. Nobody has checked any of it.
         </Text>
       </View>
       <FilterDrop pairs={textRegionPairs(all, (c) => c.claim + ' ' + (c.read || ''))} active={region} onPick={setRegion} />
-      <SocialFeed social={data.social} />
       <Chatter items={items} onStory={goArticle} />
       <Watchtower items={specs} />
     </View>
