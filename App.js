@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView,
-  Share, StyleSheet, Text, View,
+  Share, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -204,12 +204,12 @@ function fullStamp(ts) {
   const rel = hrs >= 0 && hrs < 24 ? ' · ' + (hrs < 1 ? 'JUST NOW' : hrs + 'H AGO') : '';
   return date + ' · ' + hm + rel;
 }
+// 2026-09-13, Direction C ('Just the front page'): three text tabs, search beside them. 'news' stays the key
+// for Stories so goArticle keeps working; 'conspiracy' is the key for Calls.
 const TABS = [
-  { key: 'home', label: 'HOME', g: '⌂' },
-  { key: 'news', label: 'NEWS', g: '▤' },
-  { key: 'boards', label: 'BOARDS', g: '☍' },   // 2026-09-13: replaced MAP — the chatter beat gets its own room
-  { key: 'conspiracy', label: 'ANALYSIS', g: '◉' },
-  { key: 'strategy', label: 'STRATEGY', g: '♟' },
+  { key: 'news', label: 'Stories' },
+  { key: 'boards', label: 'Boards' },
+  { key: 'conspiracy', label: 'Calls' },
 ];
 
 function Section({ title, extra, children }) {
@@ -611,7 +611,8 @@ function ConspiracyPanel({ items }) {
 
 // ── ARTICLE — the page you land on after tapping a headline. One story, nothing else. ──
 function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount, onCalls,
-                       specMatches, chatter, prev, next, onOpen, isSaved, onSave }) {
+                       specMatches, chatter, prev, next, onOpen, isSaved, onSave,
+                       tsize, onSize, theme, onTheme, level, onLevel }) {
   const { head, stand, longHead } = articleParts(item);
   const body = bodyFor(item, simpleText, easy, deep);
   // NYT's article furniture: back to the section, save it, send it to someone.
@@ -634,6 +635,12 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount
             <Text style={[MONO, { color: C.muted, fontSize: 11, letterSpacing: 1.2 }]}>↗ SHARE</Text>
           </Pressable>
         </View>
+      </View>
+      {/* reading controls live with the reading, not on the front page */}
+      <View style={{ flexDirection: 'row', gap: 18, alignItems: 'center', paddingHorizontal: 4 }}>
+        {onLevel ? <Pressable hitSlop={8} onPress={() => onLevel(level === 'simple' ? 'regular' : level === 'regular' ? 'deep' : 'simple')}><Text style={s.rctl}>{'Level · ' + (level || 'regular')}</Text></Pressable> : null}
+        {onSize ? <Pressable hitSlop={8} onPress={() => onSize(tsize === 'S' ? 'M' : tsize === 'M' ? 'L' : 'S')}><Text style={s.rctl}>{'Text · ' + (tsize || 'M')}</Text></Pressable> : null}
+        {onTheme ? <Pressable hitSlop={8} onPress={() => onTheme(theme === 'light' ? 'dark' : 'light')}><Text style={s.rctl}>{theme === 'light' ? 'Dark' : 'Light'}</Text></Pressable> : null}
       </View>
       <View style={s.article}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
@@ -1344,7 +1351,7 @@ function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
 // strictly newest-first inside day sections, so the chronology is never violated;
 // hierarchy comes from position, not from re-ranking.
 function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
-                   read, saved, markRead, toggleSave }) {
+                   read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
   useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
@@ -1385,49 +1392,81 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
         chatter={data.chatter}
         isSaved={!!saved[id]} onSave={() => toggleSave(id)}
+        tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
       />
     );
   }
 
-  // INDEX STATE — masthead, filter, then day sections: lead, secondaries, dense tail.
+  // INDEX STATE — the front page (Direction C): headlines only, serif, newest first, a rule between days.
+  const all = briefSorted(data.brief);
   let seen = null;
   return (
-    <View style={s.stack}>
-      <View style={s.masthead}>
-        <Text style={s.mastT}>The Wire</Text>
-        <Text style={[s.mastD, MONO]}>{(data.brief || []).length + ' STORIES · ' + (data.updated || '')}</Text>
-      </View>
-      <PlainLead text={easy && data.easy ? data.easy.bottomLine : null} />
-      {regions.length ? <FilterDrop pairs={chips} active={active} onPick={choose} /> : null}
-      {rows.length ? rows.map(({ s: st, i }, n) => {
+    <View>
+      {all.length ? all.map(({ s: st, i }) => {
         const k = dayKey(st.ts);
         const rule = k !== seen ? <DayRule key={'d' + k} label={dayLabel(st.ts)} /> : null;
-        const first = k !== seen;
         seen = k;
         const id = storyId(st);
-        const props = { item: st, simpleText: simple[i], easy, deep, onOpen: () => open(i), isRead: !!read[id], isSaved: !!saved[id] };
         return (
           <View key={i}>
             {rule}
-            {first && n === 0 ? <LeadStory {...props} /> : <IndexRow {...props} dense={n >= 6} />}
+            <HeadlineRow item={st} onOpen={() => open(i)} isRead={!!read[id]} isSaved={!!saved[id]} />
           </View>
         );
-      }) : (
-        <Text style={s.foot}>
-          {active === 'SAVED' ? 'Nothing saved yet — tap ☆ SAVE on any article to keep it here.' : 'No headlines in this filter right now.'}
-        </Text>
-      )}
-      {data.watch && data.watch.length ? (
-        <Section title="What to watch next">
-          {data.watch.map((w, i) => (
-            <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>
-          ))}
-        </Section>
-      ) : null}
-      <QuizSection quiz={data.quiz} />
-      <Text style={s.foot}>Headlines refresh through the day. Analysis and opinion, for information only — not advice.</Text>
+      }) : <Text style={s.foot}>No headlines right now.</Text>}
+    </View>
+  );
+}
+
+// ── HEADLINE ROW — the whole front page is made of these. ──
+function HeadlineRow({ item, onOpen, isRead, isSaved }) {
+  const { head, longHead } = articleParts(item);
+  return (
+    <Pressable onPress={onOpen} style={s.hrow}>
+      <Text style={[s.hrowH, T(24, 29), isRead && s.readH]}>{head || longHead}</Text>
+      <Text style={s.hrowMeta}>{String(item.region || kickerOf(item) || '').toUpperCase() + (isSaved ? '  ·  SAVED' : '')}</Text>
+    </Pressable>
+  );
+}
+
+// ── SEARCH — one field, results grouped the way the tabs are. ──
+function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
+  const q = query.trim().toLowerCase();
+  const hit = (txt) => q.length >= 2 && String(txt || '').toLowerCase().includes(q);
+  const stories = (data.brief || []).map((b, i) => ({ b, i })).filter(({ b }) => hit(b.head + ' ' + b.h + ' ' + b.t + ' ' + b.region + ' ' + b.tag));
+  const boards = (data.chatter || []).filter((c) => hit(c.claim + ' ' + (c.read || '')));
+  const calls = (data.forecasts || []).filter((f) => hit(f.q));
+  return (
+    <View>
+      <View style={s.searchbox}>
+        <TextInput value={query} onChangeText={setQuery} autoFocus placeholder="Search stories, places, people" placeholderTextColor={C.muted}
+          style={[s.searchin, { color: C.text }]} returnKeyType="search" autoCorrect={false} />
+        {query ? <Pressable onPress={() => setQuery('')} hitSlop={8}><Text style={{ color: C.accent, fontWeight: '600' }}>Clear</Text></Pressable> : null}
+      </View>
+      {q.length < 2 ? <Text style={[s.foot, { marginTop: 18 }]}>Type at least two letters. Results group into stories, boards and calls.</Text> : null}
+      {stories.length ? <Text style={s.searchH}>STORIES</Text> : null}
+      {stories.map(({ b, i }) => (
+        <Pressable key={'s' + i} onPress={() => goArticle(i)} style={s.hrow}>
+          <Text style={[s.hrowH, { fontSize: 19, lineHeight: 24 }]}>{articleParts(b).head}</Text>
+          <Text style={s.hrowMeta}>{String(b.region || '').toUpperCase()}</Text>
+        </Pressable>
+      ))}
+      {boards.length ? <Text style={[s.searchH, { color: C.high }]}>BOARDS</Text> : null}
+      {boards.map((c, i) => (
+        <Pressable key={'b' + i} onPress={() => goTab('boards')} style={s.hrow}>
+          <Text style={[s.ctxP, T(16, 23)]}>{decode(c.claim)}</Text>
+        </Pressable>
+      ))}
+      {calls.length ? <Text style={s.searchH}>CALLS</Text> : null}
+      {calls.map((f, i) => (
+        <Pressable key={'c' + i} onPress={() => goTab('conspiracy')} style={[s.hrow, { flexDirection: 'row', gap: 14, alignItems: 'baseline' }]}>
+          <Text style={[s.predp, MONO]}>{f.p}%</Text>
+          <Text style={[s.predq, { flex: 1 }]}>{decode(f.q)}</Text>
+        </Pressable>
+      ))}
+      {q.length >= 2 && !stories.length && !boards.length && !calls.length ? <Text style={[s.foot, { marginTop: 18 }]}>Nothing matches in today's brief.</Text> : null}
     </View>
   );
 }
@@ -1470,12 +1509,6 @@ function BoardsTab({ data, goArticle }) {
   const theaters = new Set(all.map((c) => c.region).filter(Boolean));
   return (
     <View style={s.stack}>
-      <StatStrip stats={[
-        [all.length, 'CIRCULATING'],
-        [pinned.length, 'ON A STORY'],
-        [theaters.size, 'THEATERS'],
-        [(data.speculation || []).length, 'SIGHTINGS'],
-      ]} />
       <View style={s.tabintro}>
         <Text style={s.tabintroP}>
           Everything the desk caught circulating on the boards and social feeds today — nothing withheld for being
@@ -1489,7 +1522,7 @@ function BoardsTab({ data, goArticle }) {
   );
 }
 
-function ConspiracyTab({ data }) {
+function ConspiracyTab({ data, easy, deep, goArticle, read, saved }) {
   const [region, setRegion] = useState('ALL');
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
@@ -1498,30 +1531,7 @@ function ConspiracyTab({ data }) {
   const movedN = (data.forecasts || []).filter((f) => f.prev != null && f.p !== f.prev).length;
   return (
     <View style={s.stack}>
-      <StatStrip stats={[
-        [(data.forecasts || []).length, 'LIVE CALLS'],
-        [movedN, 'MOVED TODAY'],
-        [(data.hypotheses || []).length, 'HYPOTHESES'],
-      ]} />
-      <CalibrationTrack track={data.track} forecasts={data.forecasts} />
-      <FilterDrop
-        pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
-        active={region} onPick={setRegion} />
-      <Watchlist tripwires={data.tripwires} />
-      {hyps.length ? (
-        <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
-          {hyps.map((h, i) => (
-            <View key={i} style={s.hyp}>
-              <Text style={[s.hypP, MONO]}>{h.p}%</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.hypName}>{decode(h.name)}.</Text>
-                <Text style={s.hypD}>{decode(h.d)}</Text>
-              </View>
-            </View>
-          ))}
-        </Section>
-      ) : null}
-      <Section title="Predictions on the board" extra={String(fcs.length)}>
+      <Section title="Calls on the board" extra={String(fcs.length)}>
         {fcs.map((f, i) => {
           const d = f.prev != null ? f.p - f.prev : null;
           return (
@@ -1540,9 +1550,50 @@ function ConspiracyTab({ data }) {
           );
         })}
       </Section>
-      <QuizSection quiz={data.quiz} />
+      <CalibrationTrack track={data.track} forecasts={data.forecasts} />
+      {hyps.length ? (
+        <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
+          {hyps.map((h, i) => (
+            <View key={i} style={s.hyp}>
+              <Text style={[s.hypP, MONO]}>{h.p}%</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.hypName}>{decode(h.name)}.</Text>
+                <Text style={s.hypD}>{decode(h.d)}</Text>
+              </View>
+            </View>
+          ))}
+        </Section>
+      ) : null}
+      <Watchlist tripwires={data.tripwires} />
+      <MoreFromTheDesk data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />
       <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
+  );
+}
+
+// ── MORE FROM THE DESK — everything that is not news, one tap deep instead of on the front. ──
+function MoreFromTheDesk({ data, easy, deep, goArticle, read, saved }) {
+  const [open, setOpen] = useState(null);
+  const rows = [
+    ['strategy', 'Strategy desk', 'players, dossiers, scenarios, the red board, this week\'s deep dive'],
+    ['watch', 'What to watch', (data.watch || []).length + ' items'],
+    ['quiz', 'Quiz', 'test the read'],
+    ['analyst', 'Ask the analyst', 'chat with the desk on Telegram'],
+  ];
+  return (
+    <Section title="More from the desk">
+      {rows.map(([k, t, sub]) => (
+        <View key={k}>
+          <Pressable onPress={() => (k === 'analyst' ? Linking.openURL('https://t.me/Claudeyyybot') : setOpen(open === k ? null : k))} style={s.morerow}>
+            <View style={{ flex: 1 }}><Text style={s.moreT}>{t}</Text><Text style={s.moreS}>{sub}</Text></View>
+            <Text style={{ color: C.accent, fontSize: 20 }}>{k === 'analyst' ? '↗' : open === k ? '−' : '›'}</Text>
+          </Pressable>
+          {open === k && k === 'strategy' ? <View style={{ padding: 12 }}><StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} compact /></View> : null}
+          {open === k && k === 'watch' ? (data.watch || []).map((w, i) => <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>) : null}
+          {open === k && k === 'quiz' ? <View style={{ padding: 12 }}><QuizSection quiz={data.quiz} /></View> : null}
+        </View>
+      ))}
+    </Section>
   );
 }
 
@@ -1652,7 +1703,7 @@ function Watchlist({ tripwires }) {
   );
 }
 
-function StrategyTab({ data, easy, deep, goArticle, read, saved }) {
+function StrategyTab({ data, easy, deep, goArticle, read, saved, compact }) {
   const lec = data.lecture;
   // The desk opens on the wire, not the roster: newest stories first, same index
   // furniture as NEWS (lead panel + hairline rows), then the players below.
@@ -1663,7 +1714,7 @@ function StrategyTab({ data, easy, deep, goArticle, read, saved }) {
   const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
-      {latest.length ? (
+      {latest.length && !compact ? (
         <View>
           <View style={s.masthead}>
             <Text style={s.mastT}>Latest</Text>
@@ -1806,7 +1857,9 @@ function LegalFooter() {
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [tab, setTab] = useState('home');
+  const [tab, setTab] = useState('news');
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
   const goBoard = (i) => { setBoardSel(i); setTab('map'); };
   // Which story NEWS is showing as an article (null = the index). Lives up here so HOME
@@ -1895,18 +1948,9 @@ export default function App() {
       <SafeAreaView style={s.root} edges={['top']}>
         <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
         <View style={s.header}>
-          <View style={[s.statusdot, { backgroundColor: rc, shadowColor: rc }]} />
-          <Text style={s.wordmark}>GEO <Text style={{ fontWeight: '400', color: C.muted }}>Terminal</Text></Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={[s.stamp, MONO, { marginRight: 10 }]}>{data ? data.updated : ''}</Text>
-            {/* AI chat: deep-links into the Telegram analyst (same brain, subscription-funded) */}
-            <Pressable onPress={() => Linking.openURL('https://t.me/Claudeyyybot')}
-              style={{ backgroundColor: C.accent, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 }}>
-              <Text style={{ color: C.panel, fontSize: 12.5, fontWeight: '700' }}>Ask the analyst</Text>
-            </Pressable>
-          </View>
+          <Text style={s.wordmark}>GEO Terminal</Text>
+          <Text style={s.stamp}>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}</Text>
         </View>
-        {tab !== 'home' ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -1921,27 +1965,37 @@ export default function App() {
         ) : null}
         {data && (
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} read={read} />}
-            {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
-            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} />}
-            {tab === 'conspiracy' && <ConspiracyTab data={data} />}
-            {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
+            {searching ? (
+              <SearchScreen data={data} query={query} setQuery={setQuery}
+                goArticle={(i) => { setSearching(false); goArticle(i); }} goTab={(k) => { setSearching(false); setTab(k); scrollTop(); }} />
+            ) : (
+              <>
+                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />}
+                {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
+                {tab === 'conspiracy' && <ConspiracyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
+              </>
+            )}
             <LegalFooter />
           </ScrollView>
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
-          {/* segmented pill, same organizing bubble as the READING LEVEL selector up top */}
-          <View style={[s.modetog, { marginHorizontal: 12, marginVertical: 8, flex: 0, borderRadius: 14 }]}>
-            {TABS.map((t, i) => {
-              const on = tab === t.key;
-              return (
-                <Pressable key={t.key} onPress={() => { setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}
-                  style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                  <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
-                  <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
-                </Pressable>
-              );
-            })}
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 22, alignItems: 'center', flex: 1 }}>
+              {TABS.map((t) => {
+                const on = tab === t.key && !searching;
+                return (
+                  <Pressable key={t.key} hitSlop={10} onPress={() => { setSearching(false); setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}>
+                    <Text style={[{ fontSize: 16, fontWeight: on ? '800' : '600', color: on ? C.text : C.muted, paddingBottom: 4 }, on && { borderBottomWidth: 2, borderBottomColor: C.text }]}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable hitSlop={12} onPress={() => { setSearching((v) => !v); scrollTop(); }}>
+              <Svg width="22" height="22" viewBox="0 0 24 24">
+                <Circle cx="11" cy="11" r="7" stroke={searching ? C.accent : C.text} strokeWidth="2" fill="none" />
+                <SvgPath d="M20 20l-3.5-3.5" stroke={searching ? C.accent : C.text} strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </Pressable>
           </View>
         </SafeAreaView>
       </SafeAreaView>
@@ -1952,11 +2006,11 @@ export default function App() {
 function buildStyles() {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
+  header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 14, paddingBottom: 14, borderBottomWidth: 2, borderBottomColor: C.text },
   statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
-  wordmark: { color: C.text, fontWeight: '800', letterSpacing: -0.5, fontSize: 22 },
+  wordmark: { color: C.text, fontFamily: 'Charter', fontWeight: '600', letterSpacing: -0.3, fontSize: 22 },
   classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
-  stamp: { color: C.muted, fontSize: 12, marginLeft: 'auto' },
+  stamp: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
   levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel },
   levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 10, overflow: 'hidden' },
@@ -1999,8 +2053,8 @@ function buildStyles() {
   masthead: { flexDirection: 'row', alignItems: 'baseline', borderBottomWidth: 1, borderBottomColor: C.line, paddingBottom: 10, paddingHorizontal: 2 },
   mastT: { color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.4 },
   mastD: { marginLeft: 'auto', color: C.muted, fontSize: 12 },
-  dayrule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6, marginBottom: -6 },
-  daytxt: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
+  dayrule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 22, marginBottom: 4 },
+  daytxt: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
   dayline: { flex: 1, height: 1, backgroundColor: C.line },
   kick: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, flex: 1 },
   idxmeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
@@ -2027,6 +2081,16 @@ function buildStyles() {
   backtxt: { color: C.accent, fontSize: 14, fontWeight: '600' },
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
+  rctl: { color: C.muted, fontSize: 13, fontWeight: '600' },
+  hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
+  hrowH: { fontFamily: 'Charter', fontSize: 24, lineHeight: 29, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
+  hrowMeta: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
+  searchbox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.panel, borderWidth: 1.5, borderColor: C.text, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 },
+  searchin: { flex: 1, fontSize: 17, paddingVertical: 10 },
+  searchH: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
+  morerow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: C.line },
+  moreT: { fontSize: 17, fontWeight: '700', color: C.text },
+  moreS: { fontSize: 13, color: C.muted, marginTop: 2 },
   srcchip: { borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13 },
   verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
   ctxbtnWide: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
