@@ -645,7 +645,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
   // NYT's article furniture: back to the section, save it, send it to someone.
   const share = () => {
     const url = (item.srcs || []).find((sc) => sc.u);
-    Share.share({ message: decode(head) + (url ? '\n\n' + url.u : '') + '\n\nvia GEO/TERMINAL' })
+    Share.share({ message: decode(head) + (url ? '\n\n' + url.u : '') + '\n\nvia Parallax' })
       .catch(() => {});
   };
   return (
@@ -1896,9 +1896,9 @@ function DisclaimerGate({ onAccept }) {
     <SafeAreaView style={s.root}>
       <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
       <ScrollView contentContainerStyle={s.gateScroll}>
-        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
+        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
         <Text style={[s.gateH, SERIF]}>Before you begin</Text>
-        <Text style={s.gateP}>GEO Terminal publishes geopolitical analysis and probabilistic forecasts as <Text style={{ color: C.text, fontWeight: '700' }}>opinion</Text> — not fact, and not advice.</Text>
+        <Text style={s.gateP}>Parallax publishes geopolitical analysis and probabilistic forecasts as <Text style={{ color: C.text, fontWeight: '700' }}>opinion</Text> — not fact, and not advice.</Text>
         <Text style={s.gateP}>Forecasts are subjective estimates that will often be wrong. Statements about governments, organizations, and public figures are commentary based on public reporting, not assertions of fact.</Text>
         <Text style={s.gateP}>This app is <Text style={{ color: C.text, fontWeight: '700' }}>not</Text> financial, investment, legal, security, safety, or travel advice. Do not rely on it for any decision. Consult a qualified professional.</Text>
         <View style={s.gateLinks}>
@@ -2018,7 +2018,7 @@ export default function App() {
         <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
         <View style={s.header}>
           <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc, shadowColor: rc, shadowOpacity: 0.9, shadowRadius: 6 }} />
-          <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
+          <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
         {!searching ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
