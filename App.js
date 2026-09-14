@@ -566,9 +566,9 @@ function ConspiracyPanel({ items }) {
             UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED
           </Text>
           <Text style={s.conspIntro}>
-            Everything the desk caught circulating on 4chan, Reddit and X — nothing filtered out for
-            being far-fetched, because that is the point of the section. Logged as a record of what
-            people believe, not of what is true. Nobody here has checked any of it.
+            Everything the desk caught circulating on the boards and social feeds about this story,
+            treated as source material: each claim is stated in its strongest form and tested on the
+            evidence — mechanism, who gains, what the day's data supports, and a probability.
           </Text>
           {items.map((c, i) => {
             const label = c.tier !== tier ? HEAD[c.tier] : null;
@@ -593,7 +593,9 @@ function ConspiracyPanel({ items }) {
                   {c.read ? (
                     <>
                       <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
-                      <Text style={[s.ctxP, T(17, 28)]}>{decode(c.read)}</Text>
+                      {paragraphs(decode(c.read)).map((para, k) => (
+                        <Text key={k} style={[s.ctxP, T(17, 28), k > 0 && { marginTop: 10 }]}>{para}</Text>
+                      ))}
                     </>
                   ) : null}
                   {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
@@ -1189,7 +1191,9 @@ function Chatter({ items, onStory }) {
           {c.read ? (
             <>
               <Text style={[s.ctxlbl, { marginTop: 12, color: C.accent }]}>THE DESK'S READ</Text>
-              <Text style={[s.ctxP, T(17, 27)]}>{decode(c.read)}</Text>
+              {paragraphs(decode(c.read)).map((para, k) => (
+                <Text key={k} style={[s.ctxP, T(17, 27), k > 0 && { marginTop: 10 }]}>{para}</Text>
+              ))}
             </>
           ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
