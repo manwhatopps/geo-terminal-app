@@ -206,8 +206,8 @@ function fullStamp(ts) {
 }
 const TABS = [
   { key: 'home', label: 'HOME', g: '⌂' },
-  { key: 'map', label: 'MAP', g: '◈' },
   { key: 'news', label: 'NEWS', g: '▤' },
+  { key: 'boards', label: 'BOARDS', g: '☍' },   // 2026-09-13: replaced MAP — the chatter beat gets its own room
   { key: 'conspiracy', label: 'ANALYSIS', g: '◉' },
   { key: 'strategy', label: 'STRATEGY', g: '♟' },
 ];
@@ -1173,22 +1173,29 @@ function LiveWatchlist({ items }) {
 }
 
 // ── THE CHATTER — raw narrative monitoring: what the boards are saying. Unverified BY DESIGN. ──
-function Chatter({ items }) {
+function Chatter({ items, onStory }) {
   if (!items || !items.length) return null;
   return (
     <Section title="The chatter" extra={items.length + ' circulating'}>
-      <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.8, marginBottom: 8 }]}>
-        UNVERIFIED PUBLIC SPECULATION · REPORTED AS BELIEF DATA, NOT FACT
-      </Text>
+      <Text style={[s.conspWarn, { paddingHorizontal: 16 }]}>UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED</Text>
       {items.map((c, i) => (
-        <View key={i} style={s.storycard}>
+        <View key={i} style={[s.storycard, { marginHorizontal: 12, marginBottom: 12 }]}>
           <View style={s.cardmeta}>
-            <Text style={[s.ktag, MONO, { marginBottom: 0, color: C.muted, borderColor: C.muted }]}>CIRCULATING</Text>
-            {fullStamp(c.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(c.ts)}</Text> : null}
+            <Text style={[s.ktag, { marginBottom: 0, color: c.story ? C.accent : C.high }]}>{c.story ? 'ON A STORY' : (c.region || 'CIRCULATING').toUpperCase()}</Text>
+            {fullStamp(c.ts) ? <Text style={s.stime}>{fullStamp(c.ts)}</Text> : null}
           </View>
-          <Text style={[s.storyH3, SERIF, { fontSize: 15.5 }]}>{decode(c.claim)}</Text>
-          {c.spread ? <Text style={[MONO, { color: C.muted, fontSize: 10, marginBottom: 5 }]}>{'SPREAD: ' + decode(c.spread).toUpperCase()}</Text> : null}
-          <Text style={s.storyP}>{decode(c.read || '')}</Text>
+          <Text style={[s.ctxP, T(18, 27), { fontWeight: '700' }]}>{decode(c.claim)}</Text>
+          {c.spread ? <Text style={[s.ctxP, T(15, 23), { color: C.muted, marginTop: 8 }]}>{decode(c.spread)}</Text> : null}
+          {c.read ? (
+            <>
+              <Text style={[s.ctxlbl, { marginTop: 12, color: C.accent }]}>THE DESK'S READ</Text>
+              <Text style={[s.ctxP, T(17, 27)]}>{decode(c.read)}</Text>
+            </>
+          ) : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {c.story && onStory ? <WebLink label={'THE STORY: ' + articleParts(c.story).head.toUpperCase().slice(0, 40) + '… ›'} onPress={() => onStory(c.storyIdx)} /> : null}
+            {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
+          </View>
         </View>
       ))}
       <Text style={s.foot}>What anonymous boards and social feeds are circulating — monitored so you can see the narratives forming, never endorsed.</Text>
@@ -1236,24 +1243,26 @@ function HomeTab({ data, easy, deep, goTab, goArticle, read }) {
     ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
     ['conspiracy', '◉', 'ANALYSIS', (data.forecasts || []).length, 'live calls, publicly scored'],
     ['strategy', '♟', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
-    ['map', '◈', 'THE BOARD', (data.events || []).length, 'live pressure points'],
+    ['boards', '☍', 'THE BOARDS', (data.chatter || []).length, 'claims circulating today'],
   ];
   const topDevs = briefSorted(data.brief).slice(0, 3);
   return (
     <View style={s.stack}>
-      {/* mini board strip (mockup: map leads) - tap opens MAP */}
-      <Pressable onPress={() => goTab('map')} style={{ borderWidth: 1, borderColor: C.line, borderRadius: 8, overflow: 'hidden' }}>
-        <Svg viewBox="120 60 760 300" width="100%" height={undefined} style={{ aspectRatio: 3.2, backgroundColor: C.panel2 }}>
-          <SvgPath d={LAND_PATH} fill={C.chip} stroke={C.line} strokeWidth="0.6" />
-          {(data.events || []).map((ev, i) => (
-            <Circle key={i} cx={((ev.lon + 180) / 360) * 1000} cy={((90 - ev.lat) / 180) * 500} r="5"
-              fill={riskColor[ev.sev] || C.elev} opacity="0.9" />
+      {/* from the boards — the three loudest claims of the day; tap opens BOARDS */}
+      {(data.chatter || []).length ? (
+        <Pressable onPress={() => goTab('boards')} style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 }}>
+            <Text style={[s.h2, { fontSize: 18 }]}>From the boards</Text>
+            <Text style={[s.conspWarn, { marginLeft: 'auto', marginBottom: 0 }]}>UNVERIFIED</Text>
+          </View>
+          {(data.chatter || []).slice(0, 3).map((c, i) => (
+            <Text key={i} style={[s.ctxP, T(16, 24), i > 0 && { marginTop: 8 }]} numberOfLines={2}>
+              <Text style={{ color: C.high }}>› </Text>{decode(c.claim)}
+            </Text>
           ))}
-        </Svg>
-        <View style={{ position: 'absolute', bottom: 6, right: 10 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1 }]}>{(data.events || []).length + ' ACTIVE · OPEN MAP ›'}</Text>
-        </View>
-      </Pressable>
+          <Text style={[s.readmore, { marginTop: 12 }]}>{(data.chatter || []).length + ' circulating · open the boards ›'}</Text>
+        </Pressable>
+      ) : null}
       {/* daily intelligence brief door (mockup: START) */}
       <Pressable onPress={() => goTab('news')}
         style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderRadius: 8, padding: 13, flexDirection: 'row', alignItems: 'center' }}>
@@ -1444,6 +1453,38 @@ function CalibrationTrack({ track, forecasts }) {
   );
 }
 
+// ── THE BOARDS — what 4chan, Reddit and X are saying, in one place. Deliberately low bar: the app
+// labels it unverified and reports belief, not fact. Story-pinned theories link back to their article. ──
+function BoardsTab({ data, goArticle }) {
+  const [region, setRegion] = useState('ALL');
+  const pinned = (data.brief || []).flatMap((b, i) =>
+    (b.consp ? (Array.isArray(b.consp) ? b.consp : [b.consp]) : []).map((c) => ({ ...c, story: b, storyIdx: i, region: b.region })));
+  const loose = (data.chatter || []).map((c) => ({ ...c, region: c.region || inferRegion(c.claim + ' ' + (c.read || '')) }));
+  const all = pinned.concat(loose);
+  const items = all.filter((c) => region === 'ALL' || c.region === region);
+  const specs = (data.speculation || []).filter((sp) => region === 'ALL' || (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === region);
+  const theaters = new Set(all.map((c) => c.region).filter(Boolean));
+  return (
+    <View style={s.stack}>
+      <StatStrip stats={[
+        [all.length, 'CIRCULATING'],
+        [pinned.length, 'ON A STORY'],
+        [theaters.size, 'THEATERS'],
+        [(data.speculation || []).length, 'SIGHTINGS'],
+      ]} />
+      <View style={s.tabintro}>
+        <Text style={s.tabintroP}>
+          Everything the desk caught circulating on the boards and social feeds today — nothing withheld for being
+          far-fetched. A record of what people believe, not of what is true. Nobody has checked any of it.
+        </Text>
+      </View>
+      <FilterDrop pairs={textRegionPairs(all, (c) => c.claim + ' ' + (c.read || ''))} active={region} onPick={setRegion} />
+      <Chatter items={items} onStory={goArticle} />
+      <Watchtower items={specs} />
+    </View>
+  );
+}
+
 function ConspiracyTab({ data }) {
   const [region, setRegion] = useState('ALL');
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
@@ -1462,8 +1503,6 @@ function ConspiracyTab({ data }) {
       <FilterDrop
         pairs={textRegionPairs([...(data.hypotheses || []).map((h) => h.name + ' ' + h.d), ...(data.forecasts || []).map((f) => f.q)], (x) => x)}
         active={region} onPick={setRegion} />
-      <Chatter items={(data.chatter || []).filter((c) => region === 'ALL' || inferRegion(c.claim + ' ' + (c.read || '')) === region)} />
-      <Watchtower items={specs} />
       <Watchlist tripwires={data.tripwires} />
       {hyps.length ? (
         <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
@@ -1863,7 +1902,7 @@ export default function App() {
             </Pressable>
           </View>
         </View>
-        {tab !== 'home' && tab !== 'map' ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
+        {tab !== 'home' ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -1879,8 +1918,8 @@ export default function App() {
         {data && (
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} read={read} />}
-            {tab === 'map' && <MapTab data={data} easy={easy} goTab={setTab} boardSel={boardSel} setBoardSel={setBoardSel} />}
-            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={goBoard} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} />}
+            {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
+            {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} />}
             {tab === 'conspiracy' && <ConspiracyTab data={data} />}
             {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
             <LegalFooter />
