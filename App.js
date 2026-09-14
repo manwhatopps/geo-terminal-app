@@ -1438,6 +1438,9 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
   const stories = (data.brief || []).map((b, i) => ({ b, i })).filter(({ b }) => hit(b.head + ' ' + b.h + ' ' + b.t + ' ' + b.region + ' ' + b.tag));
   const boards = (data.chatter || []).filter((c) => hit(c.claim + ' ' + (c.read || '')));
   const calls = (data.forecasts || []).filter((f) => hit(f.q));
+  const posts = [...((data.social || {}).x || []).map((p) => ({ who: '@' + p.account, text: p.text, url: p.url })),
+                 ...((data.social || {}).reddit || []).map((p) => ({ who: 'r/' + p.sub, text: p.title + ' ' + (p.body || ''), url: p.url }))]
+    .filter((p) => hit(p.who + ' ' + p.text));
   return (
     <View>
       <View style={s.searchbox}>
@@ -1459,6 +1462,13 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
           <Text style={[s.ctxP, T(16, 23)]}>{decode(c.claim)}</Text>
         </Pressable>
       ))}
+      {posts.length ? <Text style={[s.searchH, { color: C.high }]}>X AND REDDIT</Text> : null}
+      {posts.slice(0, 12).map((p, i) => (
+        <Pressable key={'p' + i} onPress={() => p.url && Linking.openURL(p.url)} style={s.hrow}>
+          <Text style={[s.hrowMeta, { marginTop: 0, marginBottom: 6 }]}>{p.who}</Text>
+          <Text style={[s.ctxP, T(16, 23)]} numberOfLines={4}>{decode(p.text)}</Text>
+        </Pressable>
+      ))}
       {calls.length ? <Text style={s.searchH}>CALLS</Text> : null}
       {calls.map((f, i) => (
         <Pressable key={'c' + i} onPress={() => goTab('conspiracy')} style={[s.hrow, { flexDirection: 'row', gap: 14, alignItems: 'baseline' }]}>
@@ -1466,7 +1476,7 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
           <Text style={[s.predq, { flex: 1 }]}>{decode(f.q)}</Text>
         </Pressable>
       ))}
-      {q.length >= 2 && !stories.length && !boards.length && !calls.length ? <Text style={[s.foot, { marginTop: 18 }]}>Nothing matches in today's brief.</Text> : null}
+      {q.length >= 2 && !stories.length && !boards.length && !calls.length && !posts.length ? <Text style={[s.foot, { marginTop: 18 }]}>Nothing matches in today's brief.</Text> : null}
     </View>
   );
 }
@@ -1516,9 +1526,52 @@ function BoardsTab({ data, goArticle }) {
         </Text>
       </View>
       <FilterDrop pairs={textRegionPairs(all, (c) => c.claim + ' ' + (c.read || ''))} active={region} onPick={setRegion} />
+      <SocialFeed social={data.social} />
       <Chatter items={items} onStory={goArticle} />
       <Watchtower items={specs} />
     </View>
+  );
+}
+
+// ── FROM X AND REDDIT — the raw posts the desk read this pass (script-owned DATA.social). Source
+// material, shown as posted, with attribution and reach; the desk's a-g reads sit below in The chatter. ──
+function SocialFeed({ social }) {
+  const [tab, setTab] = useState('x');
+  const [more, setMore] = useState(false);
+  if (!social || (!(social.x || []).length && !(social.reddit || []).length)) return null;
+  const xs = social.x || [], rs = social.reddit || [];
+  const list = tab === 'x' ? xs : rs;
+  const shown = more ? list : list.slice(0, 8);
+  const when = (iso) => { try { const d = new Date(iso); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  return (
+    <Section title="From X and Reddit" extra={'as of ' + (social.asof || '').slice(5, 16)}>
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
+        {[['x', 'X · ' + xs.length], ['reddit', 'Reddit · ' + rs.length]].map(([k, lab]) => (
+          <Pressable key={k} onPress={() => { setTab(k); setMore(false); }} style={[s.rchip, tab === k && s.rchipOn]}>
+            <Text style={[s.rchipTxt, tab === k && { color: C.text }]}>{lab}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={[s.conspWarn, { paddingHorizontal: 16 }]}>AS POSTED · ATTRIBUTED, NOT VERIFIED</Text>
+      {shown.map((p, i) => (
+        <Pressable key={i} onPress={() => p.url && Linking.openURL(p.url)} style={s.morerow}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text style={[s.hrowMeta, { marginTop: 0 }]}>{tab === 'x' ? '@' + p.account : 'r/' + p.sub}</Text>
+              {tab === 'x' && p.ts ? <Text style={{ color: C.muted, fontSize: 12 }}>{when(p.ts)}</Text> : null}
+              {tab === 'x' ? <Text style={{ color: C.muted, fontSize: 12, marginLeft: 'auto' }}>{(p.likes || 0) + ' ♥ · ' + (p.rts || 0) + ' ↻'}</Text> : null}
+            </View>
+            <Text style={[s.ctxP, T(16, 24), { marginTop: 6 }]}>{decode(tab === 'x' ? p.text : p.title)}</Text>
+            {tab === 'reddit' && p.body ? <Text style={[s.ctxP, T(14.5, 21), { color: C.muted, marginTop: 4 }]}>{decode(p.body)}</Text> : null}
+          </View>
+        </Pressable>
+      ))}
+      {list.length > 8 ? (
+        <Pressable onPress={() => setMore((v) => !v)} style={[s.morerow, { justifyContent: 'center' }]}>
+          <Text style={[s.readmore]}>{more ? 'Show fewer' : 'Show all ' + list.length + ' ›'}</Text>
+        </Pressable>
+      ) : null}
+    </Section>
   );
 }
 
