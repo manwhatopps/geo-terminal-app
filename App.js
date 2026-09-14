@@ -554,9 +554,11 @@ function chatterFor(item, chatter) {
   // Score ORDERS but never filters. Nothing circulating gets withheld from the reader —
   // the most story-relevant just surfaces first.
   const by = (x, y) => chatterScore(item, y) - chatterScore(item, x);
-  const theater = rest.filter((c) => c.r === item.region).sort(by).map((c) => ({ ...c, tier: 'theater' }));
-  const board = rest.filter((c) => c.r !== item.region).sort(by).map((c) => ({ ...c, tier: 'board' }));
-  return own.concat(theater, board);
+  // 2026-09-14 (user: an Iran story was showing 9/11 and 'random things'): under an ARTICLE only what is
+  // about that article - its own pinned claims, plus same-theater claims that share at least two real words
+  // with it. The BOARDS tab is where everything circulating lives; this door is story-specific.
+  const theater = rest.filter((c) => c.r === item.region && chatterScore(item, c) >= 2).sort(by).map((c) => ({ ...c, tier: 'theater' }));
+  return own.concat(theater);
 }
 
 function ConspiracyPanel({ items, forceOpen }) {
@@ -636,7 +638,8 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
                        tsize, onSize, theme, onTheme, level, onLevel }) {
   const { head, stand, longHead } = articleParts(item);
-  const body = bodyFor(item, simpleText, easy, deep);
+  const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
+  const body = bodyFor(item, simpleText, simple, false);
   const [pane, setPane] = useState(null);           // 'analyst' | 'consp' | null
   const conspItems = chatterFor(item, chatter);
   // NYT's article furniture: back to the section, save it, send it to someone.
@@ -650,6 +653,11 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
       <View style={s.artbar}>
         <Pressable onPress={onBack} hitSlop={8}><Text style={s.backtxt}>‹ All headlines</Text></Pressable>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginLeft: 'auto' }}>
+          {simpleText ? (
+            <Pressable onPress={() => setSimple((v) => !v)} hitSlop={8}>
+              <Text style={[MONO, { color: simple ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2 }]}>{simple ? '◐ FULL READ' : '◐ SIMPLIFY'}</Text>
+            </Pressable>
+          ) : null}
           <Pressable onPress={onSave} hitSlop={8}>
             <Text style={[MONO, { color: isSaved ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2 }]}>
               {(isSaved ? '★ SAVED' : '☆ SAVE')}
@@ -669,9 +677,9 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 18 }]}>{fullStamp(item.ts)}</Text>
-        <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{easy ? 'IN PLAIN ENGLISH' : 'THE READ'}</Text>
+        <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{simple ? 'IN PLAIN ENGLISH' : 'THE READ'}</Text>
         {paragraphs(decode(body)).map((para, i) => (
-          <Text key={i} style={[s.storyP, T(easy ? 19 : 18, easy ? 32 : 30), i > 0 && { marginTop: 14 }]}>{para}</Text>
+          <Text key={i} style={[s.storyP, T(simple ? 19 : 18, simple ? 32 : 30), i > 0 && { marginTop: 14 }]}>{para}</Text>
         ))}
         {item.srcs && item.srcs.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 18, gap: 8 }}>
@@ -694,7 +702,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
           </Pressable>
         </View>
-        {pane === 'analyst' ? <ContextPanel item={item} deep={deep} specMatches={specMatches} calls={calls} forceOpen /> : null}
+        {pane === 'analyst' ? <ContextPanel item={item} deep={false} specMatches={specMatches} calls={calls} forceOpen /> : null}
         {pane === 'consp' ? <ConspiracyPanel items={conspItems} forceOpen /> : null}
       </View>
       {/* keep reading — the paper hands you the next story rather than a dead end */}
@@ -1860,17 +1868,7 @@ const T = (fs, lh) => ({ fontSize: Math.round(fs * TSCALE * 10) / 10, lineHeight
 function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme }) {
   return (
     <View style={s.levelbar}>
-      <Text style={[s.levelLbl, MONO]}>LEVEL</Text>
-      <View style={s.modetog}>
-        {LEVELS.map(([v, lab], i) => {
-          const active = v === level;
-          return (
-            <Pressable key={v} onPress={() => onChange(v)} style={[s.modeBtn, i > 0 && s.modeBtnDiv, active && s.modeBtnActive]}>
-              <Text style={[s.modeTxt, MONO, active && { color: C.text, fontWeight: '700' }]}>{lab}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text style={[s.levelLbl, MONO]}>TEXT</Text>
       {onTheme ? (
         <Pressable onPress={() => onTheme(theme === 'light' ? 'dark' : 'light')} hitSlop={8}
           style={{ borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingVertical: 5, paddingHorizontal: 9, marginLeft: 6 }}>
@@ -1977,8 +1975,7 @@ export default function App() {
       try { if (sv[1]) setSaved(JSON.parse(sv[1])); } catch (e) {}
     }).catch(() => {});
     AsyncStorage.getItem(MODE_KEY).then((v) => {
-      if (v === 'simple' || v === 'regular' || v === 'deep') setLevel(v);
-      else if (v === 'easy') setLevel('simple'); // migrate old two-way toggle
+      if (v && v !== 'regular') AsyncStorage.setItem(MODE_KEY, 'regular').catch(() => {});   // 2026-09-14: one level only
     }).catch(() => {});
   }, []);
   const accept = useCallback(() => { AsyncStorage.setItem(ACK_KEY, '1').catch(() => {}); setAcked(true); }, []);
