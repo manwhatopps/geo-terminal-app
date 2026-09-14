@@ -43,7 +43,7 @@ const THEMES = {
   },
 };
 const THEME_KEY = 'geo-theme';
-let THEME = 'light';
+let THEME = 'dark';   // 2026-09-13: the user wants the original black+gold; light stays behind the toggle
 let C = THEMES[THEME];
 let riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
 // Every component reads C and s at render time, so a theme change is: swap the palette, rebuild the
@@ -206,10 +206,13 @@ function fullStamp(ts) {
 }
 // 2026-09-13, Direction C ('Just the front page'): three text tabs, search beside them. 'news' stays the key
 // for Stories so goArticle keeps working; 'conspiracy' is the key for Calls.
+// 2026-09-13: the original menu, minus MAP (removed 09-13) and minus ANALYSIS/Calls (the calls now live inside
+// each article under GEOPOLITICAL ANALYST). 'news' is the headline list + search the user asked for.
 const TABS = [
-  { key: 'news', label: 'Stories' },
-  { key: 'boards', label: 'Boards' },
-  { key: 'conspiracy', label: 'Calls' },
+  { key: 'home', label: 'HOME', g: '⌂' },
+  { key: 'news', label: 'NEWS', g: '▤' },
+  { key: 'boards', label: 'BOARDS', g: '☍' },
+  { key: 'strategy', label: 'STRATEGY', g: '♟' },
 ];
 
 function Section({ title, extra, children }) {
@@ -436,15 +439,17 @@ function IndexRow({ item, simpleText, easy, deep, dense, onOpen, isRead, isSaved
 }
 
 // ── THE CONTEXT PANEL — the decode that used to live inline on every card. ──
-function ContextPanel({ item, deep, specMatches }) {
-  const [open, setOpen] = useState(true);   // 2026-09-12: open by default — readers were not finding the decode
-  useEffect(() => { setOpen(true); }, [deep]);
-  if (!item.context) return null;
+function ContextPanel({ item, deep, specMatches, calls, forceOpen }) {
+  const [open, setOpen] = useState(!!forceOpen);
+  useEffect(() => { if (forceOpen) setOpen(true); }, [deep, forceOpen]);
+  if (!item.context && !(calls || []).length) return null;
   return (
     <>
-      <Pressable style={[s.ctxbtn, s.ctxbtnWide]} onPress={() => setOpen((o) => !o)}>
-        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
-      </Pressable>
+      {!forceOpen ? (
+        <Pressable style={[s.ctxbtn, s.ctxbtnWide]} onPress={() => setOpen((o) => !o)}>
+          <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
+        </Pressable>
+      ) : null}
       {open && (
         <View style={s.ctxpanel}>
           {item.dec && item.dec.verdict ? (
@@ -479,6 +484,21 @@ function ContextPanel({ item, deep, specMatches }) {
             <>
               <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHAT WOULD CHANGE THIS READ</Text>
               <Text style={[s.ctxP, T(17, 28)]}>{decode(item.dec.kill)}</Text>
+            </>
+          ) : null}
+          {(calls || []).length ? (
+            <>
+              <Text style={[s.ctxlbl, MONO, { marginTop: 14, color: C.accent }]}>THE DESK'S CALLS ON THIS THEATER</Text>
+              {calls.map((f, i) => (
+                <View key={'c' + i} style={{ flexDirection: 'row', gap: 12, alignItems: 'baseline', marginTop: 10 }}>
+                  <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.predq}>{decode(f.q)}</Text>
+                    <Text style={s.predmetaTxt}>{'by ' + f.by + (f.prev != null && f.prev !== f.p ? ' · was ' + f.prev + '%' : '')}</Text>
+                    {f.note ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
+                  </View>
+                </View>
+              ))}
             </>
           ) : null}
           {(specMatches || []).map((sp, i) => (
@@ -539,9 +559,9 @@ function chatterFor(item, chatter) {
   return own.concat(theater, board);
 }
 
-function ConspiracyPanel({ items }) {
-  const [open, setOpen] = useState(false);
-  if (!items || !items.length) return null;
+function ConspiracyPanel({ items, forceOpen }) {
+  const [open, setOpen] = useState(!!forceOpen);
+  if (!items || !items.length) return forceOpen ? <Text style={[s.foot, { marginTop: 12 }]}>Nothing is circulating about this story yet — the boards are swept every pass.</Text> : null;
   // Tier headers, not tier gates. Everything the sweep caught is in here; the labels
   // only tell the reader how close to this story each one sits.
   const HEAD = {
@@ -552,14 +572,16 @@ function ConspiracyPanel({ items }) {
   let tier = null;
   return (
     <>
-      <Pressable style={[s.ctxbtn, s.ctxbtnWide, { borderColor: C.high }]} onPress={() => setOpen((o) => !o)}>
-        <Text style={[s.ctxbtnTxt, MONO, { color: C.high }]}>
-          {(open ? '− ' : '＋ ') + 'THE CONSPIRACY'}
-        </Text>
-        <Text style={[MONO, { color: C.muted, fontSize: 11, marginLeft: 'auto' }]}>
-          {items.length + (items.length === 1 ? ' claim circulating' : ' claims circulating')}
-        </Text>
-      </Pressable>
+      {!forceOpen ? (
+        <Pressable style={[s.ctxbtn, s.ctxbtnWide, { borderColor: C.high }]} onPress={() => setOpen((o) => !o)}>
+          <Text style={[s.ctxbtnTxt, MONO, { color: C.high }]}>
+            {(open ? '− ' : '＋ ') + 'THE CONSPIRACY'}
+          </Text>
+          <Text style={[MONO, { color: C.muted, fontSize: 11, marginLeft: 'auto' }]}>
+            {items.length + (items.length === 1 ? ' claim circulating' : ' claims circulating')}
+          </Text>
+        </Pressable>
+      ) : null}
       {open ? (
         <View style={[s.ctxpanel, { borderLeftColor: C.high }]}>
           <Text style={[s.conspWarn, MONO]}>
@@ -610,11 +632,13 @@ function ConspiracyPanel({ items }) {
 }
 
 // ── ARTICLE — the page you land on after tapping a headline. One story, nothing else. ──
-function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount, onCalls,
+function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
                        tsize, onSize, theme, onTheme, level, onLevel }) {
   const { head, stand, longHead } = articleParts(item);
   const body = bodyFor(item, simpleText, easy, deep);
+  const [pane, setPane] = useState(null);           // 'analyst' | 'consp' | null
+  const conspItems = chatterFor(item, chatter);
   // NYT's article furniture: back to the section, save it, send it to someone.
   const share = () => {
     const url = (item.srcs || []).find((sc) => sc.u);
@@ -635,12 +659,6 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount
             <Text style={[MONO, { color: C.muted, fontSize: 11, letterSpacing: 1.2 }]}>↗ SHARE</Text>
           </Pressable>
         </View>
-      </View>
-      {/* reading controls live with the reading, not on the front page */}
-      <View style={{ flexDirection: 'row', gap: 18, alignItems: 'center', paddingHorizontal: 4 }}>
-        {onLevel ? <Pressable hitSlop={8} onPress={() => onLevel(level === 'simple' ? 'regular' : level === 'regular' ? 'deep' : 'simple')}><Text style={s.rctl}>{'Level · ' + (level || 'regular')}</Text></Pressable> : null}
-        {onSize ? <Pressable hitSlop={8} onPress={() => onSize(tsize === 'S' ? 'M' : tsize === 'M' ? 'L' : 'S')}><Text style={s.rctl}>{'Text · ' + (tsize || 'M')}</Text></Pressable> : null}
-        {onTheme ? <Pressable hitSlop={8} onPress={() => onTheme(theme === 'light' ? 'dark' : 'light')}><Text style={s.rctl}>{theme === 'light' ? 'Dark' : 'Light'}</Text></Pressable> : null}
       </View>
       <View style={s.article}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
@@ -665,16 +683,19 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, callsCount
             ))}
           </View>
         ) : null}
-        {!easy ? <ContextPanel item={item} deep={deep} specMatches={specMatches} /> : null}
-        <ConspiracyPanel items={chatterFor(item, chatter)} />
-        {!easy && (onBoard || callsCount > 0) ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {onBoard ? <WebLink label="◉ ON THE BOARD ↑" onPress={onBoard} /> : null}
-            {callsCount > 0 ? (
-              <WebLink label={'ANALYSIS ON ' + (item.region || 'THIS').toUpperCase() + ' (' + callsCount + ') →'} onPress={onCalls} />
-            ) : null}
-          </View>
-        ) : null}
+        {/* two doors under every story: the desk's analysis (and its calls), and what the boards say */}
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+          <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
+            <Text style={[s.artbtnT, MONO]}>◉ GEOPOLITICAL ANALYST</Text>
+            <Text style={s.artbtnS}>{'the desk\'s read' + ((calls || []).length ? ' + ' + calls.length + (calls.length === 1 ? ' call' : ' calls') : '')}</Text>
+          </Pressable>
+          <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
+            <Text style={[s.artbtnT, MONO, { color: C.high }]}>☍ THE CONSPIRACY</Text>
+            <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
+          </Pressable>
+        </View>
+        {pane === 'analyst' ? <ContextPanel item={item} deep={deep} specMatches={specMatches} calls={calls} forceOpen /> : null}
+        {pane === 'consp' ? <ConspiracyPanel items={conspItems} forceOpen /> : null}
       </View>
       {/* keep reading — the paper hands you the next story rather than a dead end */}
       {next || prev ? (
@@ -1387,8 +1408,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
       <ArticlePage
         item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open}
         onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
-        callsCount={regionForecasts(data, item.region).length}
-        onCalls={() => goTab('conspiracy')}
+        calls={regionForecasts(data, item.region)}
         specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
         chatter={data.chatter}
         isSaved={!!saved[id]} onSave={() => toggleSave(id)}
@@ -1416,6 +1436,16 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
           </View>
         );
       }) : <Text style={s.foot}>No headlines right now.</Text>}
+      {data.watch && data.watch.length ? (
+        <View style={{ marginTop: 24 }}>
+          <Section title="What to watch next">
+            {data.watch.map((w, i) => (
+              <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>
+            ))}
+          </Section>
+        </View>
+      ) : null}
+      <View style={{ marginTop: 24 }}><QuizSection quiz={data.quiz} /></View>
     </View>
   );
 }
@@ -1899,7 +1929,7 @@ function LegalFooter() {
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [tab, setTab] = useState('news');
+  const [tab, setTab] = useState('home');
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
@@ -1990,9 +2020,11 @@ export default function App() {
       <SafeAreaView style={s.root} edges={['top']}>
         <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
         <View style={s.header}>
-          <Text style={s.wordmark}>GEO Terminal</Text>
-          <Text style={s.stamp}>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}</Text>
+          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc, shadowColor: rc, shadowOpacity: 0.9, shadowRadius: 6 }} />
+          <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
+          <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
+        {tab !== 'home' && !searching ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -2013,25 +2045,29 @@ export default function App() {
             ) : (
               <>
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />}
+                {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} read={read} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
-                {tab === 'conspiracy' && <ConspiracyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
+                {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
               </>
             )}
             <LegalFooter />
           </ScrollView>
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 }}>
-            <View style={{ flexDirection: 'row', gap: 22, alignItems: 'center', flex: 1 }}>
-              {TABS.map((t) => {
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
+            <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
+              {TABS.map((t, i) => {
                 const on = tab === t.key && !searching;
                 return (
-                  <Pressable key={t.key} hitSlop={10} onPress={() => { setSearching(false); setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}>
-                    <Text style={[{ fontSize: 16, fontWeight: on ? '800' : '600', color: on ? C.text : C.muted, paddingBottom: 4 }, on && { borderBottomWidth: 2, borderBottomColor: C.text }]}>{t.label}</Text>
+                  <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}
+                    style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
+                    <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
+                    <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
                   </Pressable>
                 );
               })}
             </View>
+            <View style={{ width: 14 }} />
             <Pressable hitSlop={12} onPress={() => { setSearching((v) => !v); scrollTop(); }}>
               <Svg width="22" height="22" viewBox="0 0 24 24">
                 <Circle cx="11" cy="11" r="7" stroke={searching ? C.accent : C.text} strokeWidth="2" fill="none" />
@@ -2048,11 +2084,11 @@ export default function App() {
 function buildStyles() {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
-  header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 14, paddingBottom: 14, borderBottomWidth: 2, borderBottomColor: C.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
-  wordmark: { color: C.text, fontFamily: 'Charter', fontWeight: '600', letterSpacing: -0.3, fontSize: 22 },
+  wordmark: { color: C.text, fontWeight: '800', letterSpacing: 2.5, fontSize: 15 },
   classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
-  stamp: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
+  stamp: { color: C.muted, fontSize: 11, letterSpacing: 0.5, marginLeft: 'auto' },
   levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel },
   levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 10, overflow: 'hidden' },
@@ -2124,6 +2160,10 @@ function buildStyles() {
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
   rctl: { color: C.muted, fontSize: 13, fontWeight: '600' },
+  artbtn: { flex: 1, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, backgroundColor: C.panel },
+  artbtnOn: { backgroundColor: C.chip },
+  artbtnT: { color: C.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
+  artbtnS: { color: C.muted, fontSize: 11.5, marginTop: 4 },
   hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
   hrowH: { fontFamily: 'Charter', fontSize: 24, lineHeight: 29, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
   hrowMeta: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
