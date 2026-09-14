@@ -208,8 +208,8 @@ function fullStamp(ts) {
 // for Stories so goArticle keeps working; 'conspiracy' is the key for Calls.
 // 2026-09-13: the original menu, minus MAP (removed 09-13) and minus ANALYSIS/Calls (the calls now live inside
 // each article under GEOPOLITICAL ANALYST). 'news' is the headline list + search the user asked for.
+// 2026-09-13 23:05: HOME removed at the user's call ('get rid of this mess') - the app opens on the headlines.
 const TABS = [
-  { key: 'home', label: 'HOME', g: '⌂' },
   { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'boards', label: 'BOARDS', g: '☍' },
   { key: 'strategy', label: 'STRATEGY', g: '♟' },
@@ -1929,7 +1929,7 @@ function LegalFooter() {
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [tab, setTab] = useState('home');
+  const [tab, setTab] = useState('news');
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
@@ -2024,7 +2024,7 @@ export default function App() {
           <Text style={[s.wordmark, MONO]}>GEO<Text style={{ color: C.accent }}>/</Text>TERMINAL</Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
-        {tab !== 'home' && !searching ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
+        {!searching ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -2045,7 +2045,6 @@ export default function App() {
             ) : (
               <>
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />}
-                {tab === 'home' && <HomeTab data={data} easy={easy} deep={deep} goTab={setTab} goArticle={goArticle} read={read} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
                 {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
               </>
