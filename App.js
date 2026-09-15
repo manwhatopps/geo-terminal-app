@@ -403,6 +403,64 @@ function paragraphs(txt) {
   for (let i = 0; i < sents.length; i += 2) out.push(sents.slice(i, i + 2).join('').trim());
   return out.filter(Boolean);
 }
+// ── SECTIONS — the article as named, bold-headed sections. New cards carry `read` / `consp.reads`
+// arrays; older cards had labels jammed inline ("RAIL: … DESK: … (a) … (b) …"), which sectionize()
+// splits apart so every card on the wire reads the same way. (2026-09-15, user: "broken down in
+// sections better… make these sections noticeable, bold them.")
+const LEGACY_LABELS = {
+  'RAIL': 'THE HISTORICAL RAIL', 'DESK': 'WHO DECIDES', 'BASE RATE': 'BASE RATE',
+  'COMPETING EXPLANATIONS': 'COMPETING EXPLANATIONS', 'WHAT WOULD CHANGE IT': "WHAT WOULD CHANGE THE DESK'S MIND",
+  'WHAT TO WATCH': 'WHAT TO WATCH', 'INDICATORS': 'WHAT TO WATCH', 'SOURCE CLASS': 'SOURCE CLASS',
+  'FALSIFIER': "WHAT WOULD CHANGE THE DESK'S MIND", 'FOR': 'EVIDENCE FOR', 'AGAINST': 'EVIDENCE AGAINST',
+};
+const LETTER_LABELS = { a: 'THE CLAIM', b: 'MECHANISM', c: 'WHO GAINS, WHO PAYS', d: 'EVIDENCE FOR', e: 'EVIDENCE AGAINST', f: 'HISTORICAL ANALOGUES', g: "THE DESK'S VERDICT" };
+function sectionize(txt) {
+  const t = decode(String(txt || '')).replace(/\s+/g, ' ').trim()
+    .replace(/^Source class:/i, 'SOURCE CLASS:').replace(/\bFalsifier:/g, 'FALSIFIER:')
+    .replace(/\((\d)\)\s/g, '$1. ');   // legacy "(1) (2)" lists -> "1. 2." so Sections numbers them
+  if (!t) return [];
+  // split points: "LABEL:" in caps (2-4 words) at a sentence start, or "(a)".."(g)" markers.
+  // No lookbehind (Hermes): the sentence-end prefix is captured and kept with the preceding text.
+  const re = /(^|[.!?;]\s+)(?:([A-Z][A-Z' ]{2,40}?)(?:, at full strength)?:\s+|\(([a-g])\)\s+)/g;
+  const parts = []; let last = 0; let m;
+  while ((m = re.exec(t)) !== null) {
+    const cut = m.index + m[1].length;
+    if (cut > last) parts.push({ h: parts.length ? undefined : null, p: t.slice(last, cut).trim() });
+    const label = m[2] ? (LEGACY_LABELS[m[2].trim()] || m[2].trim()) : LETTER_LABELS[m[3]];
+    parts.push({ h: label, p: '' }); last = re.lastIndex;
+  }
+  if (last < t.length) parts.push({ h: parts.length ? undefined : null, p: t.slice(last).trim() });
+  // fold text into the preceding header
+  const out = [];
+  for (const x of parts) {
+    if (x.h) out.push({ h: x.h, p: x.p });
+    else if (out.length && x.p) out[out.length - 1].p = (out[out.length - 1].p + ' ' + x.p).trim();
+    else if (x.p) out.push({ h: null, p: x.p });
+  }
+  return out.filter((x) => x.p);
+}
+function Sections({ items, size, color }) {
+  if (!items || !items.length) return null;
+  const fs = size || 17, lh = Math.round(fs * 1.62);
+  return (
+    <View>
+      {items.map((sec, i) => {
+        const lines = String(sec.p || '').split(/\s(?=\d\.\s)/).map((x) => x.trim()).filter(Boolean);
+        const numbered = lines.length > 1 && lines.every((x) => /^\d\.\s/.test(x));
+        return (
+          <View key={i} style={{ marginTop: i ? 18 : 4 }}>
+            {sec.h ? <Text style={[MONO, { color: color || C.accent, fontSize: 11.5, letterSpacing: 1.6, fontWeight: '800', marginBottom: 6 }]}>{String(sec.h).toUpperCase()}</Text> : null}
+            {numbered ? lines.map((ln, j) => (
+              <Text key={j} style={[s.ctxP, T(fs, lh), j > 0 && { marginTop: 8 }]}><Text style={{ color: color || C.accent, fontWeight: '800' }}>{ln.slice(0, 2)}</Text>{decode(ln.slice(2))}</Text>
+            )) : paragraphs(decode(sec.p)).map((para, j) => (
+              <Text key={j} style={[s.ctxP, T(fs, lh), j > 0 && { marginTop: 10 }]}>{para}</Text>
+            ))}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 function readTime(body, context) {
   const words = String(body || '').split(/\s+/).length + String(context || '').split(/\s+/).length;
   return Math.max(1, Math.round(words / 200)) + ' MIN READ';
@@ -490,12 +548,10 @@ function ContextPanel({ item, deep, specMatches, calls, forceOpen }) {
               </Text>
             </View>
           ) : null}
-          {!deep ? (
+          {!deep && item.context && !(Array.isArray(item.read) && item.read.length) ? (
             <>
               <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
-              {paragraphs(decode(item.context)).map((para, i) => (
-                <Text key={i} style={[s.ctxP, T(17, 28), i > 0 && { marginTop: 12 }]}>{para}</Text>
-              ))}
+              <Sections items={sectionize(item.context)} />
             </>
           ) : null}
           {item.dec && item.dec.angles && item.dec.angles.length ? (
@@ -644,12 +700,12 @@ function ConspiracyPanel({ items, forceOpen }) {
                       <Text style={[s.ctxP, T(15, 24), { color: C.muted }]}>{decode(c.spread)}</Text>
                     </>
                   ) : null}
-                  {c.read ? (
+                  {Array.isArray(c.reads) && c.reads.length ? (
+                    <View style={{ marginTop: 10 }}><Sections items={c.reads} color={C.high} /></View>
+                  ) : c.read ? (
                     <>
                       <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
-                      {paragraphs(decode(c.read)).map((para, k) => (
-                        <Text key={k} style={[s.ctxP, T(17, 28), k > 0 && { marginTop: 10 }]}>{para}</Text>
-                      ))}
+                      <Sections items={sectionize(c.read)} color={C.high} />
                     </>
                   ) : null}
                   {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
@@ -707,10 +763,19 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 18 }]}>{fullStamp(item.ts)}</Text>
-        <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{simple ? 'IN PLAIN ENGLISH' : 'THE READ'}</Text>
-        {paragraphs(decode(body)).map((para, i) => (
-          <Text key={i} style={[s.storyP, T(simple ? 19 : 18, simple ? 32 : 30), i > 0 && { marginTop: 14 }]}>{para}</Text>
-        ))}
+        {!simple && Array.isArray(item.read) && item.read.length ? (
+          <>
+            <Text style={[s.storyP, T(18, 30), { marginBottom: 6 }]}>{decode(item.t || '')}</Text>
+            <Sections items={item.read} size={18} />
+          </>
+        ) : (
+          <>
+            <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{simple ? 'IN PLAIN ENGLISH' : 'THE READ'}</Text>
+            {paragraphs(decode(body)).map((para, i) => (
+              <Text key={i} style={[s.storyP, T(simple ? 19 : 18, simple ? 32 : 30), i > 0 && { marginTop: 14 }]}>{para}</Text>
+            ))}
+          </>
+        )}
         {item.srcs && item.srcs.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 18, gap: 8 }}>
             <Text style={[MONO, { color: C.muted, fontSize: 10.5, letterSpacing: 1, marginRight: 2 }]}>SOURCES</Text>
