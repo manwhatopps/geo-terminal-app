@@ -49,8 +49,8 @@ const LEGAL = {
 
 // SIGINT terminal — phosphor green on near-black, amber for warnings, typewriter headlines.
 // (Mirrors dashboard.html's dark :root; the old navy "Situation Room" palette is retired.)
-// Black + gold intelligence-agency (per user's reference mockup): near-black field,
-// dark cards, gold as THE accent. Severity stays amber->orange->red.
+// Near-black field with an earth accent (terracotta since 2026-09-14; gold before): intelligence-agency look,
+// dark cards, terracotta as THE accent. Severity stays amber->orange->red.
 // Two palettes, one key set. LIGHT is the default: dark-on-light (positive polarity) reads faster and more
 // accurately for normal vision at every size (Piepenbrock et al.; NN/g), and the effect grows as type gets
 // smaller. Newsprint, not white: a warm off-white ground, near-black ink, gold darkened until it clears 4.5:1
@@ -58,13 +58,13 @@ const LEGAL = {
 const THEMES = {
   light: {
     ink: '#F6F4EE', panel: '#FFFFFF', panel2: '#F0EDE5', line: '#DDD8CC',
-    text: '#17171A', muted: '#63626B', accent: '#8A6300', accentDim: '#C9A64A',
+    text: '#17171A', muted: '#63626B', accent: '#A0522D', accentDim: '#D4906E',   // 2026-09-14: clay, matches the split-globe icon (4.6:1 on the off-white)
     calm: '#2E7D5B', elev: '#B07316', high: '#C24D1E', crit: '#B42323',
     barBg: '#E9E5DB', chip: '#ECE8DE',
   },
   dark: {
     ink: '#09090B', panel: '#141317', panel2: '#0E0D10', line: '#2E2A20',
-    text: '#EDE7D8', muted: '#8D8574', accent: '#D4AF37', accentDim: '#8A7222',
+    text: '#EDE7D8', muted: '#8D8574', accent: '#C97048', accentDim: '#8E4E32',   // 2026-09-14: terracotta, the icon's own colour; gold retired with the aperture
     calm: '#4C9A70', elev: '#D99A2B', high: '#E1662E', crit: '#D93B3B',
     barBg: '#0E0D10', chip: '#221F18',
   },
