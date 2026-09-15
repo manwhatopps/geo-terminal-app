@@ -1946,6 +1946,7 @@ const SHORT_LABEL = {
   exports_pct_gdp: 'Exports % GDP', imports_pct_gdp: 'Imports % GDP', energy_import_dep: 'Net energy imports',
   fossil_share: 'Fossil share', fuel_export_share: 'Fuel in exports', electricity_access: 'Electricity access',
   milex: 'Military spend', milex_pct_gdp: 'Military % GDP', armed_forces: 'Armed forces',
+  events_12m: 'Violent events, 12 mo', events_delta: 'Change', fatalities: 'Reported fatalities',
   fertility: 'Fertility', dependency_ratio: 'Dependency ratio', net_migration: 'Net migration', internet_pct: 'Internet use',
   stability: 'Political stability', govt_effectiveness: 'Govt effectiveness', rule_of_law: 'Rule of law',
   corruption_control: 'Corruption control', voice_accountability: 'Voice & accountability',
@@ -1971,6 +1972,7 @@ function CountryProfile({ iso, world, hist }) {
   const name = (world.names || {})[iso] || iso;
   const tp = (world.trade_partners || {})[iso];
   const lin = ((hist || {}).lineages || {})[iso];
+  const cf = (world.conflict || {})[iso];
   return (
     <View style={s.storycard}>
       <Text style={[s.storyH3, SERIF]}>{name}</Text>
@@ -1999,6 +2001,25 @@ function CountryProfile({ iso, world, hist }) {
             </View>
           ))}
           <Text style={[MONO, { color: C.muted, fontSize: 8 }]}>{tp.src.toUpperCase() + ' · TOTAL ' + fmtCell(tp.total_usd, 'USD')}</Text>
+        </>
+      ) : null}
+      {cf ? (
+        <>
+          <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>{'CONFLICT INTENSITY · ACLED · AS OF ' + String(cf.as_of || '').toUpperCase()}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            <DataCell field="events_12m" c={{ v: cf.events_12m, unit: 'count', year: 'last 12 complete months', src: 'ACLED' }} />
+            <DataCell field="events_delta" c={{ v: cf.events_prev_12m ? Math.round(1000 * (cf.events_12m - cf.events_prev_12m) / cf.events_prev_12m) / 10 : null, unit: '%', year: 'vs prior 12 months', src: 'ACLED' }} />
+            {Object.entries(cf.fatalities_by_year || {}).slice(-2).map(([y, n]) => (
+              <DataCell key={y} field="fatalities" c={{ v: n, unit: 'count', year: y, src: 'ACLED' }} />
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 44, gap: 3, marginTop: 4 }}>
+            {(cf.monthly || []).map(([m, n], i, arr) => {
+              const max = Math.max(1, ...arr.map((x) => x[1]));
+              return <View key={m} style={{ flex: 1, height: Math.max(2, Math.round(40 * n / max)), backgroundColor: i === arr.length - 1 ? C.accentDim : C.accent, borderRadius: 2 }} />;
+            })}
+          </View>
+          <Text style={[MONO, { color: C.muted, fontSize: 8 }]}>{'POLITICAL VIOLENCE EVENTS BY MONTH · ' + ((cf.monthly || [])[0] || [''])[0] + ' → ' + (cf.latest_month || '') + ' (LAST BAR PARTIAL)'}</Text>
         </>
       ) : null}
       {lin && lin.chain && lin.chain.length > 1 ? (
