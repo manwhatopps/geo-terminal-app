@@ -734,6 +734,9 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         </View>
         {pane === 'analyst' ? <HistPanel hist={item.hist} /> : null}
         {pane === 'analyst' ? <ContextPanel item={item} deep={false} specMatches={specMatches} calls={calls} forceOpen /> : null}
+        {pane === 'analyst' && !item.hist && !item.context && !(calls || []).length ? (
+          <Text style={[s.foot, { marginTop: 12 }]}>The desk has not filed its analysis on this story yet — the next run will carry the read, the call, and the history behind it.</Text>
+        ) : null}
         {pane === 'consp' ? <ConspiracyPanel items={conspItems} forceOpen /> : null}
       </View>
       {/* keep reading — the paper hands you the next story rather than a dead end */}
@@ -2190,6 +2193,32 @@ function WorldTab({ world, hist, err, onRetry }) {
   );
 }
 
+// ── ARTICLE HOST — one story, opened from ANY tab (headlines, boards, strategy, search), rendered above
+// that tab so Back returns to where the reader was. Prev/next walk the whole wire, newest first. ──
+function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, saved, toggleSave, markRead,
+                       tsize, onSize, theme, onTheme, level, onLevel }) {
+  const rows = briefSorted(data.brief);
+  const at = rows.findIndex(({ i }) => i === article);
+  if (at < 0) { return <Text style={s.foot}>That story is no longer on the wire.</Text>; }
+  const { s: item, i } = rows[at];
+  const simple = (easy && data.easy && data.easy.brief) || [];
+  const id = storyId(item);
+  const open = (j) => { const hit = (data.brief || [])[j]; if (hit) markRead(storyId(hit)); setArticle(j); if (scrollTop) scrollTop(); };
+  const back = () => { setArticle(null); if (scrollTop) scrollTop(); };
+  return (
+    <ArticlePage
+      item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open} onBoard={null}
+      calls={regionForecasts(data, item.region)}
+      specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
+      chatter={data.chatter}
+      isSaved={!!saved[id]} onSave={() => toggleSave(id)}
+      tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
+      prev={at > 0 ? rows[at - 1] : null}
+      next={at < rows.length - 1 ? rows[at + 1] : null}
+    />
+  );
+}
+
 // ── FOR / AGAINST — the ledger the whole product rests on: evidence on each side, side by side. ──
 function ForAgainst({ pro, con, caveat }) {
   const col = (label, color, items, glyph) => (
@@ -2388,7 +2417,7 @@ export default function App() {
   const goArticle = (i) => {
     const hit = data && (data.brief || [])[i];
     if (hit) markRead(storyId(hit));
-    setArticle(i); setTab('news'); scrollTop();
+    setArticle(i); scrollTop();   // 2026-09-15: stays on the current tab; ArticleHost renders above it, Back returns here
   };
   // What you've opened and what you've kept. Both are per-device and never leave it.
   const [read, setRead] = useState({});
@@ -2518,7 +2547,11 @@ export default function App() {
         ) : null}
         {data && (
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
-            {searching ? (
+            {article != null ? (
+              <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
+                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead}
+                tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />
+            ) : searching ? (
               <SearchScreen data={data} query={query} setQuery={setQuery}
                 goArticle={(i) => { setSearching(false); goArticle(i); }} goTab={(k) => { setSearching(false); setTab(k); scrollTop(); }} />
             ) : (
@@ -2537,7 +2570,7 @@ export default function App() {
               {TABS.map((t, i) => {
                 const on = tab === t.key && !searching;
                 return (
-                  <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); if (t.key === 'news') setArticle(null); scrollTop(); }}
+                  <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); setArticle(null); scrollTop(); }}
                     style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
                     <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
                     <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
