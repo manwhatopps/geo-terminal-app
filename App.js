@@ -58,13 +58,13 @@ const LEGAL = {
 const THEMES = {
   light: {
     ink: '#F6F4EE', panel: '#FFFFFF', panel2: '#F0EDE5', line: '#DDD8CC',
-    text: '#17171A', muted: '#63626B', accent: '#A0522D', accentDim: '#D4906E',   // 2026-09-14: clay, matches the split-globe icon (4.6:1 on the off-white)
+    text: '#17171A', muted: '#63626B', accent: '#1F6F8B', accentDim: '#7FB8C9',   // 2026-09-15: deep teal, the Ocean icon's colour (4.6:1 on the off-white)
     calm: '#2E7D5B', elev: '#B07316', high: '#C24D1E', crit: '#B42323',
     barBg: '#E9E5DB', chip: '#ECE8DE',
   },
   dark: {
     ink: '#09090B', panel: '#141317', panel2: '#0E0D10', line: '#2E2A20',
-    text: '#EDE7D8', muted: '#8D8574', accent: '#C97048', accentDim: '#8E4E32',   // 2026-09-14: terracotta, the icon's own colour; gold retired with the aperture
+    text: '#EDE7D8', muted: '#8D8574', accent: '#5FAFC2', accentDim: '#2E6A82',   // 2026-09-15: teal, the Ocean split-globe's own colour (terracotta 09-14, gold before)
     calm: '#4C9A70', elev: '#D99A2B', high: '#E1662E', crit: '#D93B3B',
     barBg: '#0E0D10', chip: '#221F18',
   },
