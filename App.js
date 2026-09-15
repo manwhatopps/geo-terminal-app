@@ -240,8 +240,10 @@ const TABS = [
   { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'boards', label: 'BOARDS', g: '☍' },
   { key: 'strategy', label: 'STRATEGY', g: '♟' },
-  { key: 'world', label: 'WORLD', g: '◎' },   // 2026-09-14: hard data + institutional memory
 ];
+// 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
+// record that logic for the bot's brain." The history/base-rate reasoning now lives in each article as THE DESK'S
+// CALL (`item.hist`, written by the analyst runs); the reference data sits under STRATEGY as WorldSections.
 
 function Section({ title, extra, children }) {
   return (
@@ -730,6 +732,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
           </Pressable>
         </View>
+        {pane === 'analyst' ? <HistPanel hist={item.hist} /> : null}
         {pane === 'analyst' ? <ContextPanel item={item} deep={false} specMatches={specMatches} calls={calls} forceOpen /> : null}
         {pane === 'consp' ? <ConspiracyPanel items={conspItems} forceOpen /> : null}
       </View>
@@ -1819,7 +1822,7 @@ function Watchlist({ tripwires }) {
   );
 }
 
-function StrategyTab({ data, easy, deep, goArticle, read, saved, compact }) {
+function StrategyTab({ data, easy, deep, goArticle, read, saved, compact, world, hist }) {
   const lec = data.lecture;
   // The desk opens on the wire, not the roster: newest stories first, same index
   // furniture as NEWS (lead panel + hairline rows), then the players below.
@@ -1866,6 +1869,7 @@ function StrategyTab({ data, easy, deep, goArticle, read, saved, compact }) {
         </Section>
       ) : null}
       <Dossiers items={data.dossiers} />
+      {!compact ? <WorldSections world={world} hist={hist} /> : null}
       <Scenarios items={data.scenarios} />
       {lec ? (
         <Section title="This week's deep dive" extra={lec.date}>
@@ -2062,15 +2066,17 @@ function SituationRoom({ sit, sources }) {
           {Object.entries(sit.base_rates).map(([k, b]) => <BaseRateCard key={k} id={k} b={b} />)}
         </>
       ) : null}
-      {(sit.tendencies || []).map((t, i) => (
-        <View key={i} style={{ marginTop: 8 }}>
-          <Text style={[s.ctxlbl, MONO]}>{'STRATEGIC TENDENCY · CONFIDENCE ' + String(t.confidence || '').toUpperCase()}</Text>
-          <Text style={{ color: C.text, fontSize: 13, lineHeight: 18 }}>{decode(t.name)}</Text>
-          <Text style={s.li}><Text style={{ color: C.calm }}>{'› FOR  '}</Text>{(t.supporting || []).length + ' cases'}</Text>
-          {(t.contradicting || []).slice(0, 1).map((c, j) => <Text key={j} style={s.li}><Text style={{ color: C.crit }}>{'› AGAINST  '}</Text>{decode(String(c).startsWith('case:') ? c.replace('case:', '').replace(/_/g, ' ') : c)}</Text>)}
-          {t.caveat ? <Text style={[{ color: C.muted, fontSize: 11.5, fontStyle: 'italic', marginTop: 2 }]}>{decode(t.caveat)}</Text> : null}
-        </View>
-      ))}
+      {(sit.tendencies || []).map((t, i) => {
+        const byId = {}; (sit.timeline || []).forEach((e) => { byId[e.id] = e; });
+        const name = (ref) => { const e = byId[ref]; return e ? String(e.date || '').slice(0, 4) + ' · ' + (e.line || e.name) : String(ref).replace(/^case:/, '').replace(/_/g, ' '); };
+        return (
+          <View key={i} style={{ marginTop: 12 }}>
+            <Text style={[s.ctxlbl, MONO]}>{'THE PATTERN · CONFIDENCE ' + String(t.confidence || '').toUpperCase()}</Text>
+            <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, fontWeight: '600' }}>{decode(t.name)}</Text>
+            <ForAgainst pro={(t.supporting || []).map(name)} con={(t.contradicting || []).map((c) => (String(c).startsWith('case:') ? name(c) : c))} caveat={t.caveat} />
+          </View>
+        );
+      })}
       {(sit.territories || []).map((t, i) => (
         <View key={i} style={{ marginTop: 8 }}>
           <Text style={[s.ctxlbl, MONO]}>{'TERRITORY · ' + String(t.name).toUpperCase()}</Text>
@@ -2179,6 +2185,125 @@ function WorldTab({ world, hist, err, onRetry }) {
           <Text style={[MONO, { color: C.muted, fontSize: 10, lineHeight: 15 }]}>{'LIVE · ' + (world.sources.keyless_live || []).join(' · ')}</Text>
           <Text style={[MONO, { color: C.muted, fontSize: 10, lineHeight: 15, marginTop: 4 }]}>{'PENDING KEY · ' + (world.sources.key_required || []).join(' · ')}</Text>
         </Section>
+      ) : null}
+    </>
+  );
+}
+
+// ── FOR / AGAINST — the ledger the whole product rests on: evidence on each side, side by side. ──
+function ForAgainst({ pro, con, caveat }) {
+  const col = (label, color, items, glyph) => (
+    <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 9 }}>
+      <Text style={[MONO, { color, fontSize: 9.5, letterSpacing: 1.4, fontWeight: '800' }]}>{label}</Text>
+      {(items || []).length ? items.map((t, i) => (
+        <Text key={i} style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 5 }}><Text style={{ color }}>{glyph + ' '}</Text>{decode(String(t))}</Text>
+      )) : <Text style={{ color: C.muted, fontSize: 12.5, marginTop: 5, fontStyle: 'italic' }}>nothing recorded</Text>}
+    </View>
+  );
+  return (
+    <View style={{ marginTop: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {col('FOR', C.calm, pro, '+')}
+        {col('AGAINST', C.crit, con, '−')}
+      </View>
+      {caveat ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, fontStyle: 'italic', marginTop: 8 }}>{decode(caveat)}</Text> : null}
+    </View>
+  );
+}
+
+// ── THE DESK'S CALL — the analyst's own prediction on a story, with the history that set the prior. ──
+function HistPanel({ hist }) {
+  if (!hist || (!hist.call && !(hist.for || []).length)) return null;
+  const call = hist.call || {};
+  const p = Math.max(0, Math.min(100, Number(call.p) || 0));
+  const br = hist.base_rate;
+  const brLine = br ? (br.low_n
+    ? `Comparable cases: ${br.n} — too few for a percentage`
+    : `Comparable cases: ${br.n} · ` + Object.entries(br.dist || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => k.replace(/_/g, ' ') + ' ' + Math.round(v) + '%').join(' · ')) : null;
+  return (
+    <View style={[s.storycard, { borderColor: C.accent, marginTop: 10 }]}>
+      <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{"THE DESK'S CALL" + (call.horizon ? ' · ' + String(call.horizon).toUpperCase() : '') + (call.conf ? ' · CONFIDENCE ' + String(call.conf).toUpperCase() : '')}</Text>
+      {call.event ? (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 30, fontWeight: '800', width: 84, lineHeight: 34 }]}>{p + '%'}</Text>
+          <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 21, flex: 1, fontWeight: '600' }}>{decode(call.event)}</Text>
+        </View>
+      ) : null}
+      {call.event ? <View style={{ marginTop: 6 }}><ProbBar p={p} /></View> : null}
+      <ForAgainst pro={hist.for} con={hist.against} />
+      {call.update || brLine ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={[s.ctxlbl, MONO]}>HOW HISTORY MOVED THIS</Text>
+          {brLine ? <Text style={[MONO, { color: C.muted, fontSize: 11, marginTop: 2 }]}>{brLine}</Text> : null}
+          {call.update ? <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 4 }}>{decode(call.update)}</Text> : null}
+        </View>
+      ) : null}
+      {(hist.precedents || []).length ? (
+        <View style={{ marginTop: 10 }}>
+          <Text style={[s.ctxlbl, MONO]}>PRECEDENTS THE DESK WEIGHED</Text>
+          {hist.precedents.map((x, i) => (
+            <View key={i} style={{ flexDirection: 'row', paddingVertical: 5, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 11, width: 70 }]}>{String(x.date || '').slice(0, 7)}</Text>
+              <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, flex: 1 }}>{decode(x.line || '')}</Text>
+              {x.use != null ? <Text style={[MONO, { color: x.use >= 60 ? C.calm : x.use >= 40 ? C.elev : C.muted, fontSize: 10, marginLeft: 8, marginTop: 3 }]}>{'USE ' + x.use}</Text> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ── WORLD SECTIONS — reference data under STRATEGY: situation rooms, country numbers, physical events. ──
+function WorldSections({ world, hist }) {
+  const [room, setRoom] = useState(null);
+  const [iso, setIso] = useState(null);
+  if (!world && !hist) return null;
+  const sits = (hist && hist.situations) || {};
+  const sitKeys = Object.keys(sits);
+  const isos = Object.keys((world && world.countries) || {});
+  const names = (world && world.names) || {};
+  const quakes = ((world && world.events) || {}).seismic || [];
+  const gaps = (world && world.intelligence_gaps) || [];
+  return (
+    <>
+      {sitKeys.length ? (
+        <Section title="Situation rooms" extra={sitKeys.length + ' tracked'}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+            {sitKeys.map((k) => (
+              <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
+                <Text style={[s.rchipTxt, MONO, room === k && { color: C.text, fontWeight: '700' }]}>{sits[k].title}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {room ? <SituationRoom sit={sits[room]} sources={hist.sources || {}} /> : null}
+        </Section>
+      ) : null}
+      {isos.length ? (
+        <Section title="Country intelligence" extra="primary sources">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+            {isos.map((k) => (
+              <Pressable key={k} onPress={() => setIso(iso === k ? null : k)} style={[s.rchip, iso === k && s.rchipOn]}>
+                <Text style={[s.rchipTxt, MONO, iso === k && { color: C.text, fontWeight: '700' }]}>{names[k] || k}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {iso ? <CountryProfile iso={iso} world={world} hist={hist} /> : null}
+        </Section>
+      ) : null}
+      {quakes.length ? (
+        <Section title="Seismic, last 7 days" extra="USGS · M5.5+">
+          {quakes.slice(0, 5).map((q, i) => (
+            <Pressable key={i} onPress={() => q.url && Linking.openURL(q.url)} style={{ flexDirection: 'row', paddingVertical: 4 }}>
+              <Text style={[MONO, { color: q.mag >= 7 ? C.crit : q.mag >= 6 ? C.high : C.elev, fontSize: 12, width: 46, fontWeight: '700' }]}>{'M' + (q.mag != null ? q.mag.toFixed(1) : '?')}</Text>
+              <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }} numberOfLines={1}>{q.place}</Text>
+              <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>{String(q.time || '').slice(5, 10)}</Text>
+            </Pressable>
+          ))}
+        </Section>
+      ) : null}
+      {gaps.length ? (
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, lineHeight: 14, paddingHorizontal: 4, marginTop: 6 }]}>{'DECLARED GAPS · ' + gaps.map((g) => g.gap).join(' · ')}</Text>
       ) : null}
     </>
   );
@@ -2348,7 +2473,7 @@ export default function App() {
     const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist)]);
     setWorldErr(errs.find(Boolean) || null);
   }, []);
-  useEffect(() => { if (tab === 'world' && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
+  useEffect(() => { if (tab === 'strategy' && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
   // older stories: the 30-day archive, pulled only when the reader asks for it at the foot of the wire
   const [older, setOlder] = useState('idle');   // idle | loading | done | error
   const loadOlder = useCallback(async () => {
@@ -2361,7 +2486,7 @@ export default function App() {
       setOlder('done');
     } catch (e) { setOlder('error'); }
   }, []);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'world') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'strategy') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
 
   if (acked === null) {
     return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
@@ -2400,8 +2525,7 @@ export default function App() {
               <>
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
-                {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
-                {tab === 'world' && <WorldTab world={world} hist={hist} err={worldErr} onRetry={loadWorld} />}
+                {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} world={world} hist={hist} />}
               </>
             )}
             <LegalFooter />
