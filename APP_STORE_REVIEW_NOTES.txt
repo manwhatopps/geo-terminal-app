@@ -1,9 +1,9 @@
-NOTES FOR APP REVIEW — Parallax
+NOTES FOR APP REVIEW — Tilt
 Bundle ID: com.manwhatopps.geoterminal
 Version: 1.0.0
 
 WHAT THE APP DOES
-Parallax is a read-only editorial app that presents geopolitical analysis and
+Tilt is a read-only editorial app that presents geopolitical analysis and
 probabilistic forecasts written by the developer. It has five tabs: a forecast board,
 a world conflict map (Apple Maps with annotated markers), a daily written brief, a
 "hypothesis lab," and a weekly long-form lecture. Content is fetched as a static public
