@@ -784,11 +784,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
       <View style={s.artbar}>
         <Pressable onPress={onBack} hitSlop={8}><Text style={s.backtxt}>‹ All headlines</Text></Pressable>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginLeft: 'auto' }}>
-          {simpleText ? (
-            <Pressable onPress={() => setSimple((v) => !v)} hitSlop={8}>
-              <Text style={[MONO, { color: simple ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2 }]}>{simple ? '◐ FULL READ' : '◐ SIMPLIFY'}</Text>
-            </Pressable>
-          ) : null}
+          {/* 2026-09-15: the SIMPLIFY toggle is gone - one depth, the deep one (user's call) */}
           <Pressable onPress={onSave} hitSlop={8}>
             <Text style={[MONO, { color: isSaved ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2 }]}>
               {(isSaved ? '★ SAVED' : '☆ SAVE')}
@@ -1918,6 +1914,7 @@ function Dossiers({ items }) {
           </View>
           <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>INTEL SUMMARY</Text>
           <Sections items={sectionize(d.summary)} size={16} />
+          {Array.isArray(d.read) && d.read.length ? <Sections items={d.read} size={16} /> : null}
           {d.threat ? (
             <>
               <Text style={[s.ctxlbl, MONO, { marginTop: 8, color: tc }]}>{'THREAT ASSESSMENT · ' + String(d.threat.level || '').toUpperCase()}</Text>
