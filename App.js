@@ -10,6 +10,33 @@ import Svg, { Circle, Line, Path as SvgPath, Rect } from 'react-native-svg';
 import { LAND_PATH } from './worldmap';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
+// 2026-09-14 WORLD tab: primary-source country data (geobrief/world_data.py) and the situation-room
+// history graph (geobrief/history_engine.py export). Lazy-loaded the first time the tab opens.
+const WORLD_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/world.json';
+const HISTORY_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/history.json';
+const WORLD_CACHE_KEY = 'geo-world-cache-v1';
+// 2026-09-14 THE WIRE: the feed carries `stories` — every card from every run of the last 72h,
+// archived by publish_feed.mjs — and stories.json holds 30 days behind a "load older" tap.
+// wireOf() makes that archive the front page: `brief` becomes the wire and `easy.brief` its
+// parallel plain-English column, so every reader of data.brief (front page, search, saved,
+// article prev/next, home) works unchanged on the full run of stories instead of one run's cards.
+const STORIES_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/stories.json';
+function wireOf(j) {
+  if (j && Array.isArray(j.stories) && j.stories.length) {
+    j.brief = j.stories;
+    j.easy = { ...(j.easy || {}), brief: j.stories.map((st) => st.easy || '') };
+  }
+  return j;
+}
+function mergeWire(cur, older) {
+  if (!cur || !Array.isArray(older)) return cur;
+  const seen = new Set((cur.brief || []).map(storyId));
+  const add = older.filter((st) => st && !seen.has(storyId(st)));
+  if (!add.length) return cur;
+  const brief = (cur.brief || []).concat(add);
+  return { ...cur, brief, easy: { ...(cur.easy || {}), brief: brief.map((st, i) => st.easy || ((cur.easy || {}).brief || [])[i] || '') } };
+}
+const HISTORY_CACHE_KEY = 'geo-history-cache-v1';
 const ACK_KEY = 'geo-disclaimer-ack-v1';
 const MODE_KEY = 'geo-mode';
 const FEED_CACHE_KEY = 'geo-feed-cache-v1'; // last good feed: the app opens on it, then refreshes
@@ -213,6 +240,7 @@ const TABS = [
   { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'boards', label: 'BOARDS', g: '☍' },
   { key: 'strategy', label: 'STRATEGY', g: '♟' },
+  { key: 'world', label: 'WORLD', g: '◎' },   // 2026-09-14: hard data + institutional memory
 ];
 
 function Section({ title, extra, children }) {
@@ -1380,7 +1408,8 @@ function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
 // strictly newest-first inside day sections, so the chronology is never violated;
 // hierarchy comes from position, not from re-ranking.
 function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
-                   read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel }) {
+                   read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
+                   older, loadOlder }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
   useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
@@ -1444,6 +1473,13 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
           </View>
         );
       }) : <Text style={s.foot}>No headlines right now.</Text>}
+      {loadOlder && older !== 'done' ? (
+        <Pressable onPress={older === 'loading' ? null : loadOlder} style={{ paddingVertical: 14, alignItems: 'center' }}>
+          <Text style={[MONO, { color: older === 'error' ? C.high : C.accent, fontSize: 11, letterSpacing: 1 }]}>
+            {older === 'loading' ? 'LOADING THE ARCHIVE…' : older === 'error' ? 'ARCHIVE UNAVAILABLE · TAP TO RETRY' : '› LOAD OLDER STORIES · 30 DAYS'}
+          </Text>
+        </Pressable>
+      ) : null}
       {data.watch && data.watch.length ? (
         <View style={{ marginTop: 24 }}>
           <Section title="What to watch next">
@@ -1861,6 +1897,293 @@ function StrategyTab({ data, easy, deep, goArticle, read, saved, compact }) {
 
 const LEVELS = [['simple', 'SIMPLE'], ['regular', 'REGULAR'], ['deep', 'DEEP']];
 // Text size is the reader's, not the designer's. Three stops; the article/prose styles multiply by it.
+// ── WORLD — primary-source numbers and the situation-room history graph ──────────────────────────
+// Every number on this tab is a provenanced cell {v, unit, year, src, code} from a primary statistical
+// source (World Bank, IMF, UN Comtrade, UNHCR, USGS, NASA, FRED). No LLM prose. A missing value renders
+// as NO DATA, never as a guess. History comes from the sourced knowledge graph; confidence and source
+// ids travel with every event so the reader can see what an assessment rests on.
+function fmtCell(v, unit) {
+  if (v == null || Number.isNaN(v)) return '—';
+  const a = Math.abs(v);
+  if (unit === 'USD') {
+    if (a >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
+    if (a >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (a >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    return '$' + Math.round(v).toLocaleString();
+  }
+  if (unit === 'people') {
+    if (a >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+    if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+    if (a >= 1e3) return Math.round(v / 1e3) + 'K';
+    return String(Math.round(v));
+  }
+  if (unit === '%') return (Math.round(v * 10) / 10).toFixed(1) + '%';
+  if (unit === 'index') return (v > 0 ? '+' : '') + v.toFixed(2);
+  if (unit === 'USD/bbl' || unit === 'USD/MMBtu') return '$' + v.toFixed(2);
+  return (Math.round(v * 100) / 100).toLocaleString();
+}
+const WORLD_GROUPS = [
+  ['SCALE', ['population', 'gdp', 'gdp_per_capita', 'urban_pct']],
+  ['ECONOMY', ['gdp_growth', 'imf_gdp_growth_proj', 'inflation', 'unemployment', 'reserves', 'external_debt', 'govt_debt', 'imf_current_account']],
+  ['INDUSTRY (% GDP)', ['va_agriculture', 'va_industry', 'va_manufacturing', 'va_services']],
+  ['TRADE & ENERGY', ['exports_pct_gdp', 'imports_pct_gdp', 'energy_import_dep', 'fossil_share', 'fuel_export_share', 'electricity_access']],
+  ['MILITARY', ['milex', 'milex_pct_gdp', 'armed_forces']],
+  ['DEMOGRAPHY', ['fertility', 'dependency_ratio', 'net_migration', 'internet_pct']],
+  ['GOVERNANCE · WGI -2.5..+2.5', ['stability', 'govt_effectiveness', 'rule_of_law', 'corruption_control', 'voice_accountability']],
+];
+const SHORT_LABEL = {
+  population: 'Population', gdp: 'GDP', gdp_per_capita: 'GDP per capita', urban_pct: 'Urban',
+  gdp_growth: 'GDP growth', imf_gdp_growth_proj: 'IMF growth (proj.)', inflation: 'Inflation', unemployment: 'Unemployment',
+  reserves: 'Reserves', external_debt: 'External debt', govt_debt: 'Govt debt % GDP', imf_current_account: 'Current acct % GDP',
+  va_agriculture: 'Agriculture', va_industry: 'Industry', va_manufacturing: 'Manufacturing', va_services: 'Services',
+  exports_pct_gdp: 'Exports % GDP', imports_pct_gdp: 'Imports % GDP', energy_import_dep: 'Net energy imports',
+  fossil_share: 'Fossil share', fuel_export_share: 'Fuel in exports', electricity_access: 'Electricity access',
+  milex: 'Military spend', milex_pct_gdp: 'Military % GDP', armed_forces: 'Armed forces',
+  fertility: 'Fertility', dependency_ratio: 'Dependency ratio', net_migration: 'Net migration', internet_pct: 'Internet use',
+  stability: 'Political stability', govt_effectiveness: 'Govt effectiveness', rule_of_law: 'Rule of law',
+  corruption_control: 'Corruption control', voice_accountability: 'Voice & accountability',
+};
+const confColor = (c) => (c === 'high' ? C.calm : c === 'moderate' ? C.elev : c === 'contested' ? C.crit : C.high);
+
+function DataCell({ field, c }) {
+  if (!c) return null;
+  const missing = c.v == null;
+  return (
+    <View style={{ width: '50%', paddingVertical: 5, paddingRight: 8 }}>
+      <Text style={[MONO, { color: C.muted, fontSize: 8.5, letterSpacing: 1 }]} numberOfLines={1}>{(SHORT_LABEL[field] || field).toUpperCase()}</Text>
+      <Text style={[MONO, { color: missing ? C.muted : C.text, fontSize: 14, marginTop: 1, fontWeight: '700' }]}>{fmtCell(c.v, c.unit)}</Text>
+      <Text style={[MONO, { color: C.muted, fontSize: 8 }]} numberOfLines={1}>
+        {missing ? 'NO DATA' : c.src + ' · ' + (c.year || '') + (c.note ? ' · PROJECTION' : '')}
+      </Text>
+    </View>
+  );
+}
+
+function CountryProfile({ iso, world, hist }) {
+  const d = (world.countries || {})[iso] || {};
+  const name = (world.names || {})[iso] || iso;
+  const tp = (world.trade_partners || {})[iso];
+  const lin = ((hist || {}).lineages || {})[iso];
+  return (
+    <View style={s.storycard}>
+      <Text style={[s.storyH3, SERIF]}>{name}</Text>
+      {WORLD_GROUPS.map(([title, fields]) => {
+        const present = fields.filter((f) => d[f]);
+        if (!present.length) return null;
+        return (
+          <View key={title}>
+            <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>{title}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {present.map((f) => <DataCell key={f} field={f} c={d[f]} />)}
+            </View>
+          </View>
+        );
+      })}
+      {tp ? (
+        <>
+          <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>{'TOP EXPORT PARTNERS · ' + tp.year + ' · TOP-3 SHARE ' + (tp.concentration_top3_pct != null ? tp.concentration_top3_pct + '%' : '—')}</Text>
+          {tp.partners.map((p, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 3 }}>
+              <Text style={[MONO, { color: C.text, fontSize: 12.5, flex: 1 }]} numberOfLines={1}>{p.partner}</Text>
+              <View style={{ width: 90, height: 5, backgroundColor: C.barBg, borderRadius: 3, marginHorizontal: 8 }}>
+                <View style={{ width: Math.min(100, (p.share_pct || 0) * 3) + '%', height: 5, backgroundColor: C.accent, borderRadius: 3 }} />
+              </View>
+              <Text style={[MONO, { color: C.muted, fontSize: 11, width: 46, textAlign: 'right' }]}>{p.share_pct != null ? p.share_pct.toFixed(1) + '%' : '—'}</Text>
+            </View>
+          ))}
+          <Text style={[MONO, { color: C.muted, fontSize: 8 }]}>{tp.src.toUpperCase() + ' · TOTAL ' + fmtCell(tp.total_usd, 'USD')}</Text>
+        </>
+      ) : null}
+      {lin && lin.chain && lin.chain.length > 1 ? (
+        <>
+          <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>STATE LINEAGE · CONTINUITY IS SHOWN, NOT ASSUMED</Text>
+          <Text style={[MONO, { color: C.text, fontSize: 12 }]}>{lin.chain.map((c) => c.name).join('  →  ')}</Text>
+          {lin.links.map((l, i) => (
+            <Text key={i} style={[s.li, { fontSize: 12 }]}><Text style={{ color: confColor(l.confidence) }}>{'› ' + String(l.confidence).toUpperCase() + ' · '}</Text>{decode(l.discontinuity || '')}</Text>
+          ))}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function BaseRateCard({ id, b }) {
+  const low = b.flag === 'LOW_N';
+  const keys = Object.keys(b.counts || {});
+  return (
+    <View style={{ marginTop: 6 }}>
+      <Text style={[MONO, { color: C.text, fontSize: 12, fontWeight: '700' }]}>{id.replace(/_/g, ' ').toUpperCase() + ' · n=' + b.n + (low ? ' · LOW N' : '')}</Text>
+      {keys.map((k) => {
+        const pct = b.pct ? b.pct[k] : null;
+        return (
+          <View key={k} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
+            <Text style={[MONO, { color: C.muted, fontSize: 11, width: 130 }]} numberOfLines={1}>{k.replace(/_/g, ' ')}</Text>
+            <View style={{ flex: 1, height: 5, backgroundColor: C.barBg, borderRadius: 3, marginHorizontal: 8 }}>
+              <View style={{ width: (pct != null ? pct : (100 * b.counts[k] / b.n)) + '%', height: 5, backgroundColor: low ? C.muted : C.accent, borderRadius: 3 }} />
+            </View>
+            <Text style={[MONO, { color: low ? C.muted : C.text, fontSize: 11, width: 56, textAlign: 'right' }]}>{low ? b.counts[k] + ' case' + (b.counts[k] === 1 ? '' : 's') : pct + '%'}</Text>
+          </View>
+        );
+      })}
+      <Text style={[{ color: C.muted, fontSize: 11.5, marginTop: 2, fontStyle: 'italic' }]}>{low ? 'Too few cases for a percentage: a rough prior only. ' : ''}{decode(b.selection_note || '')}</Text>
+    </View>
+  );
+}
+
+function SituationRoom({ sit, sources }) {
+  const [full, setFull] = useState(false);
+  const [srcOpen, setSrcOpen] = useState(null);
+  const srcLine = (ids) => (ids || []).map((id) => (sources[id] || {}).publisher || id).filter((x, i, a) => a.indexOf(x) === i).join(' · ');
+  const events = full ? sit.timeline : sit.why_it_matters;
+  return (
+    <View style={s.storycard}>
+      <Text style={[s.storyH3, SERIF]}>{sit.title}</Text>
+      <Text style={[s.ctxlbl, MONO, { marginTop: 6 }]}>{full ? 'FULL TIMELINE · ' + sit.timeline.length + ' EVENTS' : 'WHY THIS HISTORY MATTERS'}</Text>
+      {events.map((e, i) => (
+        <Pressable key={e.id || i} onPress={() => setSrcOpen(srcOpen === e.id ? null : e.id)} style={{ flexDirection: 'row', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 11, width: 74 }]}>{String(e.date || '').slice(0, 10)}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: C.text, fontSize: 13, lineHeight: 18 }}>{decode(e.line || e.name || '')}</Text>
+            {full && e.description && srcOpen === e.id ? <Text style={[s.ctxP, { color: C.muted, marginTop: 3 }]}>{decode(e.description)}</Text> : null}
+            {srcOpen === e.id ? (
+              <Text style={[MONO, { color: C.muted, fontSize: 9, marginTop: 3 }]}>
+                <Text style={{ color: confColor(e.confidence) }}>{String(e.confidence || '').toUpperCase()}</Text>{' · ' + (srcLine(e.sources) || 'UNVERIFIED')}
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
+      ))}
+      <Pressable onPress={() => setFull(!full)} style={{ paddingVertical: 8 }}>
+        <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1 }]}>{full ? '− COLLAPSE TO WHY IT MATTERS' : '› EXPLORE FULL HISTORY'}</Text>
+      </Pressable>
+      {Object.keys(sit.base_rates || {}).length ? (
+        <>
+          <Text style={[s.ctxlbl, MONO, { marginTop: 4 }]}>BASE RATES · WHAT COMPARABLE CASES DID</Text>
+          {Object.entries(sit.base_rates).map(([k, b]) => <BaseRateCard key={k} id={k} b={b} />)}
+        </>
+      ) : null}
+      {(sit.tendencies || []).map((t, i) => (
+        <View key={i} style={{ marginTop: 8 }}>
+          <Text style={[s.ctxlbl, MONO]}>{'STRATEGIC TENDENCY · CONFIDENCE ' + String(t.confidence || '').toUpperCase()}</Text>
+          <Text style={{ color: C.text, fontSize: 13, lineHeight: 18 }}>{decode(t.name)}</Text>
+          <Text style={s.li}><Text style={{ color: C.calm }}>{'› FOR  '}</Text>{(t.supporting || []).length + ' cases'}</Text>
+          {(t.contradicting || []).slice(0, 1).map((c, j) => <Text key={j} style={s.li}><Text style={{ color: C.crit }}>{'› AGAINST  '}</Text>{decode(String(c).startsWith('case:') ? c.replace('case:', '').replace(/_/g, ' ') : c)}</Text>)}
+          {t.caveat ? <Text style={[{ color: C.muted, fontSize: 11.5, fontStyle: 'italic', marginTop: 2 }]}>{decode(t.caveat)}</Text> : null}
+        </View>
+      ))}
+      {(sit.territories || []).map((t, i) => (
+        <View key={i} style={{ marginTop: 8 }}>
+          <Text style={[s.ctxlbl, MONO]}>{'TERRITORY · ' + String(t.name).toUpperCase()}</Text>
+          <Text style={s.li}><Text style={{ color: C.accent }}>{'› DE FACTO CONTROL  '}</Text>{String(t.de_facto_control || '').replace('country:', '')}</Text>
+          <Text style={s.li}><Text style={{ color: C.accent }}>{'› CLAIMS  '}</Text>{(t.current_claims || []).map((c) => String(c.claimant).replace('country:', '')).join(', ')}</Text>
+          <Text style={s.li}><Text style={{ color: C.accent }}>{'› RECOGNITION  '}</Text>{decode(t.recognition || '')}</Text>
+          <Text style={s.li}><Text style={{ color: C.accent }}>{'› HISTORICAL CONTROL  '}</Text>{(t.historical_control || []).map((h) => String(h.controller).replace('country:', '') + ' ' + (h.from || '') + '–' + (h.to || 'now')).join('; ')}</Text>
+        </View>
+      ))}
+      {(sit.path_dependencies || []).map((p, i) => (
+        <View key={i} style={{ marginTop: 8 }}>
+          <Text style={[s.ctxlbl, MONO]}>{'PATH DEPENDENCY · EACH ARROW IS A HYPOTHESIS'}</Text>
+          {(p.chain || []).map((st, j) => <Text key={j} style={s.li}><Text style={{ color: C.accent }}>{j ? '↓ ' : '› '}</Text>{decode(st.step)}</Text>)}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function WorldTab({ world, hist, err, onRetry }) {
+  const [room, setRoom] = useState(null);
+  const [iso, setIso] = useState(null);
+  const [moreEv, setMoreEv] = useState(false);
+  if (!world && !hist) {
+    return (
+      <View style={s.section}>
+        <Pressable onPress={onRetry} style={s.storycard}>
+          <Text style={[MONO, { color: C.muted, fontSize: 11, letterSpacing: 1 }]}>{err ? 'WORLD DATA UNAVAILABLE · ' + err + ' · TAP TO RETRY' : 'LOADING PRIMARY-SOURCE DATA…'}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  const m = (world && world.markets) || {};
+  const sits = (hist && hist.situations) || {};
+  const sitKeys = Object.keys(sits);
+  const isos = Object.keys((world && world.countries) || {});
+  const names = (world && world.names) || {};
+  const quakes = ((world && world.events) || {}).seismic || [];
+  const hazards = ((world && world.events) || {}).hazards || [];
+  const gaps = (world && world.intelligence_gaps) || [];
+  return (
+    <>
+      {Object.keys(m).length ? (
+        <Section title="Markets" extra={'FRED · ' + (m.brent ? m.brent.year : '')}>
+          <StatStrip stats={[['brent', 'BRENT'], ['us10y', 'US 10Y'], ['vix', 'VIX'], ['nat_gas_henry_hub', 'HH GAS']].filter(([k]) => m[k]).map(([k, l]) => [fmtCell(m[k].v, m[k].unit), l + (m[k].chg_pct != null ? ' ' + (m[k].chg_pct > 0 ? '▲' : '▼') + Math.abs(m[k].chg_pct).toFixed(1) + '%' : '')])} />
+        </Section>
+      ) : null}
+      {sitKeys.length ? (
+        <Section title="Situation rooms" extra={sitKeys.length + ' tracked'}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+            {sitKeys.map((k) => (
+              <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
+                <Text style={[s.rchipTxt, MONO, room === k && { color: C.text, fontWeight: '700' }]}>{sits[k].title}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {room ? <SituationRoom sit={sits[room]} sources={hist.sources || {}} /> : (
+            <Text style={[{ color: C.muted, fontSize: 12.5, paddingHorizontal: 4 }]}>Pick a situation. You get the five to nine events that explain today, base rates from comparable cases, and the claims on the territory kept apart from who actually controls it.</Text>
+          )}
+        </Section>
+      ) : null}
+      {isos.length ? (
+        <Section title="Country intelligence" extra={isos.length + ' profiles'}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+            {isos.map((k) => (
+              <Pressable key={k} onPress={() => setIso(iso === k ? null : k)} style={[s.rchip, iso === k && s.rchipOn]}>
+                <Text style={[s.rchipTxt, MONO, iso === k && { color: C.text, fontWeight: '700' }]}>{names[k] || k}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {iso ? <CountryProfile iso={iso} world={world} hist={hist} /> : (
+            <Text style={[{ color: C.muted, fontSize: 12.5, paddingHorizontal: 4 }]}>Pick a country. Every figure carries its source and vintage; tap nothing, trust nothing you cannot see the source of.</Text>
+          )}
+        </Section>
+      ) : null}
+      {quakes.length || hazards.length ? (
+        <Section title="Live physical events" extra="USGS · NASA">
+          {quakes.slice(0, moreEv ? 40 : 5).map((q, i) => (
+            <Pressable key={'q' + i} onPress={() => q.url && Linking.openURL(q.url)} style={{ flexDirection: 'row', paddingVertical: 4 }}>
+              <Text style={[MONO, { color: q.mag >= 7 ? C.crit : q.mag >= 6 ? C.high : C.elev, fontSize: 12, width: 46, fontWeight: '700' }]}>{'M' + (q.mag != null ? q.mag.toFixed(1) : '?')}</Text>
+              <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }} numberOfLines={1}>{q.place}</Text>
+              <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>{String(q.time || '').slice(5, 16).replace('T', ' ')}</Text>
+            </Pressable>
+          ))}
+          {hazards.slice(0, moreEv ? 30 : 5).map((h, i) => (
+            <Pressable key={'h' + i} onPress={() => h.url && Linking.openURL(h.url)} style={{ flexDirection: 'row', paddingVertical: 4 }}>
+              <Text style={[MONO, { color: C.elev, fontSize: 10, width: 46 }]} numberOfLines={1}>{String((h.categories || [])[0] || 'EVENT').toUpperCase().slice(0, 6)}</Text>
+              <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }} numberOfLines={1}>{decode(h.title)}</Text>
+              <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>{String(h.date || '').slice(5, 10)}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={() => setMoreEv(!moreEv)} style={{ paddingVertical: 6 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1 }]}>{moreEv ? '− FEWER' : '› ALL ' + (quakes.length + hazards.length) + ' EVENTS'}</Text>
+          </Pressable>
+        </Section>
+      ) : null}
+      {gaps.length ? (
+        <Section title="Intelligence gaps" extra={gaps.length + ' declared'}>
+          {gaps.map((g, i) => (
+            <Text key={i} style={s.li}><Text style={{ color: C.high }}>› </Text>{decode(g.gap)}<Text style={{ color: C.muted }}>{' — ' + decode(g.why)}</Text></Text>
+          ))}
+        </Section>
+      ) : null}
+      {world && world.sources ? (
+        <Section title="Sources" extra={(world.generated || '').slice(0, 10)}>
+          <Text style={[MONO, { color: C.muted, fontSize: 10, lineHeight: 15 }]}>{'LIVE · ' + (world.sources.keyless_live || []).join(' · ')}</Text>
+          <Text style={[MONO, { color: C.muted, fontSize: 10, lineHeight: 15, marginTop: 4 }]}>{'PENDING KEY · ' + (world.sources.key_required || []).join(' · ')}</Text>
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
 const SIZES = [['S', 'S', 0.92], ['M', 'M', 1], ['L', 'L', 1.15]];
 const TEXT_KEY = 'geo-textsize';
 let TSCALE = 1;
@@ -1986,7 +2309,7 @@ export default function App() {
     try {
       const r = await fetch(`${FEED}?t=${Date.now()}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
+      const j = wireOf(await r.json());
       setData(j); setErr(null); lastPull.current = Date.now();
       AsyncStorage.setItem(FEED_CACHE_KEY, JSON.stringify(j)).catch(() => {});
     } catch (e) { setErr(String(e.message || e)); }
@@ -1994,7 +2317,7 @@ export default function App() {
   // open on the cached feed (no spinner, works offline), then pull the live one
   useEffect(() => {
     AsyncStorage.getItem(FEED_CACHE_KEY).then((v) => {
-      try { if (v) setData((cur) => cur || JSON.parse(v)); } catch (e) {}
+      try { if (v) setData((cur) => cur || wireOf(JSON.parse(v))); } catch (e) {}
     }).catch(() => {}).finally(load);
   }, [load]);
   // the desk refreshes the wire several times a day: re-pull when the app comes back to the foreground
@@ -2004,7 +2327,41 @@ export default function App() {
     });
     return () => sub.remove();
   }, [load]);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
+  // WORLD tab data: two more files beside data.json, pulled the first time the tab opens (and on
+  // pull-to-refresh while it is open). Each falls back to its last cached copy, like the main feed.
+  const [world, setWorld] = useState(null);
+  const [hist, setHist] = useState(null);
+  const [worldErr, setWorldErr] = useState(null);
+  const loadWorld = useCallback(async () => {
+    const pull = async (url, key, set) => {
+      try {
+        const r = await fetch(`${url}?t=${Date.now()}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        set(j); AsyncStorage.setItem(key, JSON.stringify(j)).catch(() => {});
+        return null;
+      } catch (e) {
+        try { const v = await AsyncStorage.getItem(key); if (v) set((cur) => cur || JSON.parse(v)); } catch (e2) {}
+        return String(e.message || e);
+      }
+    };
+    const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist)]);
+    setWorldErr(errs.find(Boolean) || null);
+  }, []);
+  useEffect(() => { if (tab === 'world' && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
+  // older stories: the 30-day archive, pulled only when the reader asks for it at the foot of the wire
+  const [older, setOlder] = useState('idle');   // idle | loading | done | error
+  const loadOlder = useCallback(async () => {
+    setOlder('loading');
+    try {
+      const r = await fetch(`${STORIES_URL}?t=${Date.now()}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const arr = await r.json();
+      setData((cur) => mergeWire(cur, arr));
+      setOlder('done');
+    } catch (e) { setOlder('error'); }
+  }, []);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'world') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
 
   if (acked === null) {
     return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
@@ -2041,9 +2398,10 @@ export default function App() {
                 goArticle={(i) => { setSearching(false); goArticle(i); }} goTab={(k) => { setSearching(false); setTab(k); scrollTop(); }} />
             ) : (
               <>
-                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />}
+                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
                 {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
+                {tab === 'world' && <WorldTab world={world} hist={hist} err={worldErr} onRetry={loadWorld} />}
               </>
             )}
             <LegalFooter />
