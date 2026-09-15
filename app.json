@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0A1119",
+    "backgroundColor": "#0C121E",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.manwhatopps.geoterminal",
@@ -17,7 +17,7 @@
     "android": {
       "package": "com.manwhatopps.geoterminal",
       "adaptiveIcon": {
-        "backgroundColor": "#0A1119",
+        "backgroundColor": "#0C121E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
