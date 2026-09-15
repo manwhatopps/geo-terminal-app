@@ -1688,25 +1688,85 @@ function CalibrationTrack({ track, forecasts }) {
 
 // ── THE BOARDS — what 4chan, Reddit and X are saying, in one place. Deliberately low bar: the app
 // labels it unverified and reports belief, not fact. Story-pinned theories link back to their article. ──
-function BoardsTab({ data, goArticle }) {
-  const [region, setRegion] = useState('ALL');
-  const pinned = (data.brief || []).flatMap((b, i) =>
-    (b.consp ? (Array.isArray(b.consp) ? b.consp : [b.consp]) : []).map((c) => ({ ...c, story: b, storyIdx: i, region: b.region })));
-  const loose = (data.chatter || []).map((c) => ({ ...c, region: c.region || inferRegion(c.claim + ' ' + (c.read || '')) }));
-  const all = pinned.concat(loose);
-  const items = all.filter((c) => region === 'ALL' || c.region === region);
-  const specs = (data.speculation || []).filter((sp) => region === 'ALL' || (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === region);
-  const theaters = new Set(all.map((c) => c.region).filter(Boolean));
+// ── BOARDS — a front page of claims, laid out exactly like NEWS: short headlines, a rule between days,
+// tap to open. (2026-09-15, user: "the board article headlines are way too long, I want it to look like
+// the news tab.") New cards carry a newspaper `head`; older ones are clipped to their first clause. ──
+function boardHead(c) {
+  if (c.head) return decode(c.head);
+  let t = decode(c.claim || '').replace(/^(posters on|users on|accounts on|anons on)\s+[^ ]+\s+(argue|claim|say|suggest|allege)\s+(that\s+)?/i, '').replace(/^that\s+/i, '').trim();
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  const brk = t.search(/\s+[-–—]\s+|:\s|;\s|,\s(?:and|but|which|while|because)\s/);
+  const first = brk > 24 && brk <= 90 ? t.slice(0, brk) : t;
+  if (first.length <= 80) return first.replace(/[.,;:]+$/, '');
+  const cut = first.lastIndexOf(' ', 76);
+  return first.slice(0, cut > 36 ? cut : 76).replace(/[.,;:]+$/, '') + '…';
+}
+function BoardArticle({ c, onBack, onStory }) {
+  const reads = Array.isArray(c.reads) && c.reads.length
+    ? c.reads.map((sec) => (/VERDICT/i.test(sec.h || '') && Array.isArray(c.verdicts) ? { ...sec, verdicts: c.verdicts } : sec))
+    : sectionize(c.read);
   return (
     <View style={s.stack}>
-      <View style={s.tabintro}>
-        <Text style={s.tabintroP}>
-          Everything the desk caught circulating today on 4chan, X and Reddit — nothing withheld for being
-          far-fetched. A record of what people believe, not of what is true. Nobody has checked any of it.
-        </Text>
+      <View style={s.article}>
+        <View style={s.artbar}><Pressable onPress={onBack} hitSlop={8}><Text style={s.backtxt}>‹ The boards</Text></Pressable></View>
+        <Text style={[s.ktag, { color: c.story ? C.accent : C.high, marginTop: 14 }]}>{(c.story ? 'ON A STORY · ' : 'CIRCULATING · ') + String(c.region || '').toUpperCase()}</Text>
+        <Text style={[s.artH, SERIF, T(30, 37)]}>{boardHead(c)}</Text>
+        <Text style={[s.artStand, T(17.5, 26)]}>{decode(c.claim)}</Text>
+        <View style={s.artrule} />
+        <Text style={[s.conspWarn]}>UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED</Text>
+        {fullStamp(c.ts) ? <Text style={[s.stime, MONO, { marginBottom: 12 }]}>{fullStamp(c.ts)}</Text> : null}
+        {c.spread ? (
+          <>
+            <Text style={[s.ctxlbl, MONO]}>WHERE IT'S SPREADING</Text>
+            <Text style={[s.ctxP, T(16, 25), { color: C.muted, marginBottom: 12 }]}>{decode(c.spread)}</Text>
+          </>
+        ) : null}
+        {reads.length ? (
+          <>
+            <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE DESK'S READ</Text>
+            <Sections items={reads} color={C.high} />
+          </>
+        ) : null}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 16 }}>
+          {c.story && onStory ? <WebLink label={'THE STORY: ' + articleParts(c.story).head.toUpperCase().slice(0, 40) + '… ›'} onPress={() => onStory(c.storyIdx)} /> : null}
+          {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
+        </View>
       </View>
+    </View>
+  );
+}
+function BoardsTab({ data, goArticle }) {
+  const [region, setRegion] = useState('ALL');
+  const [open, setOpen] = useState(null);
+  const pinned = (data.brief || []).flatMap((b, i) =>
+    (b.consp ? (Array.isArray(b.consp) ? b.consp : [b.consp]) : []).map((c) => ({ ...c, story: b, storyIdx: i, region: b.region, ts: c.ts || b.ts })));
+  const loose = (data.chatter || []).map((c) => ({ ...c, region: c.region || inferRegion(c.claim + ' ' + (c.read || '')) }));
+  const all = pinned.concat(loose).map((c, k) => ({ ...c, k }));
+  const items = all.filter((c) => region === 'ALL' || c.region === region)
+    .sort((a, b) => (Date.parse(b.ts || '') || 0) - (Date.parse(a.ts || '') || 0));
+  const specs = (data.speculation || []).filter((sp) => region === 'ALL' || (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === region);
+  const cur = open != null ? all.find((c) => c.k === open) : null;
+  if (cur) return <BoardArticle c={cur} onBack={() => setOpen(null)} onStory={goArticle} />;
+  let seen = null;
+  return (
+    <View style={s.stack}>
       <FilterDrop pairs={textRegionPairs(all, (c) => c.claim + ' ' + (c.read || ''))} active={region} onPick={setRegion} />
-      <Chatter items={items} onStory={goArticle} />
+      <Text style={[s.conspWarn, { paddingHorizontal: 4 }]}>{items.length + ' CIRCULATING · UNVERIFIED · WHAT PEOPLE BELIEVE, NOT WHAT IS CONFIRMED'}</Text>
+      {items.map((c) => {
+        const k = dayKey(c.ts);
+        const rule = c.ts && k !== seen ? <DayRule key={'d' + k} label={dayLabel(c.ts)} /> : null;
+        if (c.ts) seen = k;
+        return (
+          <View key={c.k}>
+            {rule}
+            <Pressable onPress={() => setOpen(c.k)} style={s.hrow}>
+              <Text style={[s.hrowH, T(24, 29)]}>{boardHead(c)}</Text>
+              <Text style={[s.hrowMeta, !c.story && { color: C.high }]}>{(c.story ? 'ON A STORY · ' : '') + String(c.region || 'CIRCULATING').toUpperCase()}</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+      {!items.length ? <Text style={s.foot}>Nothing circulating in this filter right now.</Text> : null}
       <Watchtower items={specs} />
     </View>
   );
@@ -1857,7 +1917,7 @@ function Dossiers({ items }) {
             ) : null)}
           </View>
           <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>INTEL SUMMARY</Text>
-          <Text style={s.storyP}>{decode(d.summary || '')}</Text>
+          <Sections items={sectionize(d.summary)} size={16} />
           {d.threat ? (
             <>
               <Text style={[s.ctxlbl, MONO, { marginTop: 8, color: tc }]}>{'THREAT ASSESSMENT · ' + String(d.threat.level || '').toUpperCase()}</Text>
