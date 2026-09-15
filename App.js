@@ -177,7 +177,47 @@ const BODY = { fontFamily: 'Charter' };
 function decode(s) {
   return String(s == null ? '' : s)
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    // 2026-09-15 house style (user): "1%", never "1 per cent" / "1 percent" — applied at render so
+    // every card already on the wire complies, not just the ones written after the prompt change
+    .replace(/(\d+(?:\.\d+)?)\s*(?:per\s?cent|percent)(?:age points?)?/gi, (m, n) => (/points?$/i.test(m) ? n + ' pts' : n + '%'));
+}
+// probabilities stated in prose ("X: about 80%; Y: under 1%") → rows the app can draw as bars
+function probsFrom(text) {
+  const t = decode(text);
+  const out = [];
+  const re = /([^.;:]*?)(?::\s*)?\b(under|below|about|roughly|around|over|above|at least|at most|near)?\s*(\d{1,3}(?:\.\d+)?)%/gi;
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    const p = Math.max(0, Math.min(100, parseFloat(m[3])));
+    let label = m[1].replace(/^[\s,;.]+|[\s,;.]+$/g, '').replace(/^(?:the )?desk(?:'s)? (?:estimate|call|read|puts?|gives?)( that)?\s*/i, '').replace(/^(?:and|that|is|are|at)\s+/i, '');
+    label = label.replace(/\s+(?:at|is|of|to|around|about|near)$/i, '');
+    if (!label || label.length < 4) continue;
+    if (label.length > 90) label = '…' + label.slice(-88);
+    const q = (m[2] || '').toLowerCase();
+    const shown = q === 'under' || q === 'below' || q === 'at most' ? '<' + m[3] + '%' : q === 'over' || q === 'above' || q === 'at least' ? '>' + m[3] + '%' : q ? '~' + m[3] + '%' : m[3] + '%';
+    out.push({ label, p, shown });
+  }
+  return out;
+}
+function ProbList({ items, color }) {
+  if (!items || !items.length) return null;
+  const c = color || C.accent;
+  return (
+    <View style={{ marginTop: 8, marginBottom: 10 }}>
+      {items.map((it, i) => (
+        <View key={i} style={{ marginTop: i ? 10 : 0 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+            <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 18, flex: 1, paddingRight: 10 }}>{it.label.charAt(0).toUpperCase() + it.label.slice(1)}</Text>
+            <Text style={[MONO, { color: c, fontSize: 22, fontWeight: '800', lineHeight: 24 }]}>{it.shown || it.p + '%'}</Text>
+          </View>
+          <View style={{ height: 7, backgroundColor: C.barBg, borderRadius: 4, marginTop: 5 }}>
+            <View style={{ width: Math.max(1.5, it.p) + '%', height: 7, backgroundColor: c, borderRadius: 4 }} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
 }
 // ── news region filter + chronological ordering ──
 const REGION_KEY = 'geo-region';
@@ -447,9 +487,14 @@ function Sections({ items, size, color }) {
       {items.map((sec, i) => {
         const lines = String(sec.p || '').split(/\s(?=\d\.\s)/).map((x) => x.trim()).filter(Boolean);
         const numbered = lines.length > 1 && lines.every((x) => /^\d\.\s/.test(x));
+        // a verdict or a call that names probabilities gets them drawn as bars above the prose
+        const probs = Array.isArray(sec.verdicts) && sec.verdicts.length
+          ? sec.verdicts.map((v) => ({ label: v.claim || v.label || '', p: Number(v.p) || 0, shown: (Number(v.p) || 0) + '%' }))
+          : (/VERDICT|HAPPENS NEXT|BASE RATE|PROBABILIT|THE CALL/i.test(sec.h || '') ? probsFrom(sec.p) : []);
         return (
           <View key={i} style={{ marginTop: i ? 18 : 4 }}>
             {sec.h ? <Text style={[MONO, { color: color || C.accent, fontSize: 11.5, letterSpacing: 1.6, fontWeight: '800', marginBottom: 6 }]}>{String(sec.h).toUpperCase()}</Text> : null}
+            <ProbList items={probs} color={color} />
             {numbered ? lines.map((ln, j) => (
               <Text key={j} style={[s.ctxP, T(fs, lh), j > 0 && { marginTop: 8 }]}><Text style={{ color: color || C.accent, fontWeight: '800' }}>{ln.slice(0, 2)}</Text>{decode(ln.slice(2))}</Text>
             )) : paragraphs(decode(sec.p)).map((para, j) => (
@@ -701,7 +746,7 @@ function ConspiracyPanel({ items, forceOpen }) {
                     </>
                   ) : null}
                   {Array.isArray(c.reads) && c.reads.length ? (
-                    <View style={{ marginTop: 10 }}><Sections items={c.reads} color={C.high} /></View>
+                    <View style={{ marginTop: 10 }}><Sections items={c.reads.map((sec) => (/VERDICT/i.test(sec.h || '') && Array.isArray(c.verdicts) ? { ...sec, verdicts: c.verdicts } : sec))} color={C.high} /></View>
                   ) : c.read ? (
                     <>
                       <Text style={[s.ctxlbl, MONO, { marginTop: 10, color: C.accent }]}>THE DESK'S READ</Text>
