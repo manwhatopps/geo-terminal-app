@@ -603,21 +603,25 @@ function chatterScore(item, c) {
   for (const w of a) if (b.has(w)) n++;
   return n;
 }
-function chatterFor(item, chatter) {
-  const own = item.consp
+// 2026-09-16 (user: "it gives me the conspiracy for the article but then keeps going on about conspiracy
+// for other articles that aren't relevant"). The 09-14 fix kept a "same theater + two shared words" tier,
+// and two shared words is far too weak a test on stories that already share a region, a country name and a
+// leader's name - so every Iran story carried every Iran claim. Under an ARTICLE the door now shows ONLY
+// what the desk pinned to THIS card. Everything else circulating has its own tab: BOARDS.
+// A watchtower observation belongs under a story only if it is ABOUT that story: same theater AND at
+// least three real words in common (2026-09-16 - region alone put a whole theater's sightings on one card).
+function storySpec(speculation, item) {
+  return (speculation || []).filter((sp) => {
+    const r = sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''));
+    if (r !== item.region) return false;
+    return chatterScore(item, { claim: sp.obs || '', spread: sp.src || '', read: sp.read || '' }) >= 3;
+  });
+}
+
+function chatterFor(item) {
+  return item.consp
     ? (Array.isArray(item.consp) ? item.consp : [item.consp]).map((c) => ({ ...c, tier: 'own' }))
     : [];
-  const rest = (chatter || []).map((c) => ({
-    ...c, r: c.region || inferRegion(c.claim + ' ' + (c.spread || '') + ' ' + (c.read || '')),
-  }));
-  // Score ORDERS but never filters. Nothing circulating gets withheld from the reader —
-  // the most story-relevant just surfaces first.
-  const by = (x, y) => chatterScore(item, y) - chatterScore(item, x);
-  // 2026-09-14 (user: an Iran story was showing 9/11 and 'random things'): under an ARTICLE only what is
-  // about that article - its own pinned claims, plus same-theater claims that share at least two real words
-  // with it. The BOARDS tab is where everything circulating lives; this door is story-specific.
-  const theater = rest.filter((c) => c.r === item.region && chatterScore(item, c) >= 2).sort(by).map((c) => ({ ...c, tier: 'theater' }));
-  return own.concat(theater);
 }
 
 function ConspiracyPanel({ items, forceOpen }) {
@@ -715,7 +719,7 @@ function Movement({ n, title, sub, children }) {
   );
 }
 
-function AnalystPanel({ item, calls, specMatches }) {
+function AnalystPanel({ item, specMatches }) {
   const hist = item.hist || {};
   const dec = item.dec || {};
   const call = hist.call || {};
@@ -820,18 +824,6 @@ function AnalystPanel({ item, calls, specMatches }) {
       <View key="k"><Text style={lbl}>WHAT WOULD CHANGE THIS READ</Text>
         <Text style={body}>{decode(dec.kill)}</Text></View>
     ) : null,
-    (calls || []).length ? (
-      <View key="t"><Text style={lbl}>THE DESK'S OTHER CALLS IN THIS THEATER</Text>
-        {calls.map((f, i) => (
-          <View key={i} style={{ flexDirection: 'row', gap: 12, alignItems: 'baseline', marginTop: 8 }}>
-            <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.predq}>{decode(f.q)}</Text>
-              <Text style={s.predmetaTxt}>{'by ' + f.by + (f.prev != null && f.prev !== f.p ? ' · was ' + f.prev + '%' : '')}</Text>
-            </View>
-          </View>
-        ))}</View>
-    ) : null,
   ].filter(Boolean);
 
   if (!past.length && !present.length && !future.length) {
@@ -855,7 +847,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
   const [pane, setPane] = useState(null);           // 'analyst' | 'consp' | null
-  const conspItems = chatterFor(item, chatter);
+  const conspItems = chatterFor(item);
   // NYT's article furniture: back to the section, save it, send it to someone.
   const share = () => {
     const url = (item.srcs || []).find((sc) => sc.u);
@@ -892,7 +884,9 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
           <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO]}>◉ GEOPOLITICAL ANALYST</Text>
-            <Text style={s.artbtnS}>{'the desk\'s read' + ((calls || []).length ? ' + ' + calls.length + (calls.length === 1 ? ' call' : ' calls') : '')}</Text>
+            <Text style={s.artbtnS}>{item.hist && item.hist.call && item.hist.call.p != null
+              ? "the desk's call on this story: " + Math.round(Number(item.hist.call.p)) + '%'
+              : "the desk's read on this story"}</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO, { color: C.high }]}>☍ THE CONSPIRACY</Text>
@@ -900,7 +894,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
           </Pressable>
         </View>
         {pane === 'analyst' ? (
-          <View style={{ marginBottom: 18 }}><AnalystPanel item={item} calls={calls} specMatches={specMatches} /></View>
+          <View style={{ marginBottom: 18 }}><AnalystPanel item={item} specMatches={specMatches} /></View>
         ) : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
         {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
@@ -1763,7 +1757,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open}
         onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
         calls={regionForecasts(data, item.region)}
-        specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
+        specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
         isSaved={!!saved[id]} onSave={() => toggleSave(id)}
         tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
@@ -2610,7 +2604,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
     <ArticlePage
       item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open} onBoard={null}
       calls={regionForecasts(data, item.region)}
-      specMatches={(data.speculation || []).filter((sp) => (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === item.region)}
+      specMatches={storySpec(data.speculation, item)}
       chatter={data.chatter}
       isSaved={!!saved[id]} onSave={() => toggleSave(id)}
       tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
