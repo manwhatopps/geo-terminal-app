@@ -308,15 +308,24 @@ const TABS = [
 // record that logic for the bot's brain." The history/base-rate reasoning now lives in each article as THE DESK'S
 // CALL (`item.hist`, written by the analyst runs); the reference data sits under STRATEGY as WorldSections.
 
-function Section({ title, extra, children }) {
+// 2026-09-16 (user, on CALLS: "make all of these headlines and dropdowns instead of displaying
+// everything, it takes too long to scroll through all of this"). `fold` turns a section into a
+// headline that opens on tap. Opt-in, so NEWS and HOME keep reading top to bottom the way a front
+// page should; the reference tabs become an index you choose from.
+function Section({ title, extra, children, fold, open: openInit }) {
+  const [open, setOpen] = useState(!fold || !!openInit);
+  const head = (
+    <View style={s.h2row}>
+      <Text style={s.h2}>{title}</Text>
+      <View style={s.h2rule} />
+      {extra ? <Text style={[s.h2extra, MONO]}>{extra}</Text> : null}
+      {fold ? <Text style={{ color: C.accent, fontSize: 19, marginLeft: 10, marginTop: -2 }}>{open ? '\u2212' : '+'}</Text> : null}
+    </View>
+  );
   return (
     <View style={s.section}>
-      <View style={s.h2row}>
-        <Text style={s.h2}>{title}</Text>
-        <View style={s.h2rule} />
-        {extra ? <Text style={[s.h2extra, MONO]}>{extra}</Text> : null}
-      </View>
-      {children}
+      {fold ? <Pressable onPress={() => setOpen((v) => !v)}>{head}</Pressable> : head}
+      {open ? children : null}
     </View>
   );
 }
@@ -1289,7 +1298,7 @@ function QuizSection({ quiz }) {
   const onAnswered = (right) => { setAnswered((a) => a + 1); if (right) setScore((v) => v + 1); };
   const doneAll = answered === quiz.length;
   return (
-    <Section title="Test yourself" extra={quiz.length + ' questions'}>
+    <Section title="Test yourself" extra={quiz.length + ' questions'} fold>
       <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
         <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + "TAKE TODAY'S QUIZ"}</Text>
       </Pressable>
@@ -1527,7 +1536,7 @@ function LiveWatchlist({ items }) {
   const [open, setOpen] = useState(null);
   if (!items || !items.length) return null;
   return (
-    <Section title="The money" extra={items.length + ' live prints'}>
+    <Section title="The money" extra={items.length + ' live prints'} fold open>
       {items.map((x, i) => {
         const why = whyOf(x.k);
         const isOpen = open === i;
@@ -1891,7 +1900,7 @@ function CalibrationTrack({ track, forecasts }) {
     ? track.items
     : (forecasts || []).slice(0, 14).map(() => ({ pending: true }));
   return (
-    <Section title="Our track record" extra={scored ? track.resolved + ' scored' : 'scoring opens Oct'}>
+    <Section title="Our track record" extra={scored ? track.resolved + ' scored' : 'scoring opens Oct'} fold>
       <View style={s.cal}>
         <View style={s.calbig}>
           <Text style={[s.calnum, MONO]}>{scored && track.brier != null ? track.brier.toFixed(3) : '—'}</Text>
@@ -2027,11 +2036,14 @@ function Chairs({ cards, goArticle }) {
   const [open, setOpen] = useState(null);
   const [region, setRegion] = useState('ALL');
   const all = chairsFrom(cards);
-  const rows = all.filter((r) => region === 'ALL' || r.region === region);
+  const [showAll, setShowAll] = useState(false);
+  const hit = all.filter((r) => region === 'ALL' || r.region === region);
+  // most-modelled first; the long tail is one tap away rather than 99 rows of scroll
+  const rows = showAll ? hit : hit.slice(0, 12);
   if (!all.length) return null;
   const pairs = textRegionPairs(all, (r) => r.region + ' ' + r.name);
   return (
-    <Section title="The chairs" extra={all.length + ' principals today'}>
+    <Section title="The chairs" extra={all.length + ' principals today'} fold>
       <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 10 }]}>
         Before the desk writes a number it sits in each principal's chair and reasons as they would:
         what they need to survive politically, what they fear, what is closed to them at home, and the
@@ -2068,6 +2080,11 @@ function Chairs({ cards, goArticle }) {
           </View>
         );
       })}
+      {hit.length > rows.length || showAll ? (
+        <Pressable onPress={() => setShowAll((v) => !v)} style={{ paddingVertical: 13, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
+          <Text style={[s.readmore, MONO]}>{showAll ? 'SHOW THE MOST-MODELLED ONLY ‹' : 'ALL ' + hit.length + ' PRINCIPALS ›'}</Text>
+        </Pressable>
+      ) : null}
     </Section>
   );
 }
@@ -2080,7 +2097,7 @@ function DeskCalls({ cards, goArticle }) {
     .sort((a, b) => Math.abs(Number(b.h.call.p) - 50) - Math.abs(Number(a.h.call.p) - 50));
   if (!items.length) return null;
   return (
-    <Section title="The desk's calls" extra={items.length + ' live'}>
+    <Section title="The desk's calls" extra={items.length + ' live'} fold>
       <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 6 }]}>
         Each one is falsifiable, dated, and scored when it resolves. Open a call for the case for and
         against it, the precedents behind it, and what would change the desk's mind.
@@ -2136,6 +2153,7 @@ function DeskCalls({ cards, goArticle }) {
 // after the legacy home screen went. It belongs at the top of CALLS: a forecast without its clock is
 // an opinion, and step 6 of the policy protocol asks whose constraint binds FIRST. ──
 function Calendar({ clocks }) {
+  const [open, setOpen] = useState(null);
   if (!Array.isArray(clocks) || !clocks.length) return null;
   const today = new Date().toISOString().slice(0, 10);
   const rows = clocks.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
@@ -2145,11 +2163,12 @@ function Calendar({ clocks }) {
     return n < 0 ? 'passed' : n === 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' days';
   };
   return (
-    <Section title="The calendar" extra={rows.length + ' dated'}>
+    <Section title="The calendar" extra={rows.length + ' dated'} fold>
       {rows.map((c, i) => {
         const soon = String(c.date || '') <= today;
         return (
-          <View key={i} style={[s.clockRow, i === 0 && { borderTopWidth: 0 }]}>
+          <Pressable key={i} onPress={() => c.why && setOpen(open === i ? null : i)}
+            style={[s.clockRow, i === 0 && { borderTopWidth: 0 }]}>
             <View style={{ width: 86 }}>
               <Text style={[MONO, { color: soon ? C.high : C.accent, fontSize: 12, fontWeight: '800' }]}>
                 {String(c.date || '').slice(5)}
@@ -2160,9 +2179,10 @@ function Calendar({ clocks }) {
               <Text style={[MONO, { color: C.text, fontSize: 11.5, letterSpacing: 1.1, fontWeight: '700' }]}>
                 {String(c.label || '').toUpperCase()}
               </Text>
-              {c.why ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 19, marginTop: 5 }}>{decode(c.why)}</Text> : null}
+              {c.why && open === i ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 19, marginTop: 6 }}>{decode(c.why)}</Text> : null}
             </View>
-          </View>
+            {c.why ? <Text style={{ color: C.accent, fontSize: 17, marginLeft: 8 }}>{open === i ? '\u2212' : '\u203a'}</Text> : null}
+          </Pressable>
         );
       })}
     </Section>
@@ -2174,6 +2194,7 @@ function Calendar({ clocks }) {
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
 function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const [region, setRegion] = useState('ALL');
+  const [book, setBook] = useState(null);   // the tracked book opens one row at a time
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
@@ -2182,12 +2203,12 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
       <Chairs cards={data.brief} goArticle={goArticle} />
       <Calendar clocks={data.clocks} />
       <DeskCalls cards={data.brief} goArticle={goArticle} />
-      <Section title="The tracked book" extra={String(fcs.length)}>
+      <Section title="The tracked book" extra={String(fcs.length)} fold>
         <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
         {fcs.map((f, i) => {
           const d = f.prev != null ? f.p - f.prev : null;
           return (
-            <View key={i} style={s.pred}>
+            <Pressable key={i} onPress={() => setBook(book === i ? null : i)} style={s.pred}>
               <View style={s.predtop}>
                 <Text style={s.predq}>{decode(f.q)}</Text>
                 <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
@@ -2197,14 +2218,15 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
                 {d ? <Text style={[s.chip, MONO, { color: d > 0 ? C.high : C.calm }]}>{(d > 0 ? '+' : '') + d}</Text> : null}
                 <Text style={s.predmetaTxt}>by {f.by}</Text>
               </View>
-              {f.note ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
-            </View>
+              {f.note && book === i ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
+              {f.note && book !== i ? <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1, marginTop: 6 }]}>+ WHY</Text> : null}
+            </Pressable>
           );
         })}
       </Section>
       <CalibrationTrack track={data.track} forecasts={data.forecasts} />
       {hyps.length ? (
-        <Section title="Hidden-strategy lab" extra={hyps.length + ' live'}>
+        <Section title="Hidden-strategy lab" extra={hyps.length + ' live'} fold>
           {hyps.map((h, i) => (
             <View key={i} style={s.hyp}>
               <Text style={[s.hypP, MONO]}>{h.p}%</Text>
@@ -2274,7 +2296,7 @@ function Scenarios({ items }) {
   const [sel, setSel] = useState(null);
   if (!items || !items.length) return null;
   return (
-    <Section title="Scenario explorer" extra={items.length + ' branches'}>
+    <Section title="Scenario explorer" extra={items.length + ' branches'} fold>
       {items.map((sc, i) => (
         <View key={i} style={s.storycard}>
           <Pressable onPress={() => setSel(sel === i ? null : i)}>
@@ -2313,7 +2335,7 @@ function Watchlist({ tripwires }) {
   const armed = tw.armed || [], fired = tw.fired || [];
   if (!armed.length && !fired.length) return null;
   return (
-    <Section title="Watchlist" extra={armed.length + ' armed'}>
+    <Section title="Watchlist" extra={armed.length + ' armed'} fold>
       {fired.map((f, i) => (
         <View key={'f' + i} style={{ flexDirection: 'row', paddingVertical: 5 }}>
           <Text style={[MONO, { color: C.crit, fontSize: 9, width: 52, letterSpacing: 1 }]}>FIRED</Text>
@@ -2359,7 +2381,7 @@ function DataTab({ data, easy, world, hist }) {
       <Dossiers items={data.dossiers} />
       <WorldSections world={world} hist={hist} />
             {data.actors && data.actors.length ? (
-        <Section title="The players" extra={actors.length + ' tracked'}>
+        <Section title="The players" extra={actors.length + ' tracked'} fold>
           <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
           {actors.map((a, i) => (
             <View key={i} style={s.actor}>
@@ -2659,7 +2681,7 @@ function WorldSections({ world, hist }) {
   return (
     <>
       {sitKeys.length ? (
-        <Section title="Situation rooms" extra={sitKeys.length + ' tracked'}>
+        <Section title="Situation rooms" extra={sitKeys.length + ' tracked'} fold>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
             {sitKeys.map((k) => (
               <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
@@ -2671,7 +2693,7 @@ function WorldSections({ world, hist }) {
         </Section>
       ) : null}
       {isos.length ? (
-        <Section title="Country intelligence" extra="primary sources">
+        <Section title="Country intelligence" extra="primary sources" fold>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
             {isos.map((k) => (
               <Pressable key={k} onPress={() => setIso(iso === k ? null : k)} style={[s.rchip, iso === k && s.rchipOn]}>
@@ -2683,7 +2705,7 @@ function WorldSections({ world, hist }) {
         </Section>
       ) : null}
       {quakes.length ? (
-        <Section title="Seismic, last 7 days" extra="USGS · M5.5+">
+        <Section title="Seismic, last 7 days" extra="USGS · M5.5+" fold>
           {quakes.slice(0, 5).map((q, i) => (
             <Pressable key={i} onPress={() => q.url && Linking.openURL(q.url)} style={{ flexDirection: 'row', paddingVertical: 4 }}>
               <Text style={[MONO, { color: q.mag >= 7 ? C.crit : q.mag >= 6 ? C.high : C.elev, fontSize: 12, width: 46, fontWeight: '700' }]}>{'M' + (q.mag != null ? q.mag.toFixed(1) : '?')}</Text>
