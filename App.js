@@ -1867,6 +1867,9 @@ function MoreFromTheDesk({ data, easy, deep, goArticle, read, saved }) {
   const rows = [
     ['strategy', 'Strategy desk', 'players, dossiers, scenarios, the red board, this week\'s deep dive'],
     ['watch', 'What to watch', (data.watch || []).length + ' items'],
+    // 2026-09-16: the desk writes a teaching note every daily run (prompt.txt `lesson`: the history or
+    // framework behind one of today's stories, from the canon) and nothing in the app had ever shown it.
+    ['lesson', "Today's lesson", 'the framework behind one of today\'s stories'],
     ['quiz', 'Quiz', 'test the read'],
     ['analyst', 'Ask the analyst', 'chat with the desk on Telegram'],
   ];
@@ -1880,6 +1883,11 @@ function MoreFromTheDesk({ data, easy, deep, goArticle, read, saved }) {
           </Pressable>
           {open === k && k === 'strategy' ? <View style={{ padding: 12 }}><StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} compact /></View> : null}
           {open === k && k === 'watch' ? (data.watch || []).map((w, i) => <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>) : null}
+          {open === k && k === 'lesson' && data.lesson ? (
+            <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
+              <Text style={[s.p, { marginVertical: 0 }]}>{decode(data.lesson)}</Text>
+            </View>
+          ) : null}
           {open === k && k === 'quiz' ? <View style={{ padding: 12 }}><QuizSection quiz={data.quiz} /></View> : null}
         </View>
       ))}
