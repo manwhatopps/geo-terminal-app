@@ -1290,18 +1290,22 @@ function QuizQuestion({ q, index, onAnswered }) {
   );
 }
 
-function QuizSection({ quiz }) {
-  const [open, setOpen] = useState(false);
+function QuizSection({ quiz, bare }) {
+  // `bare` drops the card chrome and the extra tap: used under today's lesson on HOME, where the
+  // reader has already said "take the quiz" and should not have to say it twice (2026-09-16).
+  const [open, setOpen] = useState(!!bare);
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(0);
   if (!quiz || !quiz.length) return null;
   const onAnswered = (right) => { setAnswered((a) => a + 1); if (right) setScore((v) => v + 1); };
   const doneAll = answered === quiz.length;
-  return (
-    <Section title="Test yourself" extra={quiz.length + ' questions'} fold>
-      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
-        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + "TAKE TODAY'S QUIZ"}</Text>
-      </Pressable>
+  const body = (
+    <>
+      {!bare ? (
+        <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
+          <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + "TAKE TODAY'S QUIZ"}</Text>
+        </Pressable>
+      ) : null}
       {open ? (
         <>
           {quiz.map((q, i) => <QuizQuestion key={i} q={q} index={i} onAnswered={onAnswered} />)}
@@ -1313,8 +1317,9 @@ function QuizSection({ quiz }) {
           ) : null}
         </>
       ) : null}
-    </Section>
+    </>
   );
+  return bare ? body : <Section title="Test yourself" extra={quiz.length + ' questions'} fold>{body}</Section>;
 }
 
 // ── DECODE — a claim, interrogated: announced vs binding, and who gains vs who pays ──
@@ -1694,6 +1699,8 @@ function Watchtower({ items }) {
 // the state of the board, the story of the day, the desk's sharpest call, what it is watching,
 // what the boards are claiming, and the lesson underneath it all.
 function FrontPage({ data, goTab, goArticle, read }) {
+  const [lessonOpen, setLessonOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
   const cards = data.brief || [];
   const lead = cards[0];
   const rc = riskColor[(data.risk || {}).color] || C.elev;
@@ -1729,12 +1736,30 @@ function FrontPage({ data, goTab, goArticle, read }) {
       </View>
 
 
-      {/* today's lesson, the thing the desk wants you to keep */}
+      {/* 2026-09-16 (user: "when I click the link to read the education article and take the quiz it
+          takes me to the calls menu and just gives me a huge droplist. Clicking that link should just
+          expand the article and give an option to take a short quiz. That's it."). It used to hand the
+          reader to another tab and make them find the quiz. Now the lesson opens where it is, and the
+          quiz opens under it. Nobody leaves the front page. */}
       {data.lesson ? (
         <View style={s.fpLesson}>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>TODAY'S LESSON</Text>
-          <Text style={[s.p, { fontSize: 15, lineHeight: 24, marginTop: 7 }]} numberOfLines={6}>{decode(data.lesson)}</Text>
-          <Text style={[s.readmore, MONO, { marginTop: 9 }]} onPress={() => goTab('calls')}>TEST YOURSELF ON TODAY'S READ ›</Text>
+          <Text style={[s.p, { fontSize: 15, lineHeight: 24, marginTop: 7 }]} numberOfLines={lessonOpen ? undefined : 6}>
+            {decode(data.lesson)}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 18, marginTop: 11, alignItems: 'center' }}>
+            <Pressable onPress={() => setLessonOpen((v) => !v)} hitSlop={6}>
+              <Text style={[s.readmore, MONO]}>{lessonOpen ? 'SHOW LESS ‹' : 'READ THE FULL LESSON ›'}</Text>
+            </Pressable>
+            {(data.quiz || []).length ? (
+              <Pressable onPress={() => setQuizOpen((v) => !v)} hitSlop={6}>
+                <Text style={[s.readmore, MONO, { color: quizOpen ? C.muted : C.accent }]}>
+                  {quizOpen ? 'HIDE THE QUIZ' : 'TAKE THE QUIZ · ' + (data.quiz || []).length + ' Q'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {quizOpen ? <View style={{ marginTop: 14 }}><QuizSection quiz={data.quiz} bare /></View> : null}
         </View>
       ) : null}
 
