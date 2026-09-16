@@ -2492,6 +2492,17 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
             );
           })}
         </Section>
+        {/* the weekly deep dive lost its only surface when the HOME banner came off (the editor's
+            words: don't start the page with this boring article). Ten written sections belong behind a
+            door, not on the front page - so it lives here. */}
+        {data.lecture && (data.lecture.sections || []).length ? (
+          <Section title="This week's deep dive" extra={data.lecture.date || ''} fold>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+              <Text style={[s.idxH, SERIF, { fontSize: 21, lineHeight: 27 }]}>{decode(data.lecture.title)}</Text>
+              <View style={{ marginTop: 12 }}><Sections items={data.lecture.sections} /></View>
+            </View>
+          </Section>
+        ) : null}
         <CalibrationTrack track={data.track} forecasts={data.forecasts} />
         {hyps.length ? (
           <Section title="Hidden-strategy lab" extra={hyps.length + ' live'} fold>
