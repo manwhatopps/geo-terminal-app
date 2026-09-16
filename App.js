@@ -2008,6 +2008,40 @@ const DUE_TAIL = /[,;]?\s*\b(?:by|before|on or before|no later than|not later th
 const fmtDue = (d) => (d ? 'BY ' + String(+d.slice(8, 10)) + ' ' + (MON3[+d.slice(5, 7) - 1] || '') : 'UNDATED');
 const inDays = (n) => (n == null ? '' : n < 0 ? 'overdue' : n === 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' days');
 
+// ── WHAT THE CALL IS ABOUT. ─────────────────────────────────────────────────────────────────────
+// 2026-09-16 (user: "categorize these more broadly for the filter. I like the chronological aspect
+// but if people want to filter it should be large filters at first. Like money markets, countries,
+// financial, war if that makes sense, but use that as only filters"). Nine theatres was a filing
+// system, not a filter. Six subjects a reader already thinks in, and the theatre still prints on
+// every row so the country is never lost. Matched on the CALL itself first and only then on its
+// story: the headline drags a call into the wrong bucket (an ICC examination filed under WAR because
+// the story around it was a war story).
+const DOMAINS = [
+  ['COURTS', /\b(court|indict|tribunal|prosecut|ruling|charges|arrest|icc\b|lawsuit|sentenc|convict|subpoena|contempt|warrant|grand jury|judge|extradit)/i],
+  ['WAR', /\b(strike|struck|missile|drone|shelling|offensive|troops?|forces|combat|casualt|killed|wounded|ceasefire|truce|air ?defen[cs]e|interceptor|airstrike|bomb|artillery|front ?line|incursion|naval|warship|mobilis|mobiliz|war\b|fighting|militar|attack|seiz|blockad|raid|sabotage|assassinat|hostage|cyber|liberat|captur|recaptur|f-\d\d|arms (sale|transfer|package|deal)|weapons?|munitions?|fighter jets?|submarine|nuclear (test|weapon|warhead))/i],
+  ['MONEY', /\b(price|prices|barrel|brent|yield|oil|crude|gas\b|lng|export|import|tariff|sanction|designat|embargo|bank|currency|rouble|ruble|yuan|dollar|debt|bond|market|trade|inflation|budget|fund|imf\b|world bank|revenue|shipment|cargo|loading|refiner|pipeline|freight|insurance|transit|tanker|strait|chokepoint|barrels|gdp|investment|asset freeze|fomc|federal reserve|interest rate|target range|central bank|ecb|rate (cut|hike|rise|decision)|commercial|contract|licen[cs]e|concession|joint venture)/i],
+  ['CRISES', /\b(flood|earthquake|collapse|death toll|dead|missing|famine|drought|displace|refugee|evacuat|cholera|outbreak|disease|aid convoy|humanitarian|wildfire|storm|cyclone|landslide)/i],
+  ['POLITICS', /\b(elect|vote|votes|voted|ballot|parliament|duma|riksdag|congress|senate|house\b|seats|coalition|cabinet|minister|impeach|resign|president|prime minister|referendum|poll|party|legislat|\bbill\b|confidence motion|appoint|swear|inaugurat|no-confidence)/i],
+  ['DIPLOMACY', /\b(talks|summit|meet|meeting|agreement|treaty|accord|\bdeal\b|recogni[sz]|ambassador|normali[sz]|mediat|delegation|joint statement|communiqu|visit|readout|envoy|negotiat|memorandum|protocol|resolution|declaration|council|conclusions|endorse|border|boundary|demarcat|survey|framework)/i],
+];
+const DOMAIN_SUB = { WAR: 'fighting, weapons and who is arming whom', MONEY: 'prices, trade, sanctions and the money behind them',
+  POLITICS: 'elections, parliaments and who holds the chair', DIPLOMACY: 'talks, treaties, recognition and the rooms they happen in',
+  COURTS: 'indictments, rulings and where the law bites', CRISES: 'disasters, tolls and the people moved by them' };
+function domainOf(ev, extra) {
+  for (const [name, re] of DOMAINS) if (re.test(ev)) return name;
+  for (const [name, re] of DOMAINS) if (re.test(extra)) return name;
+  return 'DIPLOMACY';   // statecraft is the residual: a call that is none of the above is still a move
+}
+
+// 2026-09-16 (user: "let's get rid of the number percentage next to the headline"). He is right about
+// what this tab is: "calls is pretty much [the] strategy tab - we are using our logic to try and
+// predict outcomes based on current geopolitical events". A percentage in 22pt beside a sentence
+// makes it a market line; the desk's judgement reads in words, and the number is still there in the
+// story behind it, in the tracked book and on the share card, where it sits with its reasoning (L14).
+const ODDS = [[85, 'NEAR CERTAIN'], [65, 'LIKELY'], [55, 'LEANS THIS WAY'], [45, 'A COIN FLIP'],
+  [35, 'LEANS AGAINST'], [15, 'UNLIKELY'], [0, 'NEARLY RULED OUT']];
+const oddsWord = (p) => (ODDS.find(([n]) => p >= n) || ODDS[ODDS.length - 1])[1];
+
 function callsFrom(cards, clocks) {
   const out = [];
   (cards || []).forEach((c, idx) => {
@@ -2016,6 +2050,7 @@ function callsFrom(cards, clocks) {
     const due = dueOf(c, call);
     out.push({ idx, head: c.head, region: c.region || 'Global',
       theatre: THEATRE_OF[c.region] || c.region || 'Global',
+      domain: domainOf(String(call.event), String(c.head || '') + ' ' + String(c.tag || '')),
       p: Math.max(0, Math.min(100, Math.round(Number(call.p) || 0))),
       event: String(call.event).replace(DUE_TAIL, '').trim(), due,
       days: due ? Math.round((Date.parse(due + 'T12:00:00Z') - Date.now()) / 86400000) : null,
@@ -2048,30 +2083,29 @@ const BUCKETS = [{ lab: 'THE NEXT TWO WEEKS', sub: 'resolve inside a fortnight',
 // One call, written out. The number never appears without the position that produced it (L14), which
 // is why FOR and BUT are printed here rather than hidden behind the row.
 function CallRow({ x, goArticle, lede }) {
-  const big = lede ? 33 : 22, hs = lede ? 23 : 17;
+  const hs = lede ? 25 : 18.5;
   return (
     <View style={{ borderTopWidth: lede ? 0 : 1, borderTopColor: C.line, paddingHorizontal: 16, paddingTop: lede ? 0 : 15, paddingBottom: lede ? 0 : 17 }}>
-      <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700' }]}>
-        {[fmtDue(x.due), inDays(x.days).toUpperCase(), String(x.theatre || '').toUpperCase()].filter(Boolean).join('  \u00b7  ')}
+      <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700' }]}>
+        <Text style={{ color: C.accent }}>{oddsWord(x.p)}</Text>
+        <Text style={{ color: C.muted }}>
+          {'  \u00b7  ' + [fmtDue(x.due), inDays(x.days).toUpperCase(), String(x.theatre || '').toUpperCase()].filter(Boolean).join('  \u00b7  ')}
+        </Text>
       </Text>
-      <Pressable onPress={() => goArticle && goArticle(x.idx)} style={{ flexDirection: 'row', gap: 14, marginTop: 8, alignItems: 'flex-start' }}>
-        <View style={{ width: lede ? 80 : 58 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: big, fontWeight: '800', lineHeight: big + 3 }]}>{x.p + '%'}</Text>
-          <ProbBar p={x.p} />
-        </View>
-        <Text style={[SERIF, { color: C.text, fontSize: hs, lineHeight: Math.round(hs * 1.34), flex: 1, fontWeight: '600' }]}>{decode(x.event)}</Text>
+      <Pressable onPress={() => goArticle && goArticle(x.idx)}>
+        <Text style={[SERIF, { color: C.text, fontSize: hs, lineHeight: Math.round(hs * 1.34), fontWeight: '600', marginTop: 7 }]}>{decode(x.event)}</Text>
       </Pressable>
       {x.pro ? (
-        <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 19.5, marginTop: 11 }}>
+        <Text style={[s.p, { fontSize: 15, lineHeight: 22.5, marginTop: 11, marginBottom: 0 }]}>
           <Text style={[MONO, { color: C.calm, fontSize: 10, letterSpacing: 1.1, fontWeight: '800' }]}>{'FOR  '}</Text>{decode(String(x.pro))}
         </Text>
       ) : null}
       {x.con ? (
-        <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 19.5, marginTop: 6 }}>
+        <Text style={[s.p, { fontSize: 15, lineHeight: 22.5, marginTop: 7, marginBottom: 0 }]}>
           <Text style={[MONO, { color: C.crit, fontSize: 10, letterSpacing: 1.1, fontWeight: '800' }]}>{'BUT  '}</Text>{decode(String(x.con))}
         </Text>
       ) : null}
-      {lede && x.update ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 10 }}>{decode(x.update)}</Text> : null}
+      {lede && x.update ? <Text style={[s.p, { color: C.muted, fontSize: 15, lineHeight: 22.5, marginTop: 11, marginBottom: 0 }]}>{decode(x.update)}</Text> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 11 }}>
         {x.conf ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>{String(x.conf).toUpperCase() + ' CONFIDENCE'}</Text> : null}
         {x.clock ? (
@@ -2177,21 +2211,21 @@ function Rooms({ chairs, goArticle }) {
 function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const [region, setRegion] = useState('ALL');
   const [book, setBook] = useState(null);   // the tracked book opens one row at a time
-  const [theatre, setTheatre] = useState('ALL');
+  const [subject, setSubject] = useState('ALL');
   const [allCalls, setAllCalls] = useState(false);
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
   const calls = callsFrom(data.brief, data.clocks);
   const counts = new Map();
-  calls.forEach((x) => counts.set(x.theatre, (counts.get(x.theatre) || 0) + 1));
-  const theatres = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  const hit = theatre === 'ALL' ? calls : calls.filter((x) => x.theatre === theatre);
+  calls.forEach((x) => counts.set(x.domain, (counts.get(x.domain) || 0) + 1));
+  const subjects = DOMAINS.map(([n]) => [n, counts.get(n) || 0]).filter(([, n]) => n > 0);
+  const hit = subject === 'ALL' ? calls : calls.filter((x) => x.domain === subject);
   // the lede is the soonest call the desk is actually confident about, not merely the soonest
   const lede = hit.find((x) => x.days != null && x.days <= 45 && Math.abs(x.p - 50) >= 20) || hit[0];
   const rest = hit.filter((x) => x !== lede);
-  const shown = allCalls || theatre !== 'ALL' ? rest : rest.slice(0, 14);
-  const chairs = chairsFrom(data.brief).filter((r) => theatre === 'ALL' || (THEATRE_OF[r.region] || r.region) === theatre);
+  const shown = allCalls || subject !== 'ALL' ? rest : rest.slice(0, 14);
+  const chairs = chairsFrom(data.brief);
   const groups = [];
   BUCKETS.forEach((b, bi) => {
     const lo = bi ? BUCKETS[bi - 1].max : -1e9;
@@ -2203,18 +2237,18 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
       <CallsLede x={lede} goArticle={goArticle} />
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.rfilter, { paddingHorizontal: 12, paddingBottom: 12 }]}>
-          {[['ALL', calls.length]].concat(theatres).map(([nm, n]) => (
-            <Pressable key={nm} onPress={() => { setTheatre(nm); setAllCalls(false); }} style={[s.rchip, theatre === nm && s.rchipOn]}>
-              <Text style={[s.rchipTxt, MONO, theatre === nm && { color: C.text, fontWeight: '700' }]}>
-                {(nm === 'ALL' ? 'EVERYWHERE' : decode(nm)) + '  ' + n}
+          {[['ALL', calls.length]].concat(subjects).map(([nm, n]) => (
+            <Pressable key={nm} onPress={() => { setSubject(nm); setAllCalls(false); }} style={[s.rchip, subject === nm && s.rchipOn]}>
+              <Text style={[s.rchipTxt, MONO, subject === nm && { color: C.text, fontWeight: '700' }]}>
+                {(nm === 'ALL' ? 'EVERYTHING' : nm) + '  ' + n}
               </Text>
             </Pressable>
           ))}
         </ScrollView>
-        {theatre !== 'ALL' ? (
-          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.1, paddingHorizontal: 16, paddingBottom: 14 }]}>
-            {[hit.length + ' CALLS', chairs.length + ' PRINCIPALS',
-              hit[0] && hit[0].due ? 'NEXT RESOLVES ' + fmtDue(hit[0].due).replace('BY ', '') : null].filter(Boolean).join('  \u00b7  ')}
+        {subject !== 'ALL' ? (
+          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 16, paddingBottom: 14 }}>
+            {(DOMAIN_SUB[subject] || '') + ' \u2014 ' + hit.length + (hit.length === 1 ? ' call' : ' calls')
+              + (hit[0] && hit[0].due ? ', the next resolving ' + fmtDue(hit[0].due).replace('BY ', '').toLowerCase() : '')}
           </Text>
         ) : null}
         {groups.map((g, i) => (
@@ -2226,7 +2260,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
             {g.rows.map((x, j) => <CallRow key={j} x={x} goArticle={goArticle} />)}
           </View>
         ))}
-        {!allCalls && theatre === 'ALL' && rest.length > shown.length ? (
+        {!allCalls && subject === 'ALL' && rest.length > shown.length ? (
           <Pressable onPress={() => setAllCalls(true)} style={{ paddingVertical: 15, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
             <Text style={[s.readmore, MONO]}>{'THE REMAINING ' + (rest.length - shown.length) + ' CALLS \u203a'}</Text>
           </Pressable>
