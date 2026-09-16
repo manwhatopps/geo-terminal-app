@@ -1645,6 +1645,72 @@ function FrontPage({ data, goTab, goArticle, read }) {
     <View style={s.stack}>
       {/* 2026-09-16 (user: "get rid of the high alert banner ... I don't want that banner in the
           middle of the screen"). The board's state now lives in the masthead dot and in the wire itself. */}
+      {/* 2026-09-16 (user: "move this to the top of the homepage instead of the bottom, flip the
+          order of the home page"). The four doors open HOME: the reader chooses a room first and
+          reads second. Below them the page runs in the reverse of what it was - the lesson and the
+          boards first, the wire last - because the wire has its own tab and this is the front page. */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
+        {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
+        {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
+        {tile('data', '▦', 'DATA', (data.actors || []).length, 'players tracked')}
+      </View>
+
+
+      {/* today's lesson, the thing the desk wants you to keep */}
+      {data.lesson ? (
+        <View style={s.fpLesson}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>TODAY'S LESSON</Text>
+          <Text style={[s.p, { fontSize: 15, lineHeight: 24, marginTop: 7 }]} numberOfLines={6}>{decode(data.lesson)}</Text>
+          <Text style={[s.readmore, MONO, { marginTop: 9 }]} onPress={() => goTab('calls')}>TEST YOURSELF ON TODAY'S READ ›</Text>
+        </View>
+      ) : null}
+
+      {/* what the boards are claiming, and that the desk grades them */}
+      {boards.length ? (
+        <Pressable onPress={() => goTab('boards')} style={s.fpBoards}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text style={[MONO, { color: C.high, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '800' }]}>FROM THE BOARDS</Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginLeft: 'auto' }]}>GRADED, NOT REPEATED</Text>
+          </View>
+          {boards.map((c, i) => (
+            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 8 }} numberOfLines={2}>
+              <Text style={{ color: C.high }}>› </Text>{decode(c.consp.head)}
+            </Text>
+          ))}
+          <Text style={[s.readmore, MONO, { marginTop: 11 }]}>OPEN THE BOARDS ›</Text>
+        </Pressable>
+      ) : null}
+
+      {/* what to watch — the desk's own tripwires for the days ahead */}
+      {(data.watch || []).length ? (
+        <View>
+          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 2, marginBottom: 7 }]}>WHAT THE DESK IS WATCHING</Text>
+          {(data.watch || []).slice(0, 4).map((w, i) => (
+            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
+              <Text style={{ color: C.accent }}>› </Text>{decode(w)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      {/* the desk's sharpest call, straight off the front page */}
+      {called ? (
+        <Pressable onPress={() => goArticle(called.i)} style={[s.fpCall, { borderColor: C.accent }]}>
+          <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>
+            {"THE DESK'S SHARPEST CALL" + (called.call.horizon ? ' · ' + String(called.call.horizon).toUpperCase() : '')}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 7 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 28, fontWeight: '800', width: 76, lineHeight: 31 }]}>
+              {Math.round(Number(called.call.p)) + '%'}
+            </Text>
+            <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, flex: 1, fontWeight: '600' }} numberOfLines={4}>{decode(called.call.event)}</Text>
+          </View>
+          <View style={{ marginTop: 8 }}><ProbBar p={Math.max(0, Math.min(100, Number(called.call.p) || 0))} /></View>
+          <Text style={[s.readmore, MONO, { marginTop: 10 }]}>SEE THE CASE FOR AND AGAINST ›</Text>
+        </Pressable>
+      ) : null}
+
       {/* the story of the day */}
       {lead ? (
         <View>
@@ -1677,77 +1743,6 @@ function FrontPage({ data, goTab, goArticle, read }) {
           <Pressable onPress={() => goTab('news')} style={{ paddingTop: 4 }}>
             <Text style={[s.readmore, MONO]}>{'ALL ' + cards.length + ' STORIES ON THE WIRE ›'}</Text>
           </Pressable>
-        </View>
-      ) : null}
-
-      {/* the desk's sharpest call, straight off the front page */}
-      {called ? (
-        <Pressable onPress={() => goArticle(called.i)} style={[s.fpCall, { borderColor: C.accent }]}>
-          <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>
-            {"THE DESK'S SHARPEST CALL" + (called.call.horizon ? ' · ' + String(called.call.horizon).toUpperCase() : '')}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 7 }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 28, fontWeight: '800', width: 76, lineHeight: 31 }]}>
-              {Math.round(Number(called.call.p)) + '%'}
-            </Text>
-            <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, flex: 1, fontWeight: '600' }} numberOfLines={4}>{decode(called.call.event)}</Text>
-          </View>
-          <View style={{ marginTop: 8 }}><ProbBar p={Math.max(0, Math.min(100, Number(called.call.p) || 0))} /></View>
-          <Text style={[s.readmore, MONO, { marginTop: 10 }]}>SEE THE CASE FOR AND AGAINST ›</Text>
-        </Pressable>
-      ) : null}
-
-      {/* what to watch — the desk's own tripwires for the days ahead */}
-      {(data.watch || []).length ? (
-        <View>
-          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 2, marginBottom: 7 }]}>WHAT THE DESK IS WATCHING</Text>
-          {(data.watch || []).slice(0, 4).map((w, i) => (
-            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
-              <Text style={{ color: C.accent }}>› </Text>{decode(w)}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-
-      {/* what the boards are claiming, and that the desk grades them */}
-      {boards.length ? (
-        <Pressable onPress={() => goTab('boards')} style={s.fpBoards}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-            <Text style={[MONO, { color: C.high, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '800' }]}>FROM THE BOARDS</Text>
-            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginLeft: 'auto' }]}>GRADED, NOT REPEATED</Text>
-          </View>
-          {boards.map((c, i) => (
-            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 8 }} numberOfLines={2}>
-              <Text style={{ color: C.high }}>› </Text>{decode(c.consp.head)}
-            </Text>
-          ))}
-          <Text style={[s.readmore, MONO, { marginTop: 11 }]}>OPEN THE BOARDS ›</Text>
-        </Pressable>
-      ) : null}
-
-      {/* the three rooms */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-        {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
-        {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
-        {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
-        {tile('data', '▦', 'DATA', (data.actors || []).length, 'players tracked')}
-      </View>
-
-      {/* this week's deep dive - it was buried in the old strategy scroll */}
-      {data.lecture && data.lecture.title ? (
-        <Pressable onPress={() => goTab('calls')} style={s.fpBoards}>
-          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>{"THIS WEEK'S DEEP DIVE · " + (data.lecture.date || '')}</Text>
-          <Text style={[s.idxH, SERIF, { fontSize: 19, lineHeight: 25, marginTop: 8 }]} numberOfLines={3}>{decode(data.lecture.title)}</Text>
-          {data.lecture.sub ? <Text style={s.leadDek} numberOfLines={2}>{decode(data.lecture.sub)}</Text> : null}
-        </Pressable>
-      ) : null}
-
-      {/* today's lesson, the thing the desk wants you to keep */}
-      {data.lesson ? (
-        <View style={s.fpLesson}>
-          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>TODAY'S LESSON</Text>
-          <Text style={[s.p, { fontSize: 15, lineHeight: 24, marginTop: 7 }]} numberOfLines={6}>{decode(data.lesson)}</Text>
-          <Text style={[s.readmore, MONO, { marginTop: 9 }]} onPress={() => goTab('calls')}>TEST YOURSELF ON TODAY'S READ ›</Text>
         </View>
       ) : null}
 
