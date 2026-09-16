@@ -277,6 +277,8 @@ function fullStamp(ts) {
 // each article under GEOPOLITICAL ANALYST). 'news' is the headline list + search the user asked for.
 // 2026-09-13 23:05: HOME removed at the user's call ('get rid of this mess') - the app opens on the headlines.
 const TABS = [
+  // 2026-09-16 (user): HOME is where the app opens - a front page, not the wire index.
+  { key: 'home', label: 'HOME', g: '⌂' },
   { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'boards', label: 'BOARDS', g: '☍' },
   { key: 'strategy', label: 'STRATEGY', g: '♟' },
@@ -572,80 +574,6 @@ function IndexRow({ item, simpleText, easy, deep, dense, onOpen, isRead, isSaved
 }
 
 // ── THE CONTEXT PANEL — the decode that used to live inline on every card. ──
-function ContextPanel({ item, deep, specMatches, calls, forceOpen }) {
-  const [open, setOpen] = useState(!!forceOpen);
-  useEffect(() => { if (forceOpen) setOpen(true); }, [deep, forceOpen]);
-  if (!item.context && !(calls || []).length) return null;
-  return (
-    <>
-      {!forceOpen ? (
-        <Pressable style={[s.ctxbtn, s.ctxbtnWide]} onPress={() => setOpen((o) => !o)}>
-          <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + (deep ? 'THE DECODE' : 'WHY THIS IS HAPPENING')}</Text>
-        </Pressable>
-      ) : null}
-      {open && (
-        <View style={s.ctxpanel}>
-          {item.dec && item.dec.verdict ? (
-            <View style={[s.verdict, { borderColor: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c }]}>
-              <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.6 }]}>THE CLAIM IS</Text>
-              <Text style={[MONO, { color: (VERDICT_META[item.dec.verdict] || VERDICT_META.partly).c, fontSize: 18, fontWeight: '800', letterSpacing: 2, marginTop: 2 }]}>
-                {(VERDICT_META[item.dec.verdict] || VERDICT_META.partly).label.toUpperCase()}
-              </Text>
-            </View>
-          ) : null}
-          {!deep && item.context && !(Array.isArray(item.read) && item.read.length) ? (
-            <>
-              <Text style={[s.ctxlbl, MONO]}>THE CONTEXT, THE HISTORY, AND WHAT WOULD CHANGE IT</Text>
-              <Sections items={sectionize(item.context)} />
-            </>
-          ) : null}
-          {item.dec && item.dec.angles && item.dec.angles.length ? (
-            <>
-              <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHO GAINS, WHO PAYS</Text>
-              {item.dec.angles.map((a, i) => (
-                <Text key={i} style={[s.li, T(16, 24)]}>
-                  <Text style={{ color: C.accent }}>› </Text>
-                  <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
-                  {' — ' + decode(a.effect)}
-                </Text>
-              ))}
-            </>
-          ) : null}
-          {item.dec && item.dec.kill ? (
-            <>
-              <Text style={[s.ctxlbl, MONO, { marginTop: 8 }]}>WHAT WOULD CHANGE THIS READ</Text>
-              <Text style={[s.ctxP, T(17, 28)]}>{decode(item.dec.kill)}</Text>
-            </>
-          ) : null}
-          {(calls || []).length ? (
-            <>
-              <Text style={[s.ctxlbl, MONO, { marginTop: 14, color: C.accent }]}>THE DESK'S CALLS ON THIS THEATER</Text>
-              {calls.map((f, i) => (
-                <View key={'c' + i} style={{ flexDirection: 'row', gap: 12, alignItems: 'baseline', marginTop: 10 }}>
-                  <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.predq}>{decode(f.q)}</Text>
-                    <Text style={s.predmetaTxt}>{'by ' + f.by + (f.prev != null && f.prev !== f.p ? ' · was ' + f.prev + '%' : '')}</Text>
-                    {f.note ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
-                  </View>
-                </View>
-              ))}
-            </>
-          ) : null}
-          {(specMatches || []).map((sp, i) => (
-            <View key={'sp' + i} style={{ marginTop: 8 }}>
-              <Text style={[s.ctxlbl, MONO, { color: (GRADE_META[sp.grade] || GRADE_META.unverified).c }]}>
-                {'WATCHTOWER · ' + (GRADE_META[sp.grade] || GRADE_META.unverified).label}
-              </Text>
-              <Text style={s.ctxP}>{decode(sp.obs) + ' — ' + decode(sp.src || '')}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </>
-  );
-}
-
 // ── THE CONSPIRACY — what the boards are saying about THIS story. ─────────────
 // Sits beside the decode as the article's second door. The feed already monitors
 // belief: the news pass fetches /pol/'s catalog and searches X/reddit, and writes
@@ -765,6 +693,161 @@ function ConspiracyPanel({ items, forceOpen }) {
 }
 
 // ── ARTICLE — the page you land on after tapping a headline. One story, nothing else. ──
+// ── THE GEOPOLITICAL ANALYST — one panel, read in time order. ─────────────────
+// 2026-09-16 (user: "it's good with all the information but way too much all over the place -
+// condense and organize, maybe go in chronological order"). Before this, the button opened two
+// stacked panels (HistPanel + ContextPanel) that between them threw nine unranked blocks at the
+// reader: the call, for/against, the long call, the contrarian, how history moved it, precedents,
+// a verdict, who-gains, the watchtower. Same material, now on a spine the reader already owns —
+// PAST, PRESENT, FUTURE — with the precedents sorted oldest first inside the past.
+function Movement({ n, title, sub, children }) {
+  if (!children || (Array.isArray(children) && !children.filter(Boolean).length)) return null;
+  return (
+    <View style={{ marginTop: 20 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 9 }}>
+        <Text style={[MONO, { color: C.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1 }]}>{n}</Text>
+        <Text style={[MONO, { color: C.text, fontSize: 11.5, fontWeight: '800', letterSpacing: 1.7 }]}>{title}</Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: C.line }} />
+      </View>
+      {sub ? <Text style={{ color: C.muted, fontSize: 11.5, marginTop: 3, marginBottom: 2 }}>{sub}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
+function AnalystPanel({ item, calls, specMatches }) {
+  const hist = item.hist || {};
+  const dec = item.dec || {};
+  const call = hist.call || {};
+  const p = Math.max(0, Math.min(100, Number(call.p) || 0));
+  const br = hist.base_rate;
+  const brLine = br ? (br.low_n
+    ? `Comparable cases: ${br.n} — too few to put a percentage on`
+    : `Comparable cases: ${br.n} · ` + Object.entries(br.dist || {}).sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => k.replace(/_/g, ' ') + ' ' + Math.round(v) + '%').join(' · ')) : null;
+  // oldest first: the desk's memory reads forward into the present, not backward from it
+  const pres = (hist.precedents || []).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const sub = { color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 };
+  const lbl = [s.ctxlbl, MONO, { marginTop: 12 }];
+  const body = { color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 4 };
+
+  const past = [
+    pres.length ? (
+      <View key="pre">
+        {pres.map((x, i) => (
+          <View key={i} style={{ flexDirection: 'row', paddingVertical: 6, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 11, width: 66, fontWeight: '700' }]}>{String(x.date || '').slice(0, 7)}</Text>
+            <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, flex: 1 }}>{decode(x.line || '')}</Text>
+            {x.use != null ? (
+              <Text style={[MONO, { color: x.use >= 60 ? C.calm : x.use >= 40 ? C.elev : C.muted, fontSize: 9.5, marginLeft: 8, marginTop: 3 }]}>
+                {'WEIGHT ' + x.use}
+              </Text>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    ) : null,
+    brLine ? <Text key="br" style={[MONO, { color: C.muted, fontSize: 11, marginTop: 8 }]}>{brLine}</Text> : null,
+  ].filter(Boolean);
+
+  const present = [
+    dec.verdict ? (
+      <View key="v" style={[s.verdict, { borderColor: (VERDICT_META[dec.verdict] || VERDICT_META.partly).c, marginTop: 8 }]}>
+        <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.6 }]}>THE CLAIM IS</Text>
+        <Text style={[MONO, { color: (VERDICT_META[dec.verdict] || VERDICT_META.partly).c, fontSize: 18, fontWeight: '800', letterSpacing: 2, marginTop: 2 }]}>
+          {(VERDICT_META[dec.verdict] || VERDICT_META.partly).label.toUpperCase()}
+        </Text>
+      </View>
+    ) : null,
+    call.update ? (
+      <View key="u"><Text style={lbl}>HOW THE HISTORY MOVED THIS</Text>
+        <Text style={body}>{decode(call.update)}</Text></View>
+    ) : null,
+    (dec.angles || []).length ? (
+      <View key="a"><Text style={lbl}>WHO GAINS, WHO PAYS</Text>
+        {dec.angles.map((a, i) => (
+          <Text key={i} style={body}><Text style={{ color: C.accent }}>› </Text>
+            <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>{' — ' + decode(a.effect)}</Text>
+        ))}</View>
+    ) : null,
+    (specMatches || []).length ? (
+      <View key="w">{specMatches.map((sp, i) => (
+        <View key={i}>
+          <Text style={[s.ctxlbl, MONO, { marginTop: 12, color: (GRADE_META[sp.grade] || GRADE_META.unverified).c }]}>
+            {'WATCHTOWER · ' + (GRADE_META[sp.grade] || GRADE_META.unverified).label}
+          </Text>
+          <Text style={body}>{decode(sp.obs) + ' — ' + decode(sp.src || '')}</Text>
+        </View>
+      ))}</View>
+    ) : null,
+  ].filter(Boolean);
+
+  const future = [
+    call.event ? (
+      <View key="c" style={{ marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 30, fontWeight: '800', width: 84, lineHeight: 34 }]}>{p + '%'}</Text>
+          <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 21, flex: 1, fontWeight: '600' }}>{decode(call.event)}</Text>
+        </View>
+        <View style={{ marginTop: 6 }}><ProbBar p={p} /></View>
+        {call.horizon || call.conf ? (
+          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, marginTop: 4 }]}>
+            {[call.horizon ? String(call.horizon).toUpperCase() : null, call.conf ? 'CONFIDENCE ' + String(call.conf).toUpperCase() : null].filter(Boolean).join(' · ')}
+          </Text>
+        ) : null}
+        <ForAgainst pro={hist.for} con={hist.against} />
+      </View>
+    ) : null,
+    hist.long && hist.long.event ? (
+      <View key="l" style={{ marginTop: 14 }}>
+        <Text style={[s.ctxlbl, MONO]}>{'FURTHER OUT' + (hist.long.horizon ? ' · ' + String(hist.long.horizon).toUpperCase() : '')}</Text>
+        <ProbList items={[{ label: decode(hist.long.event), p: Math.max(0, Math.min(100, Number(hist.long.p) || 0)) }]} />
+      </View>
+    ) : null,
+    hist.contrarian && hist.contrarian.claim ? (
+      <View key="x" style={{ marginTop: 10, borderLeftWidth: 3, borderLeftColor: C.high, paddingLeft: 9 }}>
+        <Text style={[s.ctxlbl, MONO, { color: C.high }]}>
+          {'THE OTHER SIDE OF THE TRADE' + (hist.contrarian.who ? ' · ' + hist.contrarian.who : '')}
+        </Text>
+        <ProbList color={C.high} items={[{ label: decode(hist.contrarian.claim), p: Math.max(0, Math.min(100, Number(hist.contrarian.p_desk) || 0)), shown: (Number(hist.contrarian.p_desk) || 0) + '%' }]} />
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: -4 }]}>
+          {"THE DESK'S NUMBER ON THEIR CLAIM" + (hist.contrarian.their_record && hist.contrarian.their_record !== 'no scored record' ? ' · THEIR RECORD: ' + decode(hist.contrarian.their_record) : '')}
+        </Text>
+        {hist.contrarian.why ? <Text style={body}>{decode(hist.contrarian.why)}</Text> : null}
+      </View>
+    ) : null,
+    dec.kill ? (
+      <View key="k"><Text style={lbl}>WHAT WOULD CHANGE THIS READ</Text>
+        <Text style={body}>{decode(dec.kill)}</Text></View>
+    ) : null,
+    (calls || []).length ? (
+      <View key="t"><Text style={lbl}>THE DESK'S OTHER CALLS IN THIS THEATER</Text>
+        {calls.map((f, i) => (
+          <View key={i} style={{ flexDirection: 'row', gap: 12, alignItems: 'baseline', marginTop: 8 }}>
+            <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.predq}>{decode(f.q)}</Text>
+              <Text style={s.predmetaTxt}>{'by ' + f.by + (f.prev != null && f.prev !== f.p ? ' · was ' + f.prev + '%' : '')}</Text>
+            </View>
+          </View>
+        ))}</View>
+    ) : null,
+  ].filter(Boolean);
+
+  if (!past.length && !present.length && !future.length) {
+    return <Text style={[s.foot, { marginBottom: 18 }]}>The desk has not filed its analysis on this story yet — the next run will carry the read, the call, and the history behind it.</Text>;
+  }
+  return (
+    <View style={[s.storycard, { borderColor: C.accent, marginTop: 10, paddingTop: 16 }]}>
+      <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>THE GEOPOLITICAL ANALYST</Text>
+      <Text style={sub}>The desk's own reading of this story, in the order it happened: the record behind it, where it stands now, and what it thinks comes next.</Text>
+      <Movement n="I" title="WHAT CAME BEFORE" sub="the precedents the desk is reading from, oldest first">{past}</Movement>
+      <Movement n="II" title="WHERE IT STANDS NOW" sub="what the history does to today's picture">{present}</Movement>
+      <Movement n="III" title="WHAT HAPPENS NEXT" sub="the desk's call, and the case against it">{future}</Movement>
+    </View>
+  );
+}
+
 function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
                        tsize, onSize, theme, onTheme, level, onLevel }) {
@@ -816,10 +899,8 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
           </Pressable>
         </View>
-        {pane === 'analyst' ? <View style={{ marginBottom: 18 }}><HistPanel hist={item.hist} /></View> : null}
-        {pane === 'analyst' ? <View style={{ marginBottom: 18 }}><ContextPanel item={item} deep={false} specMatches={specMatches} calls={calls} forceOpen /></View> : null}
-        {pane === 'analyst' && !item.hist && !item.context && !(calls || []).length ? (
-          <Text style={[s.foot, { marginBottom: 18 }]}>The desk has not filed its analysis on this story yet — the next run will carry the read, the call, and the history behind it.</Text>
+        {pane === 'analyst' ? (
+          <View style={{ marginBottom: 18 }}><AnalystPanel item={item} calls={calls} specMatches={specMatches} /></View>
         ) : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
         {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
@@ -1521,6 +1602,128 @@ function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
 // Two states share the tab: the INDEX (scan) and an ARTICLE (read). Order stays
 // strictly newest-first inside day sections, so the chronology is never violated;
 // hierarchy comes from position, not from re-ranking.
+// ── THE FRONT PAGE — where the app opens. ────────────────────────────────────
+// 2026-09-16 (user: "we should have a home page instead of just opening straight to articles").
+// A front page is not a fourth list: it is the answer to "what do I need to know right now", and
+// every block on it is a door into the tab that owns the detail. Order is the newsroom's own —
+// the state of the board, the story of the day, the desk's sharpest call, what it is watching,
+// what the boards are claiming, and the lesson underneath it all.
+function FrontPage({ data, goTab, goArticle, read }) {
+  const cards = data.brief || [];
+  const lead = cards[0];
+  const rc = riskColor[(data.risk || {}).color] || C.elev;
+  // the sharpest call on the board: the one furthest from a coin flip, so the reader sees conviction
+  const called = cards
+    .map((c, i) => ({ c, i, call: (c.hist || {}).call }))
+    .filter((x) => x.call && x.call.event && x.call.p != null)
+    .sort((a, b) => Math.abs(Number(b.call.p) - 50) - Math.abs(Number(a.call.p) - 50))[0];
+  const boards = cards.filter((c) => c.consp && c.consp.head).slice(0, 3);
+  const tile = (key, glyph, label, n, sub) => (
+    <Pressable key={key} onPress={() => goTab(key)} style={s.fpTile}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <Text style={{ color: C.accent, fontSize: 17 }}>{glyph}</Text>
+        <Text style={[MONO, { color: C.accent, fontSize: 19, fontWeight: '800' }]}>{n}</Text>
+      </View>
+      <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.2, marginTop: 7 }]}>{label + ' ›'}</Text>
+      <Text style={{ color: C.muted, fontSize: 10.5, marginTop: 2 }}>{sub}</Text>
+    </Pressable>
+  );
+  return (
+    <View style={s.stack}>
+      {/* the state of the board — the one line the desk leads with */}
+      {data.risk ? (
+        <View style={[s.fpRisk, { borderColor: rc }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc }} />
+            <Text style={[MONO, { color: rc, fontSize: 12, fontWeight: '800', letterSpacing: 2 }]}>
+              {String(data.risk.state || '').toUpperCase()}
+            </Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1, marginLeft: 'auto' }]}>{data.updated || ''}</Text>
+          </View>
+          {data.risk.line ? <Text style={{ color: C.text, fontSize: 14, lineHeight: 21, marginTop: 9 }} numberOfLines={5}>{decode(data.risk.line)}</Text> : null}
+        </View>
+      ) : null}
+
+      {/* the story of the day */}
+      {lead ? (
+        <View>
+          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 2, marginBottom: 9 }]}>THE STORY OF THE DAY</Text>
+          <Pressable onPress={() => goArticle(0)}>
+            <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(lead)}</Text>
+            <Text style={[s.leadH, SERIF, { marginTop: 7 }, read && read[storyId(lead)] && s.readH]} numberOfLines={4}>{articleParts(lead).head}</Text>
+            <Text style={s.leadDek} numberOfLines={3}>{decode(lead.h || '')}</Text>
+            <Text style={[s.readmore, MONO, { marginTop: 11 }]}>READ THE FULL BRIEF ›</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* the desk's sharpest call, straight off the front page */}
+      {called ? (
+        <Pressable onPress={() => goArticle(called.i)} style={[s.fpCall, { borderColor: C.accent }]}>
+          <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>
+            {"THE DESK'S SHARPEST CALL" + (called.call.horizon ? ' · ' + String(called.call.horizon).toUpperCase() : '')}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 7 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 28, fontWeight: '800', width: 76, lineHeight: 31 }]}>
+              {Math.round(Number(called.call.p)) + '%'}
+            </Text>
+            <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, flex: 1, fontWeight: '600' }} numberOfLines={4}>{decode(called.call.event)}</Text>
+          </View>
+          <View style={{ marginTop: 8 }}><ProbBar p={Math.max(0, Math.min(100, Number(called.call.p) || 0))} /></View>
+          <Text style={[s.readmore, MONO, { marginTop: 10 }]}>SEE THE CASE FOR AND AGAINST ›</Text>
+        </Pressable>
+      ) : null}
+
+      {/* what to watch — the desk's own tripwires for the days ahead */}
+      {(data.watch || []).length ? (
+        <View>
+          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 2, marginBottom: 7 }]}>WHAT THE DESK IS WATCHING</Text>
+          {(data.watch || []).slice(0, 4).map((w, i) => (
+            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
+              <Text style={{ color: C.accent }}>› </Text>{decode(w)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      {/* what the boards are claiming, and that the desk grades them */}
+      {boards.length ? (
+        <Pressable onPress={() => goTab('boards')} style={s.fpBoards}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text style={[MONO, { color: C.high, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '800' }]}>FROM THE BOARDS</Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginLeft: 'auto' }]}>GRADED, NOT REPEATED</Text>
+          </View>
+          {boards.map((c, i) => (
+            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 8 }} numberOfLines={2}>
+              <Text style={{ color: C.high }}>› </Text>{decode(c.consp.head)}
+            </Text>
+          ))}
+          <Text style={[s.readmore, MONO, { marginTop: 11 }]}>OPEN THE BOARDS ›</Text>
+        </Pressable>
+      ) : null}
+
+      {/* the three rooms */}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
+        {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
+        {tile('strategy', '♟', 'STRATEGY', (data.actors || []).length, 'players tracked')}
+        {tile('strategy', '◷', 'THE RECORD', data.track && data.track.resolved != null ? data.track.resolved : '—', 'forecasts scored')}
+      </View>
+
+      {/* today's lesson, the thing the desk wants you to keep */}
+      {data.lesson ? (
+        <View style={s.fpLesson}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>TODAY'S LESSON</Text>
+          <Text style={[s.p, { fontSize: 15, lineHeight: 24, marginTop: 7 }]} numberOfLines={6}>{decode(data.lesson)}</Text>
+          <Text style={[s.readmore, MONO, { marginTop: 9 }]} onPress={() => goTab('strategy')}>MORE FROM THE DESK ›</Text>
+        </View>
+      ) : null}
+
+      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
+    </View>
+  );
+}
+
 function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
                    older, loadOlder }) {
@@ -2439,62 +2642,6 @@ function ForAgainst({ pro, con, caveat }) {
 }
 
 // ── THE DESK'S CALL — the analyst's own prediction on a story, with the history that set the prior. ──
-function HistPanel({ hist }) {
-  if (!hist || (!hist.call && !(hist.for || []).length)) return null;
-  const call = hist.call || {};
-  const p = Math.max(0, Math.min(100, Number(call.p) || 0));
-  const br = hist.base_rate;
-  const brLine = br ? (br.low_n
-    ? `Comparable cases: ${br.n} — too few for a percentage`
-    : `Comparable cases: ${br.n} · ` + Object.entries(br.dist || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => k.replace(/_/g, ' ') + ' ' + Math.round(v) + '%').join(' · ')) : null;
-  return (
-    <View style={[s.storycard, { borderColor: C.accent, marginTop: 10 }]}>
-      <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{"THE DESK'S CALL" + (call.horizon ? ' · ' + String(call.horizon).toUpperCase() : '') + (call.conf ? ' · CONFIDENCE ' + String(call.conf).toUpperCase() : '')}</Text>
-      {call.event ? (
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 30, fontWeight: '800', width: 84, lineHeight: 34 }]}>{p + '%'}</Text>
-          <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 21, flex: 1, fontWeight: '600' }}>{decode(call.event)}</Text>
-        </View>
-      ) : null}
-      {call.event ? <View style={{ marginTop: 6 }}><ProbBar p={p} /></View> : null}
-      <ForAgainst pro={hist.for} con={hist.against} />
-      {hist.long && hist.long.event ? (
-        <View style={{ marginTop: 12 }}>
-          <Text style={[s.ctxlbl, MONO]}>{'THE LONG CALL' + (hist.long.horizon ? ' · ' + String(hist.long.horizon).toUpperCase() : '') + (hist.long.conf ? ' · CONFIDENCE ' + String(hist.long.conf).toUpperCase() : '')}</Text>
-          <ProbList items={[{ label: decode(hist.long.event), p: Math.max(0, Math.min(100, Number(hist.long.p) || 0)) }]} />
-        </View>
-      ) : null}
-      {hist.contrarian && hist.contrarian.claim ? (
-        <View style={{ marginTop: 6, borderLeftWidth: 3, borderLeftColor: C.high, paddingLeft: 9 }}>
-          <Text style={[s.ctxlbl, MONO, { color: C.high }]}>{'THE CONTRARIAN CALL · ' + String(hist.contrarian.frame || '').toUpperCase() + (hist.contrarian.who ? ' · ' + hist.contrarian.who : '')}</Text>
-          <ProbList items={[{ label: decode(hist.contrarian.claim), p: Math.max(0, Math.min(100, Number(hist.contrarian.p_desk) || 0)), shown: (Number(hist.contrarian.p_desk) || 0) + '%' }]} color={C.high} />
-          <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: -4 }]}>{"THE DESK'S NUMBER ON THEIR CLAIM" + (hist.contrarian.their_record && hist.contrarian.their_record !== 'no scored record' ? ' · THEIR RECORD: ' + decode(hist.contrarian.their_record) : '')}</Text>
-          {hist.contrarian.why ? <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 6 }}>{decode(hist.contrarian.why)}</Text> : null}
-        </View>
-      ) : null}
-      {call.update || brLine ? (
-        <View style={{ marginTop: 10 }}>
-          <Text style={[s.ctxlbl, MONO]}>HOW HISTORY MOVED THIS</Text>
-          {brLine ? <Text style={[MONO, { color: C.muted, fontSize: 11, marginTop: 2 }]}>{brLine}</Text> : null}
-          {call.update ? <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 4 }}>{decode(call.update)}</Text> : null}
-        </View>
-      ) : null}
-      {(hist.precedents || []).length ? (
-        <View style={{ marginTop: 10 }}>
-          <Text style={[s.ctxlbl, MONO]}>PRECEDENTS THE DESK WEIGHED</Text>
-          {hist.precedents.map((x, i) => (
-            <View key={i} style={{ flexDirection: 'row', paddingVertical: 5, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
-              <Text style={[MONO, { color: C.accent, fontSize: 11, width: 70 }]}>{String(x.date || '').slice(0, 7)}</Text>
-              <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, flex: 1 }}>{decode(x.line || '')}</Text>
-              {x.use != null ? <Text style={[MONO, { color: x.use >= 60 ? C.calm : x.use >= 40 ? C.elev : C.muted, fontSize: 10, marginLeft: 8, marginTop: 3 }]}>{'USE ' + x.use}</Text> : null}
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 // ── WORLD SECTIONS — reference data under STRATEGY: situation rooms, country numbers, physical events. ──
 function WorldSections({ world, hist }) {
   const [room, setRoom] = useState(null);
@@ -2616,7 +2763,7 @@ function LegalFooter() {
 export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [tab, setTab] = useState('news');
+  const [tab, setTab] = useState('home');   // the front page, not the wire
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
@@ -2744,6 +2891,29 @@ export default function App() {
           <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
         </View>
+        <View style={s.navTop}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
+          <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
+            {TABS.map((t, i) => {
+              const on = tab === t.key && !searching;
+              return (
+                <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); setArticle(null); scrollTop(); }}
+                  style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
+                  <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
+                  <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={{ width: 14 }} />
+          <Pressable hitSlop={12} onPress={() => { setSearching((v) => !v); scrollTop(); }}>
+            <Svg width="22" height="22" viewBox="0 0 24 24">
+              <Circle cx="11" cy="11" r="7" stroke={searching ? C.accent : C.text} strokeWidth="2" fill="none" />
+              <SvgPath d="M20 20l-3.5-3.5" stroke={searching ? C.accent : C.text} strokeWidth="2" strokeLinecap="round" />
+            </Svg>
+          </Pressable>
+        </View>
+        </View>
         {!searching ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
@@ -2768,6 +2938,7 @@ export default function App() {
                 goArticle={(i) => { setSearching(false); goArticle(i); }} goTab={(k) => { setSearching(false); setTab(k); scrollTop(); }} />
             ) : (
               <>
+                {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} />}
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
                 {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} world={world} hist={hist} />}
@@ -2776,29 +2947,6 @@ export default function App() {
             <LegalFooter />
           </ScrollView>
         )}
-        <SafeAreaView edges={['bottom']} style={s.navWrap}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
-            <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
-              {TABS.map((t, i) => {
-                const on = tab === t.key && !searching;
-                return (
-                  <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); setArticle(null); scrollTop(); }}
-                    style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                    <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
-                    <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <View style={{ width: 14 }} />
-            <Pressable hitSlop={12} onPress={() => { setSearching((v) => !v); scrollTop(); }}>
-              <Svg width="22" height="22" viewBox="0 0 24 24">
-                <Circle cx="11" cy="11" r="7" stroke={searching ? C.accent : C.text} strokeWidth="2" fill="none" />
-                <SvgPath d="M20 20l-3.5-3.5" stroke={searching ? C.accent : C.text} strokeWidth="2" strokeLinecap="round" />
-              </Svg>
-            </Pressable>
-          </View>
-        </SafeAreaView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -2978,7 +3126,12 @@ function buildStyles() {
   legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
   legalDot: { color: C.line },
   // nav
-  navWrap: { backgroundColor: C.panel, borderTopWidth: 1, borderTopColor: C.line },
+  navTop: { borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel2 },
+  fpRisk: { borderWidth: 1, borderLeftWidth: 3, borderRadius: 10, padding: 15, backgroundColor: C.panel },
+  fpCall: { borderWidth: 1, borderRadius: 10, padding: 15, backgroundColor: C.panel },
+  fpBoards: { borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 15, backgroundColor: C.panel },
+  fpLesson: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 },
+  fpTile: { width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 12, marginBottom: 10 },
   nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 9, paddingHorizontal: 4 },
   navBtn: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10 },
   navTxt: { color: C.muted, fontSize: 11, letterSpacing: 1.4 },
