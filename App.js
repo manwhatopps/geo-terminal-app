@@ -855,17 +855,17 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             paragraph, no labels). Reading time is measured from the full read, not the summary. */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
           <Pressable onPress={() => setPane(pane === 'sum' ? null : 'sum')} style={[s.artbtn, { borderColor: C.calm }, pane === 'sum' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.calm }]}>≡ SUMMARY</Text>
+            <Text style={[s.artbtnT, MONO, { color: C.calm }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>≡ SUMMARY</Text>
             <Text style={s.artbtnS}>the story in 30 seconds</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO]}>◉ GEOPOLITICAL ANALYST</Text>
+            <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>◉ ANALYST</Text>
             <Text style={s.artbtnS}>{item.hist && item.hist.call && item.hist.call.p != null
               ? "the desk's call on this story: " + Math.round(Number(item.hist.call.p)) + '%'
               : "the desk's read on this story"}</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.high }]}>☍ THE CONSPIRACY</Text>
+            <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>☍ CONSPIRACY</Text>
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
           </Pressable>
         </View>
@@ -2749,8 +2749,8 @@ function buildStyles() {
   rctl: { color: C.muted, fontSize: 13, fontWeight: '600' },
   artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
-  artbtnT: { color: C.accent, fontSize: 9.5, fontWeight: '800', letterSpacing: 0.8 },   // three doors in one row
-  artbtnS: { color: C.muted, fontSize: 9, marginTop: 3, lineHeight: 12 },
+  artbtnT: { color: C.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.9 },   // one word per door, one line, never broken
+  artbtnS: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 13.5 },
   hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
   hrowH: { fontFamily: 'Charter', fontSize: 24, lineHeight: 29, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
   hrowMeta: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
