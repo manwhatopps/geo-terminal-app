@@ -526,6 +526,36 @@ function chatterFor(item) {
     : [];
 }
 
+// ── THE COUNTER — one checkable fact against the claim, before any of the reasoning. ───────────
+// 2026-09-16 (editor): "We should add contrarian responses on the board. For example you played one
+// that said Shanghai says oil is $130 a barrel and in the thread they predict GDP to drop 10%. But
+// the counter was that the strait isn't actually closed like news headlines read."
+//
+// He is describing the most useful thing the desk owns and was burying. The counter-evidence WAS
+// being written - the Shanghai read already said WTI printed $107 on 15 September, so $135 implies a
+// 20% premium nobody has reported - but it sat in sentence four of a paragraph, under a label that
+// said THE DESK'S READ. A claim gets a headline; the fact that deflates it got prose. Now it gets its
+// own line, above the reasoning, where a reader who taps nothing still sees it.
+//
+// Two things make this different from fact-checking. It cuts at WHOEVER IS OVERSTATING - the board
+// when the board is inflating, the wire when the headline is ("the strait isn't actually closed like
+// news headlines read" is a counter to the NEWS, not to the poster) - and it is allowed to come back
+// empty: when the check finds nothing against a claim, the desk says so and names what would settle
+// it, because a panel that always finds the claim wrong is running a narrative in the other direction.
+function Counter({ c }) {
+  if (!c) return null;
+  const holds = /^\s*(HOLDS|NOTHING)/i.test(String(c));
+  const col = holds ? C.calm : C.accent;
+  return (
+    <View style={{ marginTop: 12, borderLeftWidth: 3, borderLeftColor: col, paddingLeft: 12 }}>
+      <Text style={[MONO, { color: col, fontSize: 10, letterSpacing: 1.5, fontWeight: '800' }]}>
+        {holds ? 'AND IT SURVIVES THE CHECK' : 'BUT THE NUMBERS SAY'}
+      </Text>
+      <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 6, marginBottom: 0 }]}>{decode(String(c))}</Text>
+    </View>
+  );
+}
+
 function ConspiracyPanel({ items, forceOpen }) {
   const [open, setOpen] = useState(!!forceOpen);
   if (!items || !items.length) return forceOpen ? <Text style={[s.foot, { marginTop: 12 }]}>Nothing is circulating about this story yet — the boards are swept every pass.</Text> : null;
@@ -579,6 +609,7 @@ function ConspiracyPanel({ items, forceOpen }) {
                       <Text style={[s.ctxP, T(15, 24), { color: C.muted }]}>{decode(c.spread)}</Text>
                     </>
                   ) : null}
+                  <Counter c={c.counter} />
                   {Array.isArray(c.reads) && c.reads.length ? (
                     <View style={{ marginTop: 10 }}><Sections items={c.reads.map((sec) => (/VERDICT/i.test(sec.h || '') && Array.isArray(c.verdicts) ? { ...sec, verdicts: c.verdicts } : sec))} color={C.high} /></View>
                   ) : c.read ? (
@@ -1784,6 +1815,7 @@ function BoardArticle({ c, onBack, onStory }) {
             <Text style={[s.ctxP, T(16, 25), { color: C.muted, marginBottom: 12 }]}>{decode(c.spread)}</Text>
           </>
         ) : null}
+        <Counter c={c.counter} />
         {reads.length ? (
           <>
             <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE DESK'S READ</Text>
@@ -1877,6 +1909,14 @@ function BoardsTab({ data, goArticle }) {
             {rule}
             <Pressable onPress={() => setOpen(c.k)} style={s.hrow}>
               <Text style={[s.hrowH, T(24, 29)]}>{boardHead(c)}</Text>
+              {/* the counter rides the INDEX too: a reader scrolling the boards should meet the fact
+                  that deflates a claim at the same moment as the claim, not one tap later */}
+              {c.counter ? (
+                <Text style={{ color: C.text, fontSize: 14, lineHeight: 20, marginTop: 6 }} numberOfLines={2}>
+                  <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>{'BUT  '}</Text>
+                  {decode(String(c.counter))}
+                </Text>
+              ) : null}
               <Text style={[s.hrowMeta, !c.story && { color: C.high }]}>{(c.story ? 'ON A STORY · ' : '') + String(c.region || 'CIRCULATING').toUpperCase()}</Text>
             </Pressable>
           </View>
