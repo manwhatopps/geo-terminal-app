@@ -2448,6 +2448,20 @@ function HistPanel({ hist }) {
       ) : null}
       {call.event ? <View style={{ marginTop: 6 }}><ProbBar p={p} /></View> : null}
       <ForAgainst pro={hist.for} con={hist.against} />
+      {hist.long && hist.long.event ? (
+        <View style={{ marginTop: 12 }}>
+          <Text style={[s.ctxlbl, MONO]}>{'THE LONG CALL' + (hist.long.horizon ? ' · ' + String(hist.long.horizon).toUpperCase() : '') + (hist.long.conf ? ' · CONFIDENCE ' + String(hist.long.conf).toUpperCase() : '')}</Text>
+          <ProbList items={[{ label: decode(hist.long.event), p: Math.max(0, Math.min(100, Number(hist.long.p) || 0)) }]} />
+        </View>
+      ) : null}
+      {hist.contrarian && hist.contrarian.claim ? (
+        <View style={{ marginTop: 6, borderLeftWidth: 3, borderLeftColor: C.high, paddingLeft: 9 }}>
+          <Text style={[s.ctxlbl, MONO, { color: C.high }]}>{'THE CONTRARIAN CALL · ' + String(hist.contrarian.frame || '').toUpperCase() + (hist.contrarian.who ? ' · ' + hist.contrarian.who : '')}</Text>
+          <ProbList items={[{ label: decode(hist.contrarian.claim), p: Math.max(0, Math.min(100, Number(hist.contrarian.p_desk) || 0)), shown: (Number(hist.contrarian.p_desk) || 0) + '%' }]} color={C.high} />
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: -4 }]}>{"THE DESK'S NUMBER ON THEIR CLAIM" + (hist.contrarian.their_record && hist.contrarian.their_record !== 'no scored record' ? ' · THEIR RECORD: ' + decode(hist.contrarian.their_record) : '')}</Text>
+          {hist.contrarian.why ? <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 6 }}>{decode(hist.contrarian.why)}</Text> : null}
+        </View>
+      ) : null}
       {call.update || brLine ? (
         <View style={{ marginTop: 10 }}>
           <Text style={[s.ctxlbl, MONO]}>HOW HISTORY MOVED THIS</Text>
