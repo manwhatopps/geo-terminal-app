@@ -2151,8 +2151,17 @@ function BoardsTab({ data, goArticle }) {
                 </Pressable>
                 {isOn ? (
                   <View style={{ marginTop: 9 }}>
-                    {sp.obs ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20 }}>{decode(sp.obs)}</Text> : null}
-                    {sp.read ? <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 8 }}>{decode(sp.read)}</Text> : null}
+                    {/* 2026-09-16: when a sighting carries no `head` the headline falls back to `obs`, so
+                        printing `obs` again underneath repeated the whole paragraph verbatim. Only show
+                        the observation when it is not already the headline. */}
+                    {sp.obs && sp.head ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20 }}>{decode(sp.obs)}</Text> : null}
+                    {sp.if_true ? (
+                      <View style={{ marginTop: 10, borderLeftWidth: 2, borderLeftColor: C.elev, paddingLeft: 11 }}>
+                        <Text style={[MONO, { color: C.elev, fontSize: 9, letterSpacing: 1.1, fontWeight: '700' }]}>IF THIS IS TRUE</Text>
+                        <Text style={{ color: C.text, fontSize: 14, lineHeight: 21, marginTop: 5 }}>{decode(sp.if_true)}</Text>
+                      </View>
+                    ) : null}
+                    {sp.read ? <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 10 }}>{decode(sp.read)}</Text> : null}
                     {sp.falsifier ? (
                       <>
                         <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700', marginTop: 10 }]}>WHAT WOULD SETTLE IT</Text>
