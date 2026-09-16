@@ -2325,6 +2325,152 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   );
 }
 
+// ── THE RECEIPTS — what the official number says, and what everything else says. ────────────────
+// 2026-09-16 (editor): "What if people feel like they are being lied to about what inflation is,
+// because prices are still high and savings are diminished... this news app is supposed to go through
+// what the government tells us and use facts and stat points from multiple sources to call them out...
+// That's what's going to separate us from every other news app."
+//
+// The separation is the RECEIPTS, not the accusation. Three different questions share the word
+// inflation and the confusion between them is most of the feeling of being lied to:
+//   the RATE (how fast prices are rising now) - which can fall while
+//   the LEVEL (what things cost against a few years ago) keeps climbing, and
+//   YOUR basket, which is food, rent, power and fuel, not the average of everything.
+// So the panel puts all three on one screen with a source id on every figure, and the gap between
+// the official measure and the independent ones is printed in WHICHEVER DIRECTION IT FALLS. On the
+// day this shipped the independent measures were running BELOW the headline - and the panel says so,
+// because a desk that only ever reports "the real number is higher" is running a narrative, and the
+// first month that breaks is the month nobody believes anything else on the page.
+function Receipts({ inf }) {
+  const [openWhat, setOpenWhat] = useState(null);
+  if (!inf || !inf.official || !inf.official.length) return null;
+  const head = inf.official[0];
+  const lbl = (t, c) => (
+    <Text style={[MONO, { color: c || C.accent, fontSize: 9.5, letterSpacing: 1.6, fontWeight: '800', marginTop: 18 }]}>{t}</Text>
+  );
+  const srcline = (t) => <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 3 }]}>{t}</Text>;
+  return (
+    <Section title="The receipts" extra={inf.asof || ''}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 18 }}>
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
+          The official inflation number, checked against measures the government does not produce and
+          against what things actually cost. Every figure below is a published series with its source
+          printed beside it — the desk adds no estimates of its own here.
+        </Text>
+
+        {lbl('WHAT THE GOVERNMENT SAYS')}
+        {inf.official.map((o, i) => (
+          <View key={i} style={{ marginTop: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+              <Text style={[MONO, { color: C.text, fontSize: 22, fontWeight: '800' }]}>{o.v != null ? o.v + '%' : '—'}</Text>
+              <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{o.name + ', over 12 months'}</Text>
+            </View>
+            <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 2 }}>{o.what}</Text>
+            {srcline('BLS SERIES ' + o.src + ' \u00b7 ' + (o.asof || ''))}
+          </View>
+        ))}
+
+        {lbl('WHAT MEASURES IT DOES NOT PRODUCE SAY')}
+        {inf.independent.map((x, i) => (
+          <Pressable key={i} onPress={() => setOpenWhat(openWhat === i ? null : i)} style={{ marginTop: 11 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 18, fontWeight: '800', width: 58 }]}>{x.v != null ? x.v + '%' : '—'}</Text>
+              <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{x.name}</Text>
+              <Text style={{ color: C.accent, fontSize: 15 }}>{openWhat === i ? '\u2212' : '+'}</Text>
+            </View>
+            {openWhat === i ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 5 }}>{x.what}</Text> : null}
+            {srcline((x.who ? x.who.toUpperCase() + ' \u00b7 ' : '') + String(x.src).toUpperCase())}
+          </Pressable>
+        ))}
+        {inf.gap ? (
+          <View style={{ marginTop: 14, borderLeftWidth: 3, borderLeftColor: inf.gap.dir === 'above' ? C.crit : inf.gap.dir === 'below' ? C.calm : C.muted, paddingLeft: 12 }}>
+            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.4, fontWeight: '800' }]}>THE GAP</Text>
+            <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 5, marginBottom: 0 }]}>{decode(inf.gap.line)}</Text>
+          </View>
+        ) : null}
+
+        {(inf.basket || []).length ? (
+          <>
+            {lbl('WHAT THINGS ACTUALLY COST', C.high)}
+            <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
+              {'A falling rate does not mean falling prices — it means they climb more slowly. This is the '
+                + 'level, from the same government survey, since ' + (inf.base || '') + '.'}
+            </Text>
+            {inf.basket.map((b, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 9,
+                borderTopWidth: i ? 1 : 0, borderTopColor: C.line, paddingTop: i ? 9 : 0 }}>
+                <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{b.name}
+                  <Text style={{ color: C.muted, fontSize: 12 }}>{'  ' + b.unit}</Text>
+                </Text>
+                <Text style={[MONO, { color: C.muted, fontSize: 12.5 }]}>{'$' + b.then + ' \u2192 $' + b.now}</Text>
+                <Text style={[MONO, { color: C.high, fontSize: 14, fontWeight: '800', width: 62, textAlign: 'right' }]}>
+                  {(b.pct > 0 ? '+' : '') + b.pct + '%'}
+                </Text>
+              </View>
+            ))}
+            {srcline('BLS AVERAGE PRICE SURVEY \u00b7 ' + (inf.asof || '') + ' \u00b7 AGAINST HEADLINE CPI +'
+              + (head.since != null ? head.since : '?') + '% OVER THE SAME WINDOW')}
+          </>
+        ) : null}
+
+        {inf.wages ? (
+          <>
+            {lbl('PAY, PRICES AND WHAT IS LEFT')}
+            <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6, marginBottom: 0 }]}>
+              {'Since ' + inf.base + ' average hourly pay is up ' + inf.wages.pay + '% and prices are up '
+                + inf.wages.prices + '%, so the average wage is '
+                + (inf.wages.real >= 0 ? inf.wages.real + ' points AHEAD of' : Math.abs(inf.wages.real) + ' points BEHIND')
+                + ' the average price — $' + inf.wages.then + ' an hour then, $' + inf.wages.now + ' now.'}
+            </Text>
+            {inf.wages.saving != null ? (
+              <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
+                {'Households are saving ' + inf.wages.saving + '% of what they take home, against '
+                  + inf.wages.saving_then + '% in ' + inf.base + '. That is the part the averages hide: pay '
+                  + 'kept up with the basket on average while the things bought every week ran far ahead of it, '
+                  + 'and the difference came out of savings.'}
+              </Text>
+            ) : null}
+            {srcline(String(inf.wages.src).toUpperCase() + ' \u00b7 SAVING RATE PSAVERT \u00b7 ' + (inf.wages.asof || ''))}
+          </>
+        ) : null}
+
+        {inf.shelter ? (
+          <>
+            {lbl('RENT, THE MOST-DISPUTED PART OF THE INDEX')}
+            {Object.keys(inf.shelter).map((k, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 15, fontWeight: '800', width: 58 }]}>
+                  {inf.shelter[k].v != null ? inf.shelter[k].v + '%' : '—'}
+                </Text>
+                <Text style={{ color: C.text, fontSize: 14, flex: 1 }}>{k}
+                  <Text style={[MONO, { color: C.muted, fontSize: 9.5 }]}>{'  ' + String(inf.shelter[k].src).toUpperCase()}</Text>
+                </Text>
+              </View>
+            ))}
+            <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>
+              The CPI measures what every tenant pays, most of whom did not move this year; the market
+              figure is what a landlord asks on a new lease. They should differ — the question is only
+              whether the CPI's version turns late, and by how much.
+            </Text>
+          </>
+        ) : null}
+
+        {inf.bigmac ? (
+          <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 16 }}>
+            {'One more basket nobody official controls: a Big Mac went from $' + inf.bigmac.then + ' to $'
+              + inf.bigmac.now + ', ' + (inf.bigmac.pct > 0 ? '+' : '') + inf.bigmac.pct + '% since ' + inf.base
+              + ' (' + inf.bigmac.src + ').'}
+          </Text>
+        ) : null}
+
+        {(inf.notes || []).map((n, i) => (
+          <Text key={i} style={{ color: C.muted, fontSize: 12, lineHeight: 18, marginTop: 12, fontStyle: 'italic' }}>{decode(n)}</Text>
+        ))}
+      </View>
+    </Section>
+  );
+}
+
 // ── COUNTRY DOSSIERS — flag chips, tap to open the dossier (mockup's country page, inline) ──
 function Dossiers({ items }) {
   const [sel, setSel] = useState(null);
@@ -2444,6 +2590,7 @@ function DataTab({ data, easy, world, hist }) {
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
+      <Receipts inf={data.inflation} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
       {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       {data.plumbing ? (
