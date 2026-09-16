@@ -1996,6 +1996,141 @@ function BoardsTab({ data, goArticle }) {
 }
 
 
+// ── THE CHAIRS — every principal the desk reasoned from today. ─────────────────────────────────
+// 2026-09-16 (user: "for calls we need to do more than just percentage of prediction. This makes it
+// look like a Polymarket rip off ... this is where the geopolitical strategy and analyst brain comes
+// into play. This is the section where you put yourself into all these different leaders' shoes").
+// He is right, and the material already existed: the desk writes IN THEIR SHOES on EVERY card - what
+// a principal needs, fears, cannot afford, how they read the other side and their best move - and it
+// was reachable only by opening a story and tapping through. A number without the reasoning is a
+// betting line. The reasoning IS the product, so it opens the tab.
+function chairsFrom(cards) {
+  const by = new Map();
+  (cards || []).forEach((c, idx) => {
+    const sec = (c.read || []).find((x) => x.h === 'IN THEIR SHOES');
+    if (!sec || !sec.p) return;
+    String(sec.p).trim().split(/\s(?=\d\.\s)/).forEach((part) => {
+      const m = part.match(/^\d\.\s*([^:.]{2,42})[:.]\s*(.+)$/s);
+      if (!m) return;
+      const name = m[1].trim(), body = m[2].trim();
+      if (body.length < 60) return;                       // a stub, not a position
+      const key = name.toLowerCase().replace(/^(the|president|prime minister)\s+/, '');
+      const row = by.get(key) || { name, region: c.region, positions: [] };
+      row.positions.push({ body, head: c.head, idx, ts: c.ts });
+      if (name.length < row.name.length) row.name = name;  // the shortest form reads best
+      by.set(key, row);
+    });
+  });
+  return [...by.values()].sort((a, b) => b.positions.length - a.positions.length);
+}
+function Chairs({ cards, goArticle }) {
+  const [open, setOpen] = useState(null);
+  const [region, setRegion] = useState('ALL');
+  const all = chairsFrom(cards);
+  const rows = all.filter((r) => region === 'ALL' || r.region === region);
+  if (!all.length) return null;
+  const pairs = textRegionPairs(all, (r) => r.region + ' ' + r.name);
+  return (
+    <Section title="The chairs" extra={all.length + ' principals today'}>
+      <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 10 }]}>
+        Before the desk writes a number it sits in each principal's chair and reasons as they would:
+        what they need to survive politically, what they fear, what is closed to them at home, and the
+        move that follows. Every call further down is the equilibrium of these positions.
+      </Text>
+      <FilterDrop pairs={pairs} active={region} onPick={setRegion} />
+      {rows.map((r, i) => {
+        const isOpen = open === i;
+        return (
+          <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line }}>
+            <Pressable onPress={() => setOpen(isOpen ? null : i)} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 16, gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.actorName, SERIF, { fontSize: 19 }]}>{decode(r.name)}</Text>
+                <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1, marginTop: 3 }]}>
+                  {String(r.region || '').toUpperCase() + ' \u00b7 ' + r.positions.length + (r.positions.length === 1 ? ' STORY' : ' STORIES')}
+                </Text>
+              </View>
+              <Text style={{ color: C.accent, fontSize: 18 }}>{isOpen ? '\u2212' : '\u203a'}</Text>
+            </Pressable>
+            {isOpen ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+                {r.positions.map((p, j) => (
+                  <View key={j} style={{ marginTop: j ? 16 : 0 }}>
+                    <Pressable onPress={() => goArticle && goArticle(p.idx)}>
+                      <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1 }]} numberOfLines={2}>
+                        {'ON: ' + decode(p.head).toUpperCase()}
+                      </Text>
+                    </Pressable>
+                    <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 6 }]}>{decode(p.body)}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </Section>
+  );
+}
+
+// ── THE DESK'S CALLS — the number is the conclusion, so it never appears alone. ─────────────────
+function DeskCalls({ cards, goArticle }) {
+  const [open, setOpen] = useState(null);
+  const items = (cards || []).map((c, idx) => ({ c, idx, h: c.hist || {} }))
+    .filter((x) => x.h.call && x.h.call.event && x.h.call.p != null)
+    .sort((a, b) => Math.abs(Number(b.h.call.p) - 50) - Math.abs(Number(a.h.call.p) - 50));
+  if (!items.length) return null;
+  return (
+    <Section title="The desk's calls" extra={items.length + ' live'}>
+      <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 6 }]}>
+        Each one is falsifiable, dated, and scored when it resolves. Open a call for the case for and
+        against it, the precedents behind it, and what would change the desk's mind.
+      </Text>
+      {items.map((x, i) => {
+        const call = x.h.call, p = Math.max(0, Math.min(100, Math.round(Number(call.p) || 0)));
+        const isOpen = open === i;
+        return (
+          <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line, paddingHorizontal: 16, paddingVertical: 13 }}>
+            <Pressable onPress={() => setOpen(isOpen ? null : i)}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 27, fontWeight: '800', width: 62, lineHeight: 30 }]}>{p + '%'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '600' }}>{decode(call.event)}</Text>
+                  <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1, marginTop: 5 }]}>
+                    {[call.horizon ? String(call.horizon).toUpperCase() : null,
+                      call.conf ? 'CONFIDENCE ' + String(call.conf).toUpperCase() : null,
+                      (x.h.for || []).length + ' FOR', (x.h.against || []).length + ' AGAINST'].filter(Boolean).join('  \u00b7  ')}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ marginTop: 9 }}><ProbBar p={p} /></View>
+            </Pressable>
+            {isOpen ? (
+              <View style={{ marginTop: 12 }}>
+                <ForAgainst pro={x.h.for} con={x.h.against} />
+                {x.h.base_rate && !x.h.base_rate.low_n && x.h.base_rate.n ? (
+                  <Text style={[MONO, { color: C.muted, fontSize: 11, marginTop: 10 }]}>
+                    {'OUTSIDE VIEW \u00b7 ' + x.h.base_rate.n + ' COMPARABLE CASES'}
+                  </Text>
+                ) : null}
+                {(x.h.precedents || []).slice(0, 2).map((pr, j) => (
+                  <View key={j} style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                    <Text style={[MONO, { color: C.accent, fontSize: 11, width: 62 }]}>{String(pr.date || '').slice(0, 7)}</Text>
+                    <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, flex: 1 }}>{decode(pr.line || '')}</Text>
+                  </View>
+                ))}
+                {call.update ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 10 }}>{decode(call.update)}</Text> : null}
+                <Pressable onPress={() => goArticle && goArticle(x.idx)} style={{ marginTop: 12 }}>
+                  <Text style={[s.readmore, MONO]}>READ THE STORY BEHIND THIS CALL \u203a</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </Section>
+  );
+}
+
 // ── THE CALENDAR — the dated decision points the desk's calls turn on. `clocks` has been in the feed
 // all along (votes, rulings, auctions, summits, each with the forecast it decides) and had no surface
 // after the legacy home screen went. It belongs at the top of CALLS: a forecast without its clock is
@@ -2044,8 +2179,10 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
   return (
     <View style={s.stack}>
+      <Chairs cards={data.brief} goArticle={goArticle} />
       <Calendar clocks={data.clocks} />
-      <Section title="Calls on the board" extra={String(fcs.length)}>
+      <DeskCalls cards={data.brief} goArticle={goArticle} />
+      <Section title="The tracked book" extra={String(fcs.length)}>
         <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
         {fcs.map((f, i) => {
           const d = f.prev != null ? f.p - f.prev : null;
