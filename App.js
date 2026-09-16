@@ -803,7 +803,26 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         <Text style={[stand ? s.artH : s.artHLong, SERIF, T(stand ? 30 : 25, stand ? 37 : 32)]}>{stand ? head : longHead}</Text>
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
-        <Text style={[s.stime, MONO, { marginBottom: 18 }]}>{fullStamp(item.ts)}</Text>
+        <Text style={[s.stime, MONO, { marginBottom: 14 }]}>{fullStamp(item.ts)}</Text>
+        {/* 2026-09-15 (user): the two doors sit at the TOP of every story, before the read - the desk's
+            analysis (and its calls), and what the boards say. The pane opens right under the buttons. */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
+          <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
+            <Text style={[s.artbtnT, MONO]}>◉ GEOPOLITICAL ANALYST</Text>
+            <Text style={s.artbtnS}>{'the desk\'s read' + ((calls || []).length ? ' + ' + calls.length + (calls.length === 1 ? ' call' : ' calls') : '')}</Text>
+          </Pressable>
+          <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
+            <Text style={[s.artbtnT, MONO, { color: C.high }]}>☍ THE CONSPIRACY</Text>
+            <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
+          </Pressable>
+        </View>
+        {pane === 'analyst' ? <View style={{ marginBottom: 18 }}><HistPanel hist={item.hist} /></View> : null}
+        {pane === 'analyst' ? <View style={{ marginBottom: 18 }}><ContextPanel item={item} deep={false} specMatches={specMatches} calls={calls} forceOpen /></View> : null}
+        {pane === 'analyst' && !item.hist && !item.context && !(calls || []).length ? (
+          <Text style={[s.foot, { marginBottom: 18 }]}>The desk has not filed its analysis on this story yet — the next run will carry the read, the call, and the history behind it.</Text>
+        ) : null}
+        {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
+        {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
         {!simple && Array.isArray(item.read) && item.read.length ? (
           <>
             <Text style={[s.storyP, T(18, 30), { marginBottom: 6 }]}>{decode(item.t || '')}</Text>
@@ -827,23 +846,6 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             ))}
           </View>
         ) : null}
-        {/* two doors under every story: the desk's analysis (and its calls), and what the boards say */}
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
-          <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO]}>◉ GEOPOLITICAL ANALYST</Text>
-            <Text style={s.artbtnS}>{'the desk\'s read' + ((calls || []).length ? ' + ' + calls.length + (calls.length === 1 ? ' call' : ' calls') : '')}</Text>
-          </Pressable>
-          <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.high }]}>☍ THE CONSPIRACY</Text>
-            <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
-          </Pressable>
-        </View>
-        {pane === 'analyst' ? <HistPanel hist={item.hist} /> : null}
-        {pane === 'analyst' ? <ContextPanel item={item} deep={false} specMatches={specMatches} calls={calls} forceOpen /> : null}
-        {pane === 'analyst' && !item.hist && !item.context && !(calls || []).length ? (
-          <Text style={[s.foot, { marginTop: 12 }]}>The desk has not filed its analysis on this story yet — the next run will carry the read, the call, and the history behind it.</Text>
-        ) : null}
-        {pane === 'consp' ? <ConspiracyPanel items={conspItems} forceOpen /> : null}
       </View>
       {/* keep reading — the paper hands you the next story rather than a dead end */}
       {next || prev ? (
