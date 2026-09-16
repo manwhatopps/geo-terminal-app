@@ -1624,20 +1624,8 @@ function FrontPage({ data, goTab, goArticle, read }) {
   );
   return (
     <View style={s.stack}>
-      {/* the state of the board — the one line the desk leads with */}
-      {data.risk ? (
-        <View style={[s.fpRisk, { borderColor: rc }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-            <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc }} />
-            <Text style={[MONO, { color: rc, fontSize: 12, fontWeight: '800', letterSpacing: 2 }]}>
-              {String(data.risk.state || '').toUpperCase()}
-            </Text>
-            <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1, marginLeft: 'auto' }]}>{data.updated || ''}</Text>
-          </View>
-          {data.risk.line ? <Text style={{ color: C.text, fontSize: 14, lineHeight: 21, marginTop: 9 }} numberOfLines={5}>{decode(data.risk.line)}</Text> : null}
-        </View>
-      ) : null}
-
+      {/* 2026-09-16 (user: "get rid of the high alert banner ... I don't want that banner in the
+          middle of the screen"). The board's state now lives in the masthead dot and in the wire itself. */}
       {/* the story of the day */}
       {lead ? (
         <View>
@@ -1647,6 +1635,28 @@ function FrontPage({ data, goTab, goArticle, read }) {
             <Text style={[s.leadH, SERIF, { marginTop: 7 }, read && read[storyId(lead)] && s.readH]} numberOfLines={4}>{articleParts(lead).head}</Text>
             <Text style={s.leadDek} numberOfLines={3}>{decode(lead.h || '')}</Text>
             <Text style={[s.readmore, MONO, { marginTop: 11 }]}>READ THE FULL BRIEF ›</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* 2026-09-16 (user: "a more organized better home screen"): the next stories sit under the lead,
+          so HOME is a front page you can actually read rather than one headline and a set of doors. */}
+      {cards.length > 1 ? (
+        <View>
+          {cards.slice(1, 5).map((c, i) => {
+            const n = cards.indexOf(c);
+            return (
+              <Pressable key={n} onPress={() => goArticle(n)} style={[s.idxrow, i === 0 && { borderTopWidth: 0, paddingTop: 0 }]}>
+                <View style={s.idxmeta}>
+                  <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(c)}</Text>
+                  <Text style={[s.idxtime, MONO]}>{timeOnly(c.ts)}</Text>
+                </View>
+                <Text style={[s.idxH, SERIF, read && read[storyId(c)] && s.readH]} numberOfLines={3}>{articleParts(c).head}</Text>
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={() => goTab('news')} style={{ paddingTop: 4 }}>
+            <Text style={[s.readmore, MONO]}>{'ALL ' + cards.length + ' STORIES ON THE WIRE ›'}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -2759,6 +2769,7 @@ export default function App() {
   const [err, setErr] = useState(null);
   const [tab, setTab] = useState('home');   // the front page, not the wire
   const [searching, setSearching] = useState(false);
+  const [prefs, setPrefs] = useState(false);   // reading controls, off the page by default
   const [query, setQuery] = useState('');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
   const goBoard = (i) => { setBoardSel(i); setTab('map'); };
@@ -2880,35 +2891,18 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={s.root} edges={['top']}>
         <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
+        {/* 2026-09-16 (user): the reading controls came off the page and live behind this button -
+            he did not want a settings bar sitting in the middle of the home screen. The dot is the
+            board's risk colour, which is where the old HIGH banner's information went. */}
         <View style={s.header}>
           <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc, shadowColor: rc, shadowOpacity: 0.9, shadowRadius: 6 }} />
           <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
-        </View>
-        <View style={s.navTop}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
-          <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
-            {TABS.map((t, i) => {
-              const on = tab === t.key && !searching;
-              return (
-                <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); setArticle(null); scrollTop(); }}
-                  style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
-                  <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
-                  <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={{ width: 14 }} />
-          <Pressable hitSlop={12} onPress={() => { setSearching((v) => !v); scrollTop(); }}>
-            <Svg width="22" height="22" viewBox="0 0 24 24">
-              <Circle cx="11" cy="11" r="7" stroke={searching ? C.accent : C.text} strokeWidth="2" fill="none" />
-              <SvgPath d="M20 20l-3.5-3.5" stroke={searching ? C.accent : C.text} strokeWidth="2" strokeLinecap="round" />
-            </Svg>
+          <Pressable onPress={() => setPrefs((v) => !v)} hitSlop={10} style={s.prefsBtn}>
+            <Text style={[MONO, { color: prefs ? C.accent : C.muted, fontSize: 13 }]}>{'A' + (theme === 'light' ? '\u263e' : '\u2600')}</Text>
           </Pressable>
         </View>
-        </View>
-        {!searching ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
+        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -2941,6 +2935,29 @@ export default function App() {
             <LegalFooter />
           </ScrollView>
         )}
+        <SafeAreaView edges={['bottom']} style={s.navWrap}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
+            <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
+              {TABS.map((t, i) => {
+                const on = tab === t.key && !searching;
+                return (
+                  <Pressable key={t.key} onPress={() => { setSearching(false); setTab(t.key); setArticle(null); scrollTop(); }}
+                    style={[s.modeBtn, i > 0 && s.modeBtnDiv, on && s.modeBtnActive]}>
+                    <Text style={{ fontSize: 18, color: on ? C.accent : C.muted, lineHeight: 20 }}>{t.g}</Text>
+                    <Text style={[s.modeTxt, { fontSize: 10, letterSpacing: 0.4, marginTop: 2 }, on && { color: C.text, fontWeight: '700' }]} numberOfLines={1}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={{ width: 14 }} />
+            <Pressable hitSlop={12} onPress={() => { setSearching((v) => !v); scrollTop(); }}>
+              <Svg width="22" height="22" viewBox="0 0 24 24">
+                <Circle cx="11" cy="11" r="7" stroke={searching ? C.accent : C.text} strokeWidth="2" fill="none" />
+                <SvgPath d="M20 20l-3.5-3.5" stroke={searching ? C.accent : C.text} strokeWidth="2" strokeLinecap="round" />
+              </Svg>
+            </Pressable>
+          </View>
+        </SafeAreaView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -3120,8 +3137,8 @@ function buildStyles() {
   legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
   legalDot: { color: C.line },
   // nav
-  navTop: { borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel2 },
-  fpRisk: { borderWidth: 1, borderLeftWidth: 3, borderRadius: 10, padding: 15, backgroundColor: C.panel },
+  navWrap: { backgroundColor: C.panel, borderTopWidth: 1, borderTopColor: C.line },
+  prefsBtn: { borderWidth: 1, borderColor: C.line, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 9, marginLeft: 10 },
   fpCall: { borderWidth: 1, borderRadius: 10, padding: 15, backgroundColor: C.panel },
   fpBoards: { borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 15, backgroundColor: C.panel },
   fpLesson: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 },
