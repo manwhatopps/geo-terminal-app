@@ -2598,6 +2598,76 @@ function Receipts({ inf }) {
   );
 }
 
+// ── THE CHOKEPOINTS — the measurement behind half the geopolitics on this app. ─────────────────
+// 2026-09-16. The desk files calls that turn on whether a strait is open, and until now it settled
+// them with somebody's post about somebody's radar. IMF PortWatch publishes daily AIS transit counts
+// for 28 chokepoints via the UN Global Platform, keyless, about three days behind. Each one is scored
+// against ITS OWN ninety-day normal, because Malacca runs two hundred ships a day and the Bering
+// Strait runs two - a raw count is not a signal, a deviation from a strait's own habit is.
+const CHOKE_COL = { SHUT: 'crit', CHOKED: 'crit', THINNED: 'high', BUSIER: 'elev', OPEN: 'muted' };
+function Chokepoints({ cp }) {
+  const [open, setOpen] = useState(null);
+  const [all, setAll] = useState(false);
+  const [note, setNote] = useState(false);
+  if (!cp || !(cp.points || []).length) return null;
+  const rows = all ? cp.points : cp.points.slice(0, 9);
+  const moved = (cp.points || []).filter((x) => x.status !== 'OPEN' && x.status !== 'NO DATA');
+  return (
+    <Section title="The chokepoints" extra={cp.asof || ''}>
+      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 4 }}>
+        {'How many ships actually went through, every day, measured against each strait\u2019s own ninety-day '
+          + 'normal. ' + (moved.length
+            ? moved.length + (moved.length === 1 ? ' is' : ' are') + ' away from normal right now.'
+            : 'Everything is running about as it usually does.')}
+      </Text>
+      {rows.map((x, i) => {
+        const col = C[CHOKE_COL[x.status] || 'muted'];
+        const isOpen = open === i;
+        return (
+          <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line }}>
+            <Pressable onPress={() => setOpen(isOpen ? null : i)} style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={[MONO, { color: col, fontSize: 10, letterSpacing: 1.3, fontWeight: '800', width: 72 }]}>{x.status}</Text>
+                <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{decode(x.n)}</Text>
+                <Text style={[MONO, { color: C.muted, fontSize: 12 }]}>{x.week + '/day'}</Text>
+                <Text style={[MONO, { color: col, fontSize: 13, fontWeight: '800', width: 54, textAlign: 'right' }]}>
+                  {x.pct == null ? '—' : (x.pct > 0 ? '+' : '') + x.pct + '%'}
+                </Text>
+              </View>
+            </Pressable>
+            {isOpen ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+                {Array.isArray(x.series) && x.series.length >= 8 ? <Sparkline hist={x.series} w={320} h={40} /> : null}
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
+                  {x.week + ' ships a day this week against ' + x.base + ' normal \u2014 ' + x.what + '.'}
+                </Text>
+                <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 6 }]}>
+                  {'LATEST DAY ' + x.now + ' SHIPS \u00b7 ' + String(x.asof || '')
+                    + (x.cap ? ' \u00b7 ' + Math.round(x.cap / 1000) + 'K TONNES OF CAPACITY' : '')}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+      {cp.points.length > rows.length || all ? (
+        <Pressable onPress={() => setAll((v) => !v)} style={{ paddingVertical: 13, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
+          <Text style={[s.readmore, MONO]}>{all ? 'THE NINE THAT MATTER MOST \u2039' : 'ALL ' + cp.points.length + ' CHOKEPOINTS \u203a'}</Text>
+        </Pressable>
+      ) : null}
+      <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.line }}>
+        <Pressable onPress={() => setNote((v) => !v)} hitSlop={6}>
+          <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>
+            {note ? 'HIDE WHAT THIS CAN AND CANNOT SHOW \u2039' : 'WHAT THIS CAN AND CANNOT SHOW \u203a'}
+          </Text>
+        </Pressable>
+        {note ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19.5, marginTop: 7 }}>{decode(cp.note)}</Text> : null}
+        <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 8 }]}>{String(cp.src || '').toUpperCase()}</Text>
+      </View>
+    </Section>
+  );
+}
+
 // ── COUNTRY DOSSIERS — flag chips, tap to open the dossier (mockup's country page, inline) ──
 function Dossiers({ items }) {
   const [sel, setSel] = useState(null);
@@ -2718,6 +2788,7 @@ function DataTab({ data, easy, world, hist }) {
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
       <Receipts inf={data.inflation} />
+      <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
       {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       {data.plumbing ? (
