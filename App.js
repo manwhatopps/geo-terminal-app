@@ -735,22 +735,24 @@ function AnalystPanel({ item, specMatches }) {
         .map(([k, v]) => k.replace(/_/g, ' ') + ' ' + Math.round(v) + '%').join(' · ')) : null;
   // oldest first: the desk's memory reads forward into the present, not backward from it
   const pres = (hist.precedents || []).slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-  const sub = { color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 };
-  const lbl = [s.ctxlbl, MONO, { marginTop: 12 }];
-  const body = { color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 4 };
+  const sub = { color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 6 };
+  const lbl = [s.ctxlbl, MONO, { marginTop: 16 }];
+  const body = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 6, fontFamily: 'Charter' };
 
   const past = [
     pres.length ? (
       <View key="pre">
         {pres.map((x, i) => (
-          <View key={i} style={{ flexDirection: 'row', paddingVertical: 6, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 11, width: 66, fontWeight: '700' }]}>{String(x.date || '').slice(0, 7)}</Text>
-            <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, flex: 1 }}>{decode(x.line || '')}</Text>
-            {x.use != null ? (
-              <Text style={[MONO, { color: x.use >= 60 ? C.calm : x.use >= 40 ? C.elev : C.muted, fontSize: 9.5, marginLeft: 8, marginTop: 3 }]}>
-                {'WEIGHT ' + x.use}
-              </Text>
-            ) : null}
+          <View key={i} style={{ paddingVertical: 10, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+            <Text style={[MONO, { fontSize: 10, letterSpacing: 1.3, fontWeight: '700' }]}>
+              <Text style={{ color: C.accent }}>{String(x.date || '').slice(0, 7)}</Text>
+              {x.use != null ? (
+                <Text style={{ color: x.use >= 60 ? C.calm : x.use >= 40 ? C.elev : C.muted }}>
+                  {'   WEIGHT ' + x.use + (x.use < 40 ? ' \u00b7 CITED, NOT COUNTED' : '')}
+                </Text>
+              ) : null}
+            </Text>
+            <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 5, marginBottom: 0 }]}>{decode(x.line || '')}</Text>
           </View>
         ))}
       </View>
@@ -916,17 +918,52 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                 <Text style={[s.p, { marginTop: 6 }]}>{decode(item.context)}</Text>
               </>
             ) : null}
+            {/* 2026-09-16 (editor: "this should [be] for the user who wants a summary of the analysis
+                or conspiracy. Summary should have a button for all filters of a news article"). SUMMARY
+                used to summarise the READ alone and then point at the analyst. It now carries a short
+                version of every door on the story - the desk's call with the strongest argument each
+                way, and what the boards are saying - each with the button that opens the full thing.
+                A reader in a hurry gets the whole story here; a reader who wants one part taps it. */}
             {item.hist && item.hist.call && item.hist.call.event ? (
-              <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12 }}>
+              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
                 <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>AND THE DESK'S CALL</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
                   <Text style={[MONO, { color: C.accent, fontSize: 24, fontWeight: '800', width: 68, lineHeight: 27 }]}>
                     {Math.round(Number(item.hist.call.p) || 0) + '%'}
                   </Text>
-                  <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, flex: 1 }}>{decode(item.hist.call.event)}</Text>
+                  <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, flex: 1 }}>{decode(item.hist.call.event)}</Text>
                 </View>
-                <Pressable onPress={() => setPane('analyst')} style={{ marginTop: 10 }}>
-                  <Text style={[s.readmore, MONO]}>SEE THE CASE FOR AND AGAINST ›</Text>
+                {(item.hist.for || [])[0] ? (
+                  <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 10, marginBottom: 0 }]}>
+                    <Text style={[MONO, { color: C.calm, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>{'FOR  '}</Text>
+                    {decode(String(item.hist.for[0]))}
+                  </Text>
+                ) : null}
+                {(item.hist.against || [])[0] ? (
+                  <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6, marginBottom: 0 }]}>
+                    <Text style={[MONO, { color: C.crit, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>{'BUT  '}</Text>
+                    {decode(String(item.hist.against[0]))}
+                  </Text>
+                ) : null}
+                <Pressable onPress={() => setPane('analyst')} style={s.sumdoor}>
+                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u25c9  THE FULL ANALYSIS \u203a'}</Text>
+                  <Text style={s.artbtnS}>the record behind it, where it stands, every argument both ways</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {conspItems.length ? (
+              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
+                <Text style={[s.ctxlbl, MONO, { color: C.high }]}>AND WHAT IS CIRCULATING</Text>
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
+                  {decode(conspItems[0].head || conspItems[0].claim || '')}
+                </Text>
+                <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, marginTop: 6 }]}>
+                  {'UNVERIFIED \u00b7 ' + (conspItems[0].spread ? decode(String(conspItems[0].spread)).toUpperCase() : 'CIRCULATING')
+                    + (conspItems.length > 1 ? '  \u00b7  ' + (conspItems.length - 1) + ' MORE' : '')}
+                </Text>
+                <Pressable onPress={() => setPane('consp')} style={[s.sumdoor, { borderColor: C.high }]}>
+                  <Text style={[s.artbtnT, MONO, { color: C.high }]}>{'\u260d  THE FULL CONSPIRACY READ \u203a'}</Text>
+                  <Text style={s.artbtnS}>each claim, the mechanism it needs, and what the desk makes of it</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -2661,22 +2698,26 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
 }
 
 // ── FOR / AGAINST — the ledger the whole product rests on: evidence on each side, side by side. ──
+// 2026-09-16 (editor, reading the analyst panel on a phone: "the pros and cons I don't like the GUI,
+// it's too small. Just write them out paragraph form like the other menus"). Two columns on a 390pt
+// screen gave each argument about 160pt of width at 13pt type - four words a line, and the desk's
+// reasoning arrived as a ransom note. The case for something is prose. One column, full width,
+// reading size, each argument its own paragraph, with the side marked by a rule and a label rather
+// than by geometry. This is also what lets the desk write two sentences per argument instead of one.
 function ForAgainst({ pro, con, caveat }) {
-  const col = (label, color, items, glyph) => (
-    <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 9 }}>
-      <Text style={[MONO, { color, fontSize: 9.5, letterSpacing: 1.4, fontWeight: '800' }]}>{label}</Text>
+  const side = (label, color, items) => (
+    <View style={{ marginTop: 14, borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 12 }}>
+      <Text style={[MONO, { color, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>{label}</Text>
       {(items || []).length ? items.map((t, i) => (
-        <Text key={i} style={{ color: C.text, fontSize: 13, lineHeight: 18, marginTop: 5 }}><Text style={{ color }}>{glyph + ' '}</Text>{decode(String(t))}</Text>
-      )) : <Text style={{ color: C.muted, fontSize: 12.5, marginTop: 5, fontStyle: 'italic' }}>nothing recorded</Text>}
+        <Text key={i} style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: i ? 10 : 7, marginBottom: 0 }]}>{decode(String(t))}</Text>
+      )) : <Text style={{ color: C.muted, fontSize: 13.5, marginTop: 7, fontStyle: 'italic' }}>nothing recorded</Text>}
     </View>
   );
   return (
-    <View style={{ marginTop: 8 }}>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        {col('FOR', C.calm, pro, '+')}
-        {col('AGAINST', C.crit, con, '−')}
-      </View>
-      {caveat ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, fontStyle: 'italic', marginTop: 8 }}>{decode(caveat)}</Text> : null}
+    <View style={{ marginTop: 6 }}>
+      {side('THE CASE FOR IT', C.calm, pro)}
+      {side('THE CASE AGAINST IT', C.crit, con)}
+      {caveat ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, fontStyle: 'italic', marginTop: 12 }}>{decode(caveat)}</Text> : null}
     </View>
   );
 }
@@ -3081,6 +3122,7 @@ function buildStyles() {
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
   artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
+  sumdoor: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14 },
   sharebtn: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center' },
   artbtnT: { color: C.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.9 },   // one word per door, one line, never broken
   artbtnS: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 13.5 },
