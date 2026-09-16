@@ -2108,6 +2108,7 @@ function BoardArticle({ c, onBack, onStory }) {
 }
 function BoardsTab({ data, goArticle }) {
   const [region, setRegion] = useState('ALL');
+  const [spec, setSpec] = useState(null);
   const [open, setOpen] = useState(null);
   const pinned = (data.brief || []).flatMap((b, i) =>
     (b.consp ? (Array.isArray(b.consp) ? b.consp : [b.consp]) : []).map((c) => ({ ...c, story: b, storyIdx: i, region: b.region, ts: c.ts || b.ts })));
@@ -2123,6 +2124,49 @@ function BoardsTab({ data, goArticle }) {
     <View style={s.stack}>
       <FilterDrop pairs={textRegionPairs(all, (c) => c.claim + ' ' + (c.read || ''))} active={region} onPick={setRegion} />
       <Text style={[s.conspWarn, { paddingHorizontal: 4 }]}>{items.length + ' CIRCULATING · UNVERIFIED · WHAT PEOPLE BELIEVE, NOT WHAT IS CONFIRMED'}</Text>
+      {/* 2026-09-16 (user: "count every rumour from these accounts - maybe put a speculation category
+          for the boards"). `speculation` was computed here and never rendered outside an article: it is
+          the desk's record of what trackers and tracked accounts are claiming, each with a grade and the
+          thing that would settle it. Rumours belong on a board that says it is a board. */}
+      {specs.length ? (
+        <Section title="Speculation" extra={specs.length + ' sightings'} fold>
+          <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 8 }]}>
+            Claims from trackers and the accounts the desk follows - not confirmed, graded on how much
+            weight they can carry, each with the observation that would settle it.
+          </Text>
+          {specs.map((sp, i) => {
+            const g = GRADE_META[sp.grade] || GRADE_META.unverified;
+            const isOn = spec === i;
+            return (
+              <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line, paddingHorizontal: 16, paddingVertical: 12 }}>
+                <Pressable onPress={() => setSpec(isOn ? null : i)}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text style={[MONO, { color: g.c, fontSize: 9, letterSpacing: 1, fontWeight: '700' }]}>{g.label}</Text>
+                    <Text style={[MONO, { color: C.muted, fontSize: 9, marginLeft: 'auto' }]}>{String(sp.ts || '').slice(5, 10)}</Text>
+                    <Text style={{ color: C.accent, fontSize: 15 }}>{isOn ? '−' : '›'}</Text>
+                  </View>
+                  <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '600', marginTop: 6 }} numberOfLines={isOn ? undefined : 2}>
+                    {decode(sp.head || sp.obs || '')}
+                  </Text>
+                </Pressable>
+                {isOn ? (
+                  <View style={{ marginTop: 9 }}>
+                    {sp.obs ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20 }}>{decode(sp.obs)}</Text> : null}
+                    {sp.read ? <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 8 }}>{decode(sp.read)}</Text> : null}
+                    {sp.falsifier ? (
+                      <>
+                        <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700', marginTop: 10 }]}>WHAT WOULD SETTLE IT</Text>
+                        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 4 }}>{decode(sp.falsifier)}</Text>
+                      </>
+                    ) : null}
+                    {sp.u ? <WebLink label="SEE THE SOURCE ↗" onPress={() => Linking.openURL(sp.u)} /> : null}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </Section>
+      ) : null}
       {items.map((c) => {
         const k = dayKey(c.ts);
         const rule = c.ts && k !== seen ? <DayRule key={'d' + k} label={dayLabel(c.ts)} /> : null;
