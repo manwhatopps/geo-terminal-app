@@ -2409,6 +2409,69 @@ function WeeklyBasket({ b }) {
   );
 }
 
+// The instrument that prices an official decision before the decision is announced. Modelled on a
+// macro account the desk already reads: hours before the Fed moved, he wrote that the 3-month bill was
+// paying more than the top of the Fed's own range, so a rise was already bought - and the Fed raised.
+// The bill matures inside the next two meetings, so its yield IS the market's forecast of them. The
+// second half is the cross-market check: a move happening in five countries at once is not caused by
+// this morning's headline in one of them.
+function PricedIn({ p }) {
+  const [how, setHow] = useState(false);
+  if (!p || p.bill == null) return null;
+  const col = p.spread >= 12 ? C.crit : p.spread <= -12 ? C.calm : C.muted;
+  return (
+    <>
+      <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.6, fontWeight: '800', marginTop: 20 }]}>
+        WHAT THE MARKET HAD ALREADY PRICED
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 9 }}>
+        <Text style={[MONO, { color: C.text, fontSize: 24, fontWeight: '800' }]}>{p.bill + '%'}</Text>
+        <Text style={{ color: C.text, fontSize: 14, flex: 1, lineHeight: 20 }}>
+          {'the 3-month Treasury bill, against a target range of ' + p.bottom + '\u2013' + p.top + '%'}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+        <Text style={[MONO, { color: col, fontSize: 13, fontWeight: '800', letterSpacing: 1.1 }]}>
+          {(p.spread > 0 ? '+' : '') + p.spread + 'BP  \u00b7  ' + p.verdict}
+        </Text>
+      </View>
+      <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>{decode(p.says) + '.'}</Text>
+      <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 6 }]}>
+        {'DTB3 ' + String(p.bill_asof || '') + ' \u00b7 DFEDTARU/DFEDTARL ' + String(p.range_asof || '')}
+      </Text>
+      {(p.longs || []).length ? (
+        <>
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.4, fontWeight: '800', marginTop: 16 }]}>
+            AND IS IT ONLY HAPPENING HERE?
+          </Text>
+          {p.longs.map((x, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 7 }}>
+              <Text style={{ color: C.text, fontSize: 13.5, flex: 1 }}>{x.n}</Text>
+              <Text style={[MONO, { color: C.muted, fontSize: 12 }]}>{x.v + '%'}</Text>
+              <Text style={[MONO, { color: x.ch > 10 ? C.high : x.ch < -10 ? C.calm : C.muted, fontSize: 12.5, fontWeight: '700', width: 66, textAlign: 'right' }]}>
+                {(x.ch > 0 ? '+' : '') + x.ch + 'bp'}
+              </Text>
+            </View>
+          ))}
+          {p.where ? <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 10, marginBottom: 0 }]}>{decode(p.where)}</Text> : null}
+        </>
+      ) : null}
+      <Pressable onPress={() => setHow((v) => !v)} hitSlop={6} style={{ marginTop: 12 }}>
+        <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>
+          {how ? 'HIDE HOW THIS WORKS \u2039' : 'HOW THIS WORKS \u203a'}
+        </Text>
+      </Pressable>
+      {how ? (
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19.5, marginTop: 7 }}>
+          {decode(p.method) + ' The signal fires BEFORE the announcement and goes quiet after it: once the '
+            + 'committee moves, the range catches up with the bill and the gap closes, which is the reading '
+            + 'meaning "nothing more is priced yet", not "nothing is happening".'}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
 // ── THE RECEIPTS — what the official number says, and what everything else says. ────────────────
 // 2026-09-16 (editor): "What if people feel like they are being lied to about what inflation is,
 // because prices are still high and savings are diminished... this news app is supposed to go through
@@ -2495,6 +2558,8 @@ function Receipts({ inf }) {
             {srcline(String(inf.wages.src).toUpperCase() + ' \u00b7 SAVING RATE PSAVERT \u00b7 ' + (inf.wages.asof || ''))}
           </>
         ) : null}
+
+        {inf.priced ? <PricedIn p={inf.priced} /> : null}
 
         {inf.shelter ? (
           <>
