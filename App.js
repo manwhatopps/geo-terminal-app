@@ -1479,9 +1479,20 @@ function RedBoard({ board, compact, onPress }) {
                 <Text style={[MONO, { color: l.hit ? C.crit : C.muted, fontSize: 11, width: 18 }]}>{l.hit ? '✕' : '·'}</Text>
                 <Text style={[MONO, { color: l.hit ? C.text : C.muted, fontSize: 11.5, flex: 1 }]} numberOfLines={1}>{decode(l.k)}</Text>
                 <Text style={[MONO, { color: l.hit ? C.crit : C.text, fontSize: 12.5, fontWeight: '700' }]}>{l.v}</Text>
-                {lw ? <Text style={{ color: C.accent, fontSize: 13, marginLeft: 7 }}>{isOn ? '−' : '›'}</Text> : null}
+                {lw ? (
+                  <Text style={[MONO, { color: C.accent, fontSize: 8.5, letterSpacing: 0.8, marginLeft: 8 }]}>
+                    {isOn ? 'CLOSE' : 'EXPLAIN'}
+                  </Text>
+                ) : null}
               </Pressable>
-              {span ? (
+              {(l.hist || []).length >= 8 ? (
+                <View style={{ marginTop: 8, marginLeft: 18 }}>
+                  <Sparkline hist={l.hist} line={Number.isFinite(l.line) ? l.line : thr} hit={l.hit} />
+                  <Text style={[MONO, { color: C.muted, fontSize: 8.5, letterSpacing: 0.6, marginTop: 2 }]}>
+                    {'LAST ' + l.hist.length + ' SESSIONS · DASHED LINE IS ' + (Number.isFinite(l.line) ? l.line : thr)}
+                  </Text>
+                </View>
+              ) : span ? (
                 <View style={{ height: 6, backgroundColor: C.barBg, borderRadius: 3, marginTop: 6, marginLeft: 18, overflow: 'hidden' }}>
                   <View style={{ width: Math.max(2, Math.min(100, (num / span) * 100)) + '%', height: '100%', backgroundColor: l.hit ? C.crit : C.calm }} />
                   <View style={{ position: 'absolute', left: Math.min(98, (thr / span) * 100) + '%', top: 0, width: 2, height: 6, backgroundColor: C.text, opacity: 0.9 }} />
@@ -1505,8 +1516,17 @@ function RedBoard({ board, compact, onPress }) {
                 style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={[MONO, { color: C.accent, fontSize: 11, width: 18 }]}>{c.id}</Text>
                 <Text style={[MONO, { color: C.text, fontSize: 11.5, flex: 1 }]}>{decode(c.name)}</Text>
-                <Text style={[MONO, { color: cc, fontSize: 9.5, letterSpacing: 0.8 }]}>{String(c.status).toUpperCase()}</Text>
-                {CHANNEL_WHY[c.id] ? <Text style={{ color: C.accent, fontSize: 13, marginLeft: 7 }}>{chan === c.id ? '−' : '›'}</Text> : null}
+                <Text style={[MONO, { color: cc, fontSize: 9.5, letterSpacing: 0.8 }]}>
+                  {/* 2026-09-16 (user: "I'm not sure what not tripped means or just news"). Say it in words. */}
+                  {/TRIPPED/i.test(c.status) && !/NOT/i.test(c.status) ? 'FIRING'
+                    : /NOT/i.test(c.status) ? 'QUIET'
+                    : /NEWS/i.test(c.status) ? 'NO DATA · WATCH THE WIRE' : String(c.status).toUpperCase()}
+                </Text>
+                {CHANNEL_WHY[c.id] ? (
+                  <Text style={[MONO, { color: C.accent, fontSize: 8.5, letterSpacing: 0.8, marginLeft: 8 }]}>
+                    {chan === c.id ? 'CLOSE' : 'EXPLAIN'}
+                  </Text>
+                ) : null}
               </Pressable>
               {chan === c.id && CHANNEL_WHY[c.id] ? (
                 <View style={{ marginTop: 8, marginLeft: 18, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 10, paddingBottom: 4 }}>
@@ -1555,6 +1575,33 @@ function lineWhy(k) {
   const t = String(k || '');
   for (const [rx, title, body] of LINE_WHY) if (rx.test(t)) return { title, body };
   return null;
+}
+
+// ── SPARKLINE — the path a number took, with the line it had to cross. ─────────────────────────
+// 2026-09-16 (user: "the graphs are bad, I want an actual trend line graph not just a bar for the
+// treasury measures"). A bar says where a number sits; it cannot say whether it got there slowly or
+// this week, which for a yield is the whole story. data_feeds.py now ships ~40 business days per
+// board line with the live tape as the last point, so this draws the real path against the threshold.
+function Sparkline({ hist, line, hit, w = 300, h = 40 }) {
+  if (!Array.isArray(hist) || hist.length < 8) return null;
+  const vals = hist.filter((v) => typeof v === 'number' && Number.isFinite(v));
+  if (vals.length < 8) return null;
+  const lo = Math.min(...vals, Number.isFinite(line) ? line : Infinity);
+  const hi = Math.max(...vals, Number.isFinite(line) ? line : -Infinity);
+  const span = hi - lo || 1;
+  const pad = span * 0.12;
+  const y = (v) => h - 3 - ((v - lo + pad / 2) / (span + pad)) * (h - 6);
+  const x = (i) => (i / (vals.length - 1)) * w;
+  const d = vals.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+  const col = hit ? C.crit : C.calm;
+  const ly = Number.isFinite(line) ? y(line) : null;
+  return (
+    <Svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      {ly != null ? <Line x1="0" y1={ly} x2={w} y2={ly} stroke={C.text} strokeWidth="1" strokeDasharray="4 4" opacity="0.5" /> : null}
+      <SvgPath d={d} stroke={col} strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      <Circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r="3.2" fill={col} />
+    </Svg>
+  );
 }
 
 // ── WHY A NUMBER MATTERS — the standing explanation behind each market print. ───────────────────
@@ -2097,6 +2144,129 @@ function BoardsTab({ data, goArticle }) {
 }
 
 
+// ── THE THEATRES — the desk's consolidated view of each running situation. ─────────────────────
+// 2026-09-16 (user: "most of these don't even need calls. I want calls for big news or general news
+// all in one. Instead of a specific article of Iran mining a ship in the strait, which would be in
+// news, calls would be collecting all the data from the WHOLE WAR, not just that article. So calls is
+// the general consensus of all the news articles"). He is right: fifty stories produced fifty calls,
+// which is a feed, not a view. A theatre gathers every story, every call, every chair and every dated
+// decision in one situation, and leads with the sharpest thing the desk believes about it.
+// The desk files by region, but a reader thinks in wars: Iran, Israel and the wider Middle East are
+// one situation, as are Russia and Ukraine. Merge only where the fighting is genuinely joined.
+const THEATRE_OF = { Iran: 'Iran and the Middle East', Israel: 'Iran and the Middle East',
+  'Middle East': 'Iran and the Middle East', Russia: 'Russia and Ukraine', Ukraine: 'Russia and Ukraine' };
+function theatresFrom(cards, clocks) {
+  const by = new Map();
+  (cards || []).forEach((c, idx) => {
+    const k = THEATRE_OF[c.region] || c.region || 'Global';
+    const t = by.get(k) || { name: k, cards: [], calls: [], chairs: new Map() };
+    t.cards.push({ c, idx });
+    const call = (c.hist || {}).call;
+    if (call && call.event && call.p != null) t.calls.push({ call, idx, head: c.head, hist: c.hist });
+    const sec = (c.read || []).find((x) => x.h === 'IN THEIR SHOES');
+    if (sec && sec.p) {
+      String(sec.p).trim().split(/\s(?=\d\.\s)/).forEach((part) => {
+        const m = part.match(/^\d\.\s*([^:.]{2,42})[:.]\s*(.+)$/s);
+        if (m && m[2].trim().length >= 60) {
+          const key = m[1].trim().toLowerCase().replace(/^(the|president|prime minister)\s+/, '');
+          if (!t.chairs.has(key)) t.chairs.set(key, { name: m[1].trim(), body: m[2].trim(), idx });
+        }
+      });
+    }
+    by.set(k, t);
+  });
+  const out = [...by.values()].map((t) => {
+    t.calls.sort((a, b) => Math.abs(Number(b.call.p) - 50) - Math.abs(Number(a.call.p) - 50));
+    t.chairList = [...t.chairs.values()];
+    // the dates that bear on this theatre, matched on the theatre's own words
+    const words = new Set(t.cards.flatMap(({ c }) => tokens(decode(c.head || '') + ' ' + decode(c.tag || ''))));
+    t.dates = (clocks || []).filter((k) => {
+      const kt = tokens(decode(k.label || '') + ' ' + decode(k.why || ''));
+      let n = 0; for (const w of kt) if (words.has(w)) n++;
+      return n >= 2;
+    });
+    return t;
+  });
+  return out.sort((a, b) => b.cards.length - a.cards.length);
+}
+function Theatres({ cards, clocks, goArticle }) {
+  const [open, setOpen] = useState(null);
+  const ts = theatresFrom(cards, clocks);
+  if (!ts.length) return null;
+  return (
+    <Section title="The theatres" extra={ts.length + ' running'} fold>
+      <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 10 }]}>
+        One situation at a time, not one story at a time: every article the desk filed on it, the
+        principals it reasoned through, the dates that decide it, and what it expects to happen.
+      </Text>
+      {ts.map((t, i) => {
+        const isOpen = open === i;
+        const top = t.calls[0];
+        return (
+          <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line }}>
+            <Pressable onPress={() => setOpen(isOpen ? null : i)} style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[s.actorName, SERIF, { fontSize: 21, flex: 1 }]}>{decode(t.name)}</Text>
+                {top ? (
+                  <Text style={[MONO, { color: C.accent, fontSize: 21, fontWeight: '800', marginRight: 10 }]}>
+                    {Math.round(Number(top.call.p)) + '%'}
+                  </Text>
+                ) : null}
+                <Text style={{ color: C.accent, fontSize: 18 }}>{isOpen ? '\u2212' : '\u203a'}</Text>
+              </View>
+              {top ? <Text style={{ color: C.text, fontSize: 14, lineHeight: 20, marginTop: 5 }} numberOfLines={isOpen ? undefined : 2}>{decode(top.call.event)}</Text> : null}
+              <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginTop: 6 }]}>
+                {[t.cards.length + (t.cards.length === 1 ? ' STORY' : ' STORIES'),
+                  t.calls.length + ' CALLS', t.chairList.length + ' CHAIRS',
+                  t.dates.length ? t.dates.length + ' DATED' : null].filter(Boolean).join('  \u00b7  ')}
+              </Text>
+            </Pressable>
+            {isOpen ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 18 }}>
+                {t.dates.length ? (
+                  <>
+                    <Text style={[MONO, { color: C.high, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700', marginTop: 4 }]}>WHAT DECIDES IT, AND WHEN</Text>
+                    {t.dates.slice(0, 3).map((k, j) => (
+                      <Text key={j} style={{ color: C.text, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
+                        <Text style={[MONO, { color: C.high }]}>{String(k.date || '').slice(5) + '  '}</Text>{decode(k.label)}
+                      </Text>
+                    ))}
+                  </>
+                ) : null}
+                <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700', marginTop: 16 }]}>WHAT THE DESK EXPECTS</Text>
+                {t.calls.slice(0, 5).map((x, j) => (
+                  <Pressable key={j} onPress={() => goArticle && goArticle(x.idx)} style={{ flexDirection: 'row', gap: 12, marginTop: 9, alignItems: 'flex-start' }}>
+                    <Text style={[MONO, { color: C.accent, fontSize: 15, fontWeight: '800', width: 46 }]}>{Math.round(Number(x.call.p)) + '%'}</Text>
+                    <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 19, flex: 1 }} numberOfLines={3}>{decode(x.call.event)}</Text>
+                  </Pressable>
+                ))}
+                {t.chairList.length ? (
+                  <>
+                    <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700', marginTop: 16 }]}>WHOSE DECISION IT IS</Text>
+                    <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
+                      {t.chairList.slice(0, 8).map((ch) => decode(ch.name)).join('  \u00b7  ')}
+                    </Text>
+                  </>
+                ) : null}
+                <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700', marginTop: 16 }]}>
+                  {'THE STORIES BEHIND IT \u00b7 ' + t.cards.length}
+                </Text>
+                {t.cards.slice(0, 6).map(({ c, idx }, j) => (
+                  <Pressable key={j} onPress={() => goArticle && goArticle(idx)} style={{ marginTop: 8 }}>
+                    <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 19 }} numberOfLines={2}>
+                      <Text style={{ color: C.accent }}>{'\u203a '}</Text>{decode(c.head)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </Section>
+  );
+}
+
 // ── THE CHAIRS — every principal the desk reasoned from today. ─────────────────────────────────
 // 2026-09-16 (user: "for calls we need to do more than just percentage of prediction. This makes it
 // look like a Polymarket rip off ... this is where the geopolitical strategy and analyst brain comes
@@ -2292,14 +2462,15 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
   return (
     <View style={s.stack}>
+      <Theatres cards={data.brief} clocks={data.clocks} goArticle={goArticle} />
       <Chairs cards={data.brief} goArticle={goArticle} />
       <Calendar clocks={data.clocks} />
-      <DeskCalls cards={data.brief} goArticle={goArticle} />
       {/* 2026-09-16 (user: "calls is much better logically but still way too many headlines to expand
           and read - we need to condense it, it's a great tool"). Four doors, not nine: the reasoning,
           the calls, the dates, and everything the desk keeps for itself behind one more. The logic is
           untouched; only the number of things asking to be opened. */}
-      <Section title="More from the desk" extra="the book, the record, the lab" fold>
+      <Section title="More from the desk" extra="every call, the book, the record" fold>
+        <DeskCalls cards={data.brief} goArticle={goArticle} />
         <Section title="The tracked book" extra={String(fcs.length)} fold>
           <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
           {fcs.map((f, i) => {
@@ -2463,6 +2634,8 @@ function DataTab({ data, easy, world, hist }) {
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
+      {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
+      {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       {data.plumbing ? (
         <Section title="The economic read" extra={data.plumbing.stage ? 'live' : ''}>
           <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
@@ -2481,8 +2654,6 @@ function DataTab({ data, easy, world, hist }) {
           </View>
         </Section>
       ) : null}
-      {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
-      {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       <Dossiers items={data.dossiers} />
       <WorldSections world={world} hist={hist} />
             {data.actors && data.actors.length ? (
