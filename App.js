@@ -7,7 +7,6 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Line, Path as SvgPath, Rect, Text as SvgText } from 'react-native-svg';
-import { LAND_PATH } from './worldmap';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
 // 2026-09-14 WORLD tab: primary-source country data (geobrief/world_data.py) and the situation-room
@@ -99,7 +98,7 @@ function applyTheme(name, accent) {
   GRADE_META = mkGradeMeta();
   VERDICT_META = mkVerdictMeta();
 }
-const RISK_LEVELS = ['calm', 'elev', 'high', 'crit'];
+
 // ── THE WEB — region is the connective key across board / stories / calls / decode ──
 // (mirrors dashboard.html's REGION_RX; brief cards carry `region` explicitly, everything
 // else gets its theater inferred from text until the analyst authors it)
@@ -265,16 +264,7 @@ function briefSorted(brief) {
     return tb !== ta ? tb - ta : a.i - b.i;
   });
 }
-function timeLabel(ts) {
-  if (!ts) return '';
-  const t = Date.parse(ts); if (isNaN(t)) return '';
-  const d = new Date(t), now = new Date();
-  const mins = Math.round((now - d) / 60000);
-  if (mins >= 0 && mins < 60) return mins <= 1 ? 'just now' : mins + 'm ago';
-  if (mins >= 60 && mins < 1440 && d.toDateString() === now.toDateString())
-    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+
 // Full stamp for article cards: always date + time, plus freshness when recent.
 // "AUG 30 · 04:01 · 2H AGO" — a reader should never have to guess when a read was written.
 function fullStamp(ts) {
@@ -341,67 +331,8 @@ function ProbBar({ p, prev }) {
 
 
 // The WHY behind the posture is a drop-down, not a wall of text on the front door —
-// the gauge answers "how bad", the reader chooses whether to ask "why".
-function WhyPosture({ text, deep }) {
-  const [open, setOpen] = useState(deep);
-  useEffect(() => { setOpen(deep); }, [deep]);   // keep expansion in sync with the level toggle
-  if (!text) return null;
-  return (
-    <View>
-      <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
-        <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'WHY THIS POSTURE'}</Text>
-      </Pressable>
-      {open ? (
-        <View style={s.ctxpanel}>
-          <Text style={s.gline}>{decode(text)}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
 
-// The fun scale: same analyst-set level underneath, told the way it feels.
-const KEG = { calm: 'ALL QUIET', elev: 'SPARKS', high: 'FUSE LIT', crit: 'POWDER KEG' };
-const KEG_SCALE = ['CALM', 'ELEVATED', 'HIGH', 'CRITICAL'];
 
-function ThreatGauge({ risk, events, forecasts }) {
-  const idx = RISK_LEVELS.indexOf(risk.color);
-  const rc = riskColor[risk.color] || C.elev;
-  // receipts, not vibes: the composite is auditable against countable inputs shown WITH it
-  const sev = { crit: 0, high: 0, elev: 0 };
-  (events || []).forEach((e) => { if (sev[e.sev] != null) sev[e.sev]++; });
-  const moved = (forecasts || []).filter((f) => f.prev != null && f.p !== f.prev).length;
-  return (
-    <View style={s.gauge}>
-      <View style={s.gtop}>
-        <Text style={[s.glabel, MONO]}>GLOBAL THREAT LEVEL</Text>
-        <Text style={[s.gstate, SERIF, { color: rc }]}>{risk.state}</Text>
-      </View>
-      <View style={[s.gscale, { marginBottom: 6 }]}>
-        <Text style={[s.gscaleTxt, MONO]}>
-          <Text style={{ color: C.crit }}>{sev.crit} CRIT</Text>
-          {' · '}
-          <Text style={{ color: C.high }}>{sev.high} HIGH</Text>
-          {' · '}
-          <Text style={{ color: C.elev }}>{sev.elev} ELEV</Text>
-          {' ON THE BOARD'}
-        </Text>
-        <Text style={[s.gscaleTxt, MONO]}>{moved + '/' + (forecasts || []).length + ' CALLS MOVED'}</Text>
-      </View>
-      <View style={s.meter}>
-        {RISK_LEVELS.map((lv, i) => (
-          <View key={lv} style={[s.zone, { backgroundColor: riskColor[lv], opacity: i === idx ? 1 : 0.28 }]} />
-        ))}
-        <View style={[s.needle, { left: `${((idx + 0.5) / 4) * 100}%`, marginLeft: -6 }]} />
-      </View>
-      <View style={s.gscale}>
-        {KEG_SCALE.map((t) => (
-          <Text key={t} style={[s.gscaleTxt, MONO]}>{t}</Text>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 // ── THE FRONT PAGE MODEL (NYT) ────────────────────────────────────────────────
 // A newspaper never hands you five equal slabs of text. It hands you an INDEX you
@@ -425,14 +356,7 @@ function articleParts(item) {
     : { head: clipHead(full), stand: '', longHead: full };
 }
 // First n sentences — the dek under an index headline. Written without lookbehind
-// so it holds on Hermes.
-function firstSentences(txt, n) {
-  const str = decode(txt || '').replace(/\s+/g, ' ').trim();
-  const re = /[.?!]["')\]]?\s/g;
-  let out = '', count = 0, m;
-  while (count < n && (m = re.exec(str))) { out = str.slice(0, m.index + m[0].length).trim(); count++; }
-  return out || str;
-}
+
 function kickerOf(item) {
   const parts = [];
   if (item.region) parts.push(String(item.region).toUpperCase());
@@ -1071,19 +995,6 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
   );
 }
 
-// ── STAT STRIP — every category opens with numbers, never a paragraph ──
-function StatStrip({ stats }) {
-  return (
-    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
-      {stats.map(([num, label], i) => (
-        <View key={i} style={{ flex: 1, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, paddingVertical: 8, alignItems: 'center' }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 16, fontWeight: '700' }]} numberOfLines={1}>{String(num)}</Text>
-          <Text style={[MONO, { color: C.muted, fontSize: 8.5, letterSpacing: 0.8, marginTop: 2 }]} numberOfLines={1}>{label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 // ── FILTERS live behind a dropdown, not a banner — tap ⌕ to reveal the chips ──
 function FilterDrop({ pairs, active, onPick }) {
@@ -1100,163 +1011,8 @@ function FilterDrop({ pairs, active, onPick }) {
 }
 
 
-const SPARK = '▁▂▃▄▅▆▇█';
-function sparkline(sArr) { return (sArr || []).map((v) => SPARK[Math.max(0, Math.min(7, v))]).join(''); }
-
-// ── CLOCKS — the calendars that price the board. Countdown chips; tap for which file the clock runs on. ──
-function ClocksStrip({ clocks }) {
-  const [sel, setSel] = useState(null);
-  const cs = (clocks || []).filter((c) => c.date)
-    .map((c) => ({ ...c, days: Math.ceil((new Date(c.date + 'T00:00') - Date.now()) / 86400000) }))
-    .filter((c) => c.days >= -1);
-  if (!cs.length) return null;
-  const col = (d) => (d <= 7 ? C.crit : d <= 30 ? C.high : C.elev);
-  return (
-    <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
-        {cs.map((c, i) => (
-          <Pressable key={i} onPress={() => setSel(sel === i ? null : i)}
-            style={[s.rchip, { borderColor: col(c.days) }]}>
-            <Text style={[s.rchipTxt, MONO, { color: col(c.days) }]}>
-              {c.label + ' −' + Math.max(c.days, 0) + 'd'}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-      {sel != null && cs[sel] ? (
-        <View style={s.ctxpanel}>
-          <Text style={[s.ctxlbl, MONO, { color: col(cs[sel].days) }]}>
-            {cs[sel].label + ' · ' + cs[sel].date + ' (' + cs[sel].days + ' DAYS)'}
-          </Text>
-          <Text style={s.ctxP}>{decode(cs[sel].why || '')}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
 
 // ── THE BOARD — the situation-room wall map. Tap a point, get the read. Learning is invited
-// (every dot is a question), never forced (the brief below works without touching it). ──
-function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
-  // LIVE HAZARD LAYER — USGS quakes M5+/48h (keyless, best-effort; the board never depends on it)
-  const [quakes, setQuakes] = useState([]);
-  const [selQ, setSelQ] = useState(null);
-  useEffect(() => {
-    const since = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
-    fetch(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${since}&minmagnitude=5&orderby=magnitude&limit=25`)
-      .then((r) => r.json())
-      .then((gj) => setQuakes(gj.features || []))
-      .catch(() => {});
-  }, []);
-  if (!events || !events.length) return null;
-  const setSel = (i) => { setSelQ(null); onSelect(i); };
-  const X = (lon) => ((lon + 180) / 360) * 1000;
-  const Y = (lat) => ((90 - lat) / 180) * 500;
-  const grid = [];
-  for (let lon = -150; lon <= 150; lon += 30) grid.push({ x1: X(lon), y1: 0, x2: X(lon), y2: 500 });
-  for (let lat = -60; lat <= 60; lat += 30) grid.push({ x1: 0, y1: Y(lat), x2: 1000, y2: Y(lat) });
-  const e = sel != null ? events[sel] : null;
-  const selC = e ? (riskColor[e.sev] || C.elev) : null;
-  const coords = e
-    ? (e.lat >= 0 ? e.lat.toFixed(2) + 'N' : (-e.lat).toFixed(2) + 'S') + ' ' +
-      (e.lon >= 0 ? e.lon.toFixed(2) + 'E' : (-e.lon).toFixed(2) + 'W')
-    : '';
-  return (
-    <View style={s.section}>
-      <View style={s.h2row}>
-        <Text style={s.h2}>THE BOARD</Text>
-        <View style={s.h2rule} />
-        <Text style={[s.h2extra, MONO]}>{events.length + ' ACTIVE'}</Text>
-      </View>
-      <View style={{ backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line }}>
-        <Svg viewBox="0 0 1000 500" width="100%" height={undefined} style={{ aspectRatio: 2 }}>
-          <Rect x="0" y="0" width="1000" height="500" fill={C.panel2} />
-          {grid.map((g, i) => (
-            <Line key={'g' + i} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke={C.line} strokeWidth="0.4" opacity="0.35" />
-          ))}
-          <SvgPath d={LAND_PATH} fill={C.chip} stroke={C.line} strokeWidth="0.6" />
-          {e ? (
-            <>
-              <Line x1={X(e.lon)} y1="0" x2={X(e.lon)} y2="500" stroke={selC} strokeWidth="0.8" opacity="0.5" strokeDasharray="4 3" />
-              <Line x1="0" y1={Y(e.lat)} x2="1000" y2={Y(e.lat)} stroke={selC} strokeWidth="0.8" opacity="0.5" strokeDasharray="4 3" />
-            </>
-          ) : null}
-          {quakes.map((f, i) => {
-            const [qlon, qlat] = f.geometry.coordinates;
-            return (
-              <Circle key={'q' + i} cx={X(qlon)} cy={Y(qlat)} r={2 + (f.properties.mag - 4)}
-                fill="none" stroke={C.muted} strokeWidth="1" opacity="0.8"
-                onPress={() => { onSelect(null); setSelQ(i); }} />
-            );
-          })}
-          {events.map((ev, i) => {
-            const c = riskColor[ev.sev] || C.elev;
-            return (
-              <Circle
-                key={'e' + i}
-                cx={X(ev.lon)} cy={Y(ev.lat)} r={sel === i ? 7 : 5}
-                fill={c} stroke={C.ink} strokeWidth="0.8" opacity={sel == null || sel === i ? 1 : 0.55}
-                onPress={() => setSel(i)}
-              />
-            );
-          })}
-        </Svg>
-      </View>
-      <View style={s.ctxpanel}>
-        {selQ != null && quakes[selQ] ? (
-          <>
-            <Text style={[s.ctxlbl, MONO]}>
-              {'◌ SEISMIC · M' + quakes[selQ].properties.mag.toFixed(1) + ' · '
-                + Math.round((Date.now() - quakes[selQ].properties.time) / 3600000) + 'H AGO · USGS LIVE'}
-            </Text>
-            <Text style={s.ctxP}>
-              {(quakes[selQ].properties.place || '—')
-                + '. Sensor data, not analyst judgment — shown because disasters move politics (relief logistics, grid failures, border crossings, blame).'}
-            </Text>
-          </>
-        ) : e ? (
-          <>
-            <Text style={[s.ctxlbl, MONO, { color: selC }]}>
-              {'■ ' + decode(e.label).toUpperCase() + '  · ' + coords + ' · ' + (e.sev || 'elev').toUpperCase()}
-            </Text>
-            <Text style={s.ctxP}>{decode(e.note)}</Text>
-            {(() => {
-              const ar = evRegion(e);
-              const att = ar && (data.attention || {})[ar];
-              return att ? (
-                <Text style={[MONO, { color: C.muted, fontSize: 12, marginTop: 4 }]}>
-                  {sparkline(att.s) + '  WORLD ATTENTION ' + att.r + 'x 14-DAY BASELINE (GDELT)'}
-                </Text>
-              ) : null;
-            })()}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {(() => {
-                const r = evRegion(e);
-                if (!r) return null;
-                const n = (data.brief || []).filter((c) => c.region === r).length;
-                const calls = regionForecasts(data, r).length;
-                return (
-                  <>
-                    {n ? <WebLink label={'READ THE COVERAGE · ' + r.toUpperCase() + ' (' + n + ') ↓'} onPress={() => onFilter(r)} /> : null}
-                    {calls ? <WebLink label={'OUR CALLS ON THIS (' + calls + ') →'} onPress={() => goTab('calls')} /> : null}
-                  </>
-                );
-              })()}
-            </View>
-          </>
-        ) : (
-          <Text style={[s.ctxlbl, MONO]}>
-            {'TAP A POINT FOR THE READ · '}
-            <Text style={{ color: C.elev }}>● ELEV </Text>
-            <Text style={{ color: C.high }}>● HIGH </Text>
-            <Text style={{ color: C.crit }}>● CRIT </Text>
-            <Text style={{ color: C.muted }}>◌ SEISMIC</Text>
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
 
 // ── QUIZ — optional daily 5-question self-test on the brief; collapsed so it never intrudes ──
 function QuizQuestion({ q, index, onAnswered }) {
@@ -1323,108 +1079,7 @@ function QuizSection({ quiz, bare }) {
 }
 
 // ── DECODE — a claim, interrogated: announced vs binding, and who gains vs who pays ──
-// NOTE: `decode(...)` here is the HTML-entity helper defined above, unrelated to the DECODE tab.
-function DecodeCard({ item, easy, deep, coverageRegion, onCoverage }) {
-  const [open, setOpen] = useState(deep);
-  useEffect(() => { setOpen(deep); }, [deep]);   // keep expansion in sync with the level toggle
-  const vm = VERDICT_META[item.verdict] || VERDICT_META.partly;
-  const angles = item.angles || [];
-  const watch = item.watch || [];
-  const clock = item.clock || {};
-  const buckets = [['0–90 DAYS', clock.d90], ['6–18 MONTHS', clock.m18], ['3–7 YEARS', clock.y7]].filter(([, v]) => v);
 
-  return (
-    <View style={s.storycard}>
-      <View style={[s.spine, { backgroundColor: vm.c }]} />
-      <View style={s.cardmeta}>
-        <Text style={[s.ktag, MONO, { marginBottom: 0, color: vm.c, borderColor: vm.c }]}>{vm.label}</Text>
-        {fullStamp(item.ts) ? <Text style={[s.stime, MONO]}>{fullStamp(item.ts)}</Text> : null}
-      </View>
-      <Text style={[s.storyH3, SERIF, easy && { fontSize: 21 }]}>{decode(item.claim)}</Text>
-      {item.source ? <Text style={[s.stime, MONO, { marginBottom: 6 }]}>{decode(item.source).toUpperCase()}</Text> : null}
-
-      {easy ? (
-        <Text style={[s.storyP, { fontSize: 16.5, lineHeight: 27 }]}>{decode(item.easy || item.verdictNote)}</Text>
-      ) : (
-        <>
-          {item.verdictNote ? <Text style={s.storyP}>{decode(item.verdictNote)}</Text> : null}
-          <Pressable style={s.ctxbtn} onPress={() => setOpen((o) => !o)}>
-            <Text style={[s.ctxbtnTxt, MONO]}>{(open ? '− ' : '＋ ') + 'DECODE THE CLAIM'}</Text>
-          </Pressable>
-          {open && (
-            <View style={s.ctxpanel}>
-              {item.reality ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO]}>WHAT IS ACTUALLY TRUE TODAY</Text>
-                  <Text style={s.ctxP}>{decode(item.reality)}</Text>
-                </>
-              ) : null}
-              {item.aspiration ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO]}>WHAT IS ASPIRATIONAL OR UNVERIFIED</Text>
-                  <Text style={s.ctxP}>{decode(item.aspiration)}</Text>
-                </>
-              ) : null}
-              {angles.length ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO]}>WHO GAINS, WHO PAYS</Text>
-                  {angles.map((a, i) => (
-                    <Text key={i} style={s.li}>
-                      <Text style={{ color: C.accent }}>› </Text>
-                      <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>
-                      {' — ' + decode(a.effect)}
-                    </Text>
-                  ))}
-                </>
-              ) : null}
-              {buckets.length ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO]}>ON THE CLOCK</Text>
-                  {buckets.map(([lab, txt], i) => (
-                    <Text key={i} style={s.li}>
-                      <Text style={{ color: C.accent }}>› </Text>
-                      <Text style={[MONO, { fontWeight: '700' }]}>{lab}</Text>
-                      {' — ' + decode(txt)}
-                    </Text>
-                  ))}
-                </>
-              ) : null}
-              {watch.length ? (
-                <>
-                  <Text style={[s.ctxlbl, MONO]}>WHAT WOULD CONFIRM OR KILL THIS</Text>
-                  {watch.map((w, i) => (
-                    <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>
-                  ))}
-                </>
-              ) : null}
-            </View>
-          )}
-          {coverageRegion ? (
-            <WebLink label={'SEE THE COVERAGE · ' + coverageRegion.toUpperCase() + ' →'} onPress={() => onCoverage(coverageRegion)} />
-          ) : null}
-        </>
-      )}
-    </View>
-  );
-}
-
-
-// ── HOME — the dashboard (mockup shape): threat level, the $100 test, top developments, analyst tools ──
-function CostCard({ cost }) {
-  if (!cost || !cost.mult) return null;
-  return (
-    <View style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 14 }}>
-      <Text style={[s.glabel, MONO]}>THE $100 TEST</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 6 }}>
-        <Text style={[SERIF, { color: C.text, fontSize: 22 }]}>$100 in 2019 </Text>
-        <Text style={[SERIF, { color: C.accent, fontSize: 26 }]}>{'= $' + Math.round(100 * cost.mult) + ' now'}</Text>
-      </View>
-      <Text style={[MONO, { color: C.muted, fontSize: 10, marginTop: 4 }]}>
-        {'PRICES +' + cost.pct + '% SINCE 2019 · CPI THROUGH ' + cost.asof + ' · FRED'}
-      </Text>
-    </View>
-  );
-}
 
 // ── MONEY PRINTER RED BOARD — Tier-0 prints vs stated thresholds (mirrors dashboard plumbing tab).
 // `board` is script-owned (data_feeds.py redboard apply): colour, lines, crisis channels A-D. ──
@@ -2761,8 +2416,7 @@ function DataTab({ data, easy, world, hist }) {
   );
 }
 
-const LEVELS = [['simple', 'SIMPLE'], ['regular', 'REGULAR'], ['deep', 'DEEP']];
-// Text size is the reader's, not the designer's. Three stops; the article/prose styles multiply by it.
+
 // ── WORLD — primary-source numbers and the situation-room history graph ──────────────────────────
 // Every number on this tab is a provenanced cell {v, unit, year, src, code} from a primary statistical
 // source (World Bank, IMF, UN Comtrade, UNHCR, USGS, NASA, FRED). No LLM prose. A missing value renders
@@ -3377,9 +3031,7 @@ function buildStyles() {
   return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ink },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
-  statusdot: { width: 8, height: 8, borderRadius: 4, shadowOpacity: 0.9, shadowRadius: 5 },
   wordmark: { color: C.text, fontWeight: '800', letterSpacing: 2.5, fontSize: 15 },
-  classbar: { backgroundColor: C.elev, color: C.ink, textAlign: 'center', fontSize: 9, letterSpacing: 3, paddingVertical: 3, fontWeight: '700' },
   stamp: { color: C.muted, fontSize: 11, letterSpacing: 0.5, marginLeft: 'auto' },
   levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel },
   levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
@@ -3399,30 +3051,11 @@ function buildStyles() {
   h2rule: { flex: 1 },
   h2extra: { color: C.accent, fontSize: 13, fontWeight: '600' },
   // gauge
-  gauge: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 6, padding: 18 },
-  gtop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 13 },
-  glabel: { fontSize: 9.5, letterSpacing: 2, color: C.muted },
-  gstate: { fontSize: 24, fontWeight: '700' },
-  meter: { flexDirection: 'row', gap: 3, height: 9, marginBottom: 7, position: 'relative' },
-  zone: { flex: 1, borderRadius: 2 },
-  needle: { position: 'absolute', top: -4, width: 12, height: 17, backgroundColor: C.accent, borderRadius: 2, borderWidth: 2, borderColor: C.panel },
-  gscale: { flexDirection: 'row', justifyContent: 'space-between' },
-  gscaleTxt: { fontSize: 8, letterSpacing: 0.5, color: C.muted },
-  gline: { color: C.text, fontFamily: 'Charter', fontSize: 17, lineHeight: 25, marginTop: -8, paddingHorizontal: 4 },
   // plain lead
-  plainLead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderLeftWidth: 3, borderLeftColor: C.accent, borderRadius: 6, padding: 14 },
-  plainLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: C.accent },
-  plainP: { color: C.text, fontSize: 16.5, lineHeight: 25, marginTop: 6 },
   // brief / story
-  briefhead: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: 4, paddingTop: 2 },
-  briefT: { fontSize: 11, fontWeight: '700', letterSpacing: 2.4, color: C.muted },
-  briefD: { marginLeft: 'auto', fontSize: 10, color: C.accent, letterSpacing: 0.6 },
   // ── FRONT PAGE ──────────────────────────────────────────────────────────────
   // A newspaper's grid is made of type weight and hairlines, not boxes. The index
   // rows have no card chrome at all: a rule separates them, and size says rank.
-  masthead: { flexDirection: 'row', alignItems: 'baseline', borderBottomWidth: 1, borderBottomColor: C.line, paddingBottom: 10, paddingHorizontal: 2 },
-  mastT: { color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.4 },
-  mastD: { marginLeft: 'auto', color: C.muted, fontSize: 12 },
   dayrule: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 22, marginBottom: 4 },
   daytxt: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
   dayline: { flex: 1, height: 1, backgroundColor: C.line },
@@ -3430,16 +3063,11 @@ function buildStyles() {
   idxmeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
   idxtime: { color: C.muted, fontSize: 12 },
   // the lead is the only story on the page that gets a panel — that IS its emphasis
-  lead: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 18 },
   leadH: { color: C.text, fontSize: 30, lineHeight: 35, fontWeight: '700' },
   leadDek: { color: C.muted, fontFamily: 'Charter', fontSize: 17, lineHeight: 25, marginTop: 12 },
-  idxfoot: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   readmore: { color: C.accent, fontSize: 13, fontWeight: '700' },
-  idxsrc: { marginLeft: 'auto', color: C.muted, fontSize: 12 },
   idxrow: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 20, paddingBottom: 8, paddingHorizontal: 2 },
   idxH: { color: C.text, fontSize: 22, lineHeight: 28, fontWeight: '700' },
-  idxDek: { color: C.muted, fontFamily: 'Charter', fontSize: 16, lineHeight: 23, marginTop: 8 },
-  teaseH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700', marginTop: 1 },
   readH: { color: C.muted, fontWeight: '600' },
   conspWarn: { color: C.high, fontSize: 10.5, letterSpacing: 1.5, fontWeight: '700', marginBottom: 8 },
   conspTier: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 10 },
@@ -3451,7 +3079,6 @@ function buildStyles() {
   backtxt: { color: C.accent, fontSize: 14, fontWeight: '600' },
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
-  rctl: { color: C.muted, fontSize: 13, fontWeight: '600' },
   artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
   sharebtn: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center' },
@@ -3463,9 +3090,6 @@ function buildStyles() {
   searchbox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.panel, borderWidth: 1.5, borderColor: C.text, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 },
   searchin: { flex: 1, fontSize: 17, paddingVertical: 10 },
   searchH: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
-  morerow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: C.line },
-  moreT: { fontSize: 17, fontWeight: '700', color: C.text },
-  moreS: { fontSize: 13, color: C.muted, marginTop: 2 },
   srcchip: { borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13 },
   verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
   ctxbtnWide: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
@@ -3476,7 +3100,6 @@ function buildStyles() {
   nextrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: C.line },
   nextH: { color: C.text, fontSize: 18, lineHeight: 24, fontWeight: '700', marginTop: 1 },
   storycard: { position: 'relative', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingTop: 22, paddingBottom: 20, paddingLeft: 26, paddingRight: 22 },
-  spine: { position: 'absolute', left: 12, top: 22, bottom: 20, width: 2, borderRadius: 2, backgroundColor: C.accentDim },
   ktag: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.8, color: C.muted, marginBottom: 11 },
   cardmeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 },
   stime: { fontSize: 13, color: C.muted, letterSpacing: 0.6 },
@@ -3494,8 +3117,6 @@ function buildStyles() {
   li: { color: C.text, fontFamily: 'Charter', fontSize: 17, lineHeight: 25, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   foot: { color: C.muted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 6 },
   // tab intro
-  tabintro: { paddingHorizontal: 6 },
-  tabintroP: { color: C.muted, fontFamily: 'Charter', fontSize: 16.5, lineHeight: 25 },
   // calibration
   cal: { padding: 16 },
   calbig: { flexDirection: 'row', alignItems: 'baseline', gap: 12 },
@@ -3533,9 +3154,6 @@ function buildStyles() {
   actorRow: { color: C.text, fontFamily: 'Charter', fontSize: 16, lineHeight: 23, marginVertical: 3 },
   actorK: { color: C.muted, fontWeight: '600' },
   // prose
-  prose: { paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4 },
-  h3: { color: C.text, fontSize: 24, letterSpacing: -0.3, fontWeight: '700', marginTop: 12, marginBottom: 6 },
-  kicker: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 14, marginBottom: 3 },
   p: { color: C.text, fontFamily: 'Charter', fontSize: 17.5, lineHeight: 27, marginVertical: 6 },
   // gate
   gateScroll: { padding: 26, paddingTop: 60, flexGrow: 1, justifyContent: 'center' },
@@ -3555,10 +3173,6 @@ function buildStyles() {
   fpBoards: { borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 15, backgroundColor: C.panel },
   fpLesson: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 },
   fpTile: { width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 12, marginBottom: 10 },
-  nav: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 9, paddingHorizontal: 4 },
-  navBtn: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10 },
-  navTxt: { color: C.muted, fontSize: 11, letterSpacing: 1.4 },
-  navUnder: { marginTop: 5, width: 16, height: 2, borderRadius: 2, backgroundColor: C.accent },
 });
 }
 let s = buildStyles();
