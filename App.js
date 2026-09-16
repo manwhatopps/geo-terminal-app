@@ -690,11 +690,38 @@ function CallCard({ item, svgRef }) {
   const call = (item.hist || {}).call || {};
   const p = Math.max(0, Math.min(100, Math.round(Number(call.p) || 0)));
   const claim = wrapSvg(decode(call.event || item.head || ''), 42, 4);
-  const pro = ((item.hist || {}).for || []).slice(0, 2).map((x) => wrapSvg(decode(x), 40, 1)[0]);
-  const con = ((item.hist || {}).against || []).slice(0, 2).map((x) => wrapSvg(decode(x), 40, 1)[0]);
-  const T = (x, y, t, o) => <SvgText key={String(x) + '-' + y + '-' + t} x={x} y={y} fill={(o && o.fill) || C.text}
-    fontSize={(o && o.size) || 30} fontWeight={(o && o.weight) || '400'} opacity={(o && o.op) || 1}
-    letterSpacing={(o && o.ls) || 0}>{t}</SvgText>;
+  // two lines per argument, not one: a case cut off at "rewarded the commander..." is not a case
+  // measured against every live call: the first point gets two lines, the second one, so the card
+  // never silently drops half the case. At 2+2 it dropped an argument on twenty of thirty-five cards.
+  const arg = (arr) => (arr || []).slice(0, 2).map((x, i) => wrapSvg(decode(x), 46, i === 0 ? 2 : 1));
+  const pro = arg((item.hist || {}).for);
+  const con = arg((item.hist || {}).against);
+  const T = (x, y, t, o) => <SvgText key={String(x) + '-' + y + '-' + String(t).slice(0, 12)} x={x} y={y}
+    fill={(o && o.fill) || C.text} fontSize={(o && o.size) || 30} fontWeight={(o && o.weight) || '400'}
+    opacity={(o && o.op) || 1} letterSpacing={(o && o.ls) || 0}>{t}</SvgText>;
+  // laid out from a cursor, so a long claim or a two-line argument can never land on the footer
+  const out = []; const FOOT = CARD_H - 150;
+  let y = 370;
+  claim.forEach((ln, i) => { out.push(T(70, y, ln, { size: 37, weight: '600' })); y += 46; });
+  y += 18;
+  out.push(<Rect key="rule" x="70" y={y} width={CARD_W - 140} height="2" fill={C.line} />);
+  y += 52;
+  const block = (label, colour, items, glyph) => {
+    if (!items.length || y > FOOT) return;
+    out.push(T(70, y, label, { size: 22, weight: '800', ls: 3, fill: colour }));
+    y += 40;
+    items.forEach((lines) => {
+      lines.forEach((ln, j) => {
+        if (y > FOOT) return;
+        out.push(T(70, y, (j === 0 ? glyph + ' ' : '   ') + ln, { size: 26, op: 0.92 }));
+        y += 32;
+      });
+      y += 8;
+    });
+    y += 10;
+  };
+  block('THE CASE FOR', C.calm, pro, '+');
+  block('THE CASE AGAINST', C.high, con, '\u2212');
   return (
     <Svg ref={svgRef} width={CARD_W} height={CARD_H} viewBox={`0 0 ${CARD_W} ${CARD_H}`}>
       <Rect x="0" y="0" width={CARD_W} height={CARD_H} fill={C.ink} />
@@ -702,13 +729,8 @@ function CallCard({ item, svgRef }) {
       {T(70, 92, 'PARALLAX', { size: 30, weight: '800', ls: 7, fill: C.text })}
       {T(70, 138, "THE DESK'S CALL", { size: 24, weight: '700', ls: 4, fill: C.accent })}
       {T(70, 320, p + '%', { size: 200, weight: '800', fill: C.accent })}
-      {claim.map((ln, i) => T(70, 400 + i * 46, ln, { size: 37, weight: '600' }))}
-      <Rect x="70" y={410 + claim.length * 46} width={CARD_W - 140} height="2" fill={C.line} />
-      {T(70, 470 + claim.length * 46, 'THE CASE FOR', { size: 22, weight: '800', ls: 3, fill: C.calm })}
-      {pro.map((ln, i) => T(70, 512 + claim.length * 46 + i * 38, '+ ' + ln, { size: 27, op: 0.9 }))}
-      {T(70, 600 + claim.length * 46, 'THE CASE AGAINST', { size: 22, weight: '800', ls: 3, fill: C.high })}
-      {con.map((ln, i) => T(70, 642 + claim.length * 46 + i * 38, '- ' + ln, { size: 27, op: 0.9 }))}
-      {T(70, CARD_H - 112, String(call.horizon || '').toUpperCase() + (call.conf ? '  ·  CONFIDENCE ' + String(call.conf).toUpperCase() : ''),
+      {out}
+      {T(70, CARD_H - 112, String(call.horizon || '').toUpperCase() + (call.conf ? '  \u00b7  CONFIDENCE ' + String(call.conf).toUpperCase() : ''),
         { size: 23, ls: 2, fill: C.muted })}
       {T(70, CARD_H - 62, 'Analysis and opinion, not advice. The desk publishes its misses.', { size: 22, fill: C.muted, op: 0.85 })}
     </Svg>
