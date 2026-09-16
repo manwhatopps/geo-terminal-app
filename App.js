@@ -69,15 +69,31 @@ const THEMES = {
     barBg: '#0E0D10', chip: '#221F18',
   },
 };
+// ── ACCENT COLOURWAYS (2026-09-16, user: "I like the blue colour for the article titles. We should also
+// give a couple different options for colour"). The accent is the kicker, the section headings, the
+// probability bars and every link - so it has to stay clear of the four colours that already MEAN
+// something (calm green, elev amber, high orange, crit red). These four hues do: teal, blue, violet and
+// a near-neutral graphite for readers who want the semantic colours to do all the talking. Each carries
+// its own light and dark pair, because a hue legible on near-black is rarely legible on off-white.
+const ACCENTS = {
+  ocean:    { label: 'OCEAN',    dark: ['#5FAFC2', '#2E6A82'], light: ['#1F6F8B', '#7FB8C9'] },
+  cobalt:   { label: 'COBALT',   dark: ['#6AA6E8', '#2B5D96'], light: ['#1E5FA8', '#86B4E4'] },
+  iris:     { label: 'IRIS',     dark: ['#A88BE0', '#5B4A8C'], light: ['#5B3FA8', '#A899D8'] },
+  graphite: { label: 'GRAPHITE', dark: ['#B9B2A3', '#6A655C'], light: ['#4A4740', '#9C978C'] },
+};
+const ACCENT_KEY = 'geo-accent';
+let ACCENT = 'ocean';
 const THEME_KEY = 'geo-theme';
 let THEME = 'dark';   // 2026-09-13: the user wants the original black+gold; light stays behind the toggle
-let C = THEMES[THEME];
+let C = { ...THEMES[THEME], accent: ACCENTS[ACCENT][THEME][0], accentDim: ACCENTS[ACCENT][THEME][1] };
 let riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
 // Every component reads C and s at render time, so a theme change is: swap the palette, rebuild the
 // stylesheet, re-render from the root. (buildStyles is defined with the styles at the bottom of the file.)
-function applyTheme(name) {
+function applyTheme(name, accent) {
   THEME = THEMES[name] ? name : 'light';
-  C = THEMES[THEME];
+  if (accent && ACCENTS[accent]) ACCENT = accent;
+  const pair = (ACCENTS[ACCENT] || ACCENTS.ocean)[THEME] || ACCENTS.ocean.dark;
+  C = { ...THEMES[THEME], accent: pair[0], accentDim: pair[1] };
   riskColor = { calm: C.calm, elev: C.elev, high: C.high, crit: C.crit };
   s = buildStyles();
   GRADE_META = mkGradeMeta();
@@ -2366,8 +2382,28 @@ const SIZES = [['S', 'S', 0.92], ['M', 'M', 1], ['L', 'L', 1.15]];
 const TEXT_KEY = 'geo-textsize';
 let TSCALE = 1;
 const T = (fs, lh) => ({ fontSize: Math.round(fs * TSCALE * 10) / 10, lineHeight: lh ? Math.round(lh * TSCALE) : undefined });
-function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme }) {
+function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent }) {
   return (
+    <View>
+    {onAccent ? (
+      <View style={[s.levelbar, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+        <Text style={[s.levelLbl, MONO]}>COLOUR</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginLeft: 10 }}>
+          {Object.keys(ACCENTS).map((k) => {
+            const hex = ACCENTS[k][theme === 'light' ? 'light' : 'dark'][0];
+            const on = accent === k;
+            return (
+              <Pressable key={k} onPress={() => onAccent(k)} hitSlop={6}
+                style={{ alignItems: 'center', gap: 4 }}>
+                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: hex,
+                  borderWidth: on ? 2 : 1, borderColor: on ? C.text : C.line }} />
+                <Text style={[MONO, { color: on ? C.text : C.muted, fontSize: 8, letterSpacing: 0.6 }]}>{ACCENTS[k].label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    ) : null}
     <View style={s.levelbar}>
       <Text style={[s.levelLbl, MONO]}>TEXT</Text>
       {onTheme ? (
@@ -2388,6 +2424,7 @@ function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme }) {
           })}
         </View>
       ) : null}
+    </View>
     </View>
   );
 }
@@ -2463,8 +2500,15 @@ export default function App() {
   const [level, setLevel] = useState('regular');
   const [tsize, setTsize] = useState('M');
   const [theme, setThemeState] = useState(THEME);
-  useEffect(() => { AsyncStorage.getItem(THEME_KEY).then((v) => { if (v && THEMES[v] && v !== THEME) { applyTheme(v); setThemeState(v); } }).catch(() => {}); }, []);
-  const setTheme = useCallback((v) => { applyTheme(v); setThemeState(v); AsyncStorage.setItem(THEME_KEY, v).catch(() => {}); }, []);
+  const [accent, setAccentState] = useState(ACCENT);
+  useEffect(() => {
+    AsyncStorage.multiGet([THEME_KEY, ACCENT_KEY]).then(([t, a]) => {
+      const nt = t[1] && THEMES[t[1]] ? t[1] : null, na = a[1] && ACCENTS[a[1]] ? a[1] : null;
+      if (nt || na) { applyTheme(nt || THEME, na || ACCENT); if (nt) setThemeState(nt); if (na) setAccentState(na); }
+    }).catch(() => {});
+  }, []);
+  const setAccent = useCallback((v) => { applyTheme(THEME, v); setAccentState(v); AsyncStorage.setItem(ACCENT_KEY, v).catch(() => {}); }, []);
+  const setTheme = useCallback((v) => { applyTheme(v, ACCENT); setThemeState(v); AsyncStorage.setItem(THEME_KEY, v).catch(() => {}); }, []);
   useEffect(() => { AsyncStorage.getItem(TEXT_KEY).then((v) => { if (SIZES.some(([k]) => k === v)) { TSCALE = SIZES.find(([k]) => k === v)[2]; setTsize(v); } }).catch(() => {}); }, []);
   const setSize = useCallback((v) => { TSCALE = SIZES.find(([k]) => k === v)[2]; setTsize(v); AsyncStorage.setItem(TEXT_KEY, v).catch(() => {}); }, []);
   const easy = level === 'simple', deep = level === 'deep';
@@ -2562,7 +2606,7 @@ export default function App() {
             <Text style={[MONO, { color: prefs ? C.accent : C.muted, fontSize: 13 }]}>{'A' + (theme === 'light' ? '\u263e' : '\u2600')}</Text>
           </Pressable>
         </View>
-        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} /> : null}
+        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
