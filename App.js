@@ -1425,6 +1425,8 @@ function CostCard({ cost }) {
 // `board` is script-owned (data_feeds.py redboard apply): colour, lines, crisis channels A-D. ──
 const boardColor = () => ({ RED: C.crit, YELLOW: C.elev, GREEN: C.calm });   // read at render so the theme can change
 function RedBoard({ board, compact, onPress }) {
+  const [chan, setChan] = useState(null);
+  const [lineOpen, setLineOpen] = useState(null);
   if (!board || !board.color) return null;
   const col = boardColor()[board.color] || C.muted;
   const hit = (board.lines || []).filter((l) => l.hit).length;
@@ -1456,24 +1458,57 @@ function RedBoard({ board, compact, onPress }) {
           </View>
           <Text style={[MONO, { color: C.muted, fontSize: 9.5, flex: 1 }]}>{since.toUpperCase()}</Text>
         </View>
-        {(board.lines || []).map((l, i) => (
-          <View key={'l' + i} style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 4, borderTopWidth: 1, borderTopColor: C.line }}>
-            <Text style={[MONO, { color: l.hit ? C.crit : C.muted, fontSize: 11, width: 18 }]}>{l.hit ? '✕' : '·'}</Text>
-            <Text style={[MONO, { color: l.hit ? C.text : C.muted, fontSize: 11.5, flex: 1 }]}>{decode(l.k)}</Text>
-            <Text style={[MONO, { color: l.hit ? C.crit : C.text, fontSize: 12.5, fontWeight: '700' }]}>{l.v}</Text>
-            {l.src ? <Text style={[MONO, { color: C.muted, fontSize: 8.5, marginLeft: 6, width: 78, textAlign: 'right' }]}>{String(l.src).toUpperCase()}</Text> : null}
-          </View>
-        ))}
+        {/* 2026-09-16 (user: "add a graph or simplify"). Each line is a threshold and a reading, so it
+            draws as one: the bar fills to where the number sits, the notch is the line it has to cross.
+            A crossed line is visible at a glance instead of read. */}
+        {(board.lines || []).map((l, i) => {
+          const lw = lineWhy(l.k);
+          const isOn = lineOpen === i;
+          const num = parseFloat(String(l.v).replace(/[^0-9.\-]/g, ''));
+          const tm = String(l.k).match(/([0-9]+(?:\.[0-9]+)?)\s*%?\s*$/);
+          const thr = tm ? parseFloat(tm[1]) : NaN;
+          const span = Number.isFinite(num) && Number.isFinite(thr) && thr > 0 && num >= 0 ? Math.max(num, thr) * 1.25 : 0;
+          return (
+            <View key={'l' + i} style={{ paddingVertical: 7, borderTopWidth: 1, borderTopColor: C.line }}>
+              <Pressable onPress={() => lw && setLineOpen(isOn ? null : i)} style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={[MONO, { color: l.hit ? C.crit : C.muted, fontSize: 11, width: 18 }]}>{l.hit ? '✕' : '·'}</Text>
+                <Text style={[MONO, { color: l.hit ? C.text : C.muted, fontSize: 11.5, flex: 1 }]} numberOfLines={1}>{decode(l.k)}</Text>
+                <Text style={[MONO, { color: l.hit ? C.crit : C.text, fontSize: 12.5, fontWeight: '700' }]}>{l.v}</Text>
+                {lw ? <Text style={{ color: C.accent, fontSize: 13, marginLeft: 7 }}>{isOn ? '−' : '›'}</Text> : null}
+              </Pressable>
+              {span ? (
+                <View style={{ height: 6, backgroundColor: C.barBg, borderRadius: 3, marginTop: 6, marginLeft: 18, overflow: 'hidden' }}>
+                  <View style={{ width: Math.max(2, Math.min(100, (num / span) * 100)) + '%', height: '100%', backgroundColor: l.hit ? C.crit : C.calm }} />
+                  <View style={{ position: 'absolute', left: Math.min(98, (thr / span) * 100) + '%', top: 0, width: 2, height: 6, backgroundColor: C.text, opacity: 0.9 }} />
+                </View>
+              ) : null}
+              {isOn && lw ? (
+                <View style={{ marginTop: 9, marginLeft: 18, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 10 }}>
+                  <Text style={[MONO, { color: C.text, fontSize: 10.5, letterSpacing: 1, fontWeight: '700' }]}>{lw.title.toUpperCase()}</Text>
+                  <Text style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 5 }]}>{lw.body}</Text>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
         <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.8, marginTop: 10, marginBottom: 4 }]}>CRISIS CHANNELS · WHERE A SQUEEZE WOULD EXIT</Text>
         {(board.channels || []).map((c, i) => {
           const cc = c.status === 'TRIPPED' ? C.crit : c.status === 'not tripped' ? C.calm : C.elev;
           return (
             <View key={'c' + i} style={{ paddingVertical: 5, borderTopWidth: 1, borderTopColor: C.line }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable onPress={() => CHANNEL_WHY[c.id] && setChan(chan === c.id ? null : c.id)}
+                style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={[MONO, { color: C.accent, fontSize: 11, width: 18 }]}>{c.id}</Text>
                 <Text style={[MONO, { color: C.text, fontSize: 11.5, flex: 1 }]}>{decode(c.name)}</Text>
                 <Text style={[MONO, { color: cc, fontSize: 9.5, letterSpacing: 0.8 }]}>{String(c.status).toUpperCase()}</Text>
-              </View>
+                {CHANNEL_WHY[c.id] ? <Text style={{ color: C.accent, fontSize: 13, marginLeft: 7 }}>{chan === c.id ? '−' : '›'}</Text> : null}
+              </Pressable>
+              {chan === c.id && CHANNEL_WHY[c.id] ? (
+                <View style={{ marginTop: 8, marginLeft: 18, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 10, paddingBottom: 4 }}>
+                  <Text style={[MONO, { color: C.text, fontSize: 10.5, letterSpacing: 1, fontWeight: '700' }]}>{CHANNEL_WHY[c.id][0].toUpperCase()}</Text>
+                  <Text style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 5 }]}>{CHANNEL_WHY[c.id][1]}</Text>
+                </View>
+              ) : null}
               {c.detail ? <Text style={{ color: C.muted, fontSize: 11, marginLeft: 18, marginTop: 2 }}>{decode(c.detail)}</Text> : null}
             </View>
           );
@@ -1488,6 +1523,35 @@ function RedBoard({ board, compact, onPress }) {
 
 // ── LIVE WATCHLIST — the prints the economic read is built on (plumbing.series) ──
 const trendC = () => ({ up: C.high, dn: C.calm, flat: C.muted });
+// Crisis-channel and threshold explainers. Same principle as WHY on the money prints (2026-09-16,
+// user: "I also want an explain what this means button for the crisis channels ... the jargon is so
+// hard to comprehend"). A tripwire nobody understands is decoration.
+const CHANNEL_WHY = {
+  A: ['Forced selling of government debt',
+      'If big holders have to raise cash fast, the first thing they sell is short-dated government debt, because it is the easiest thing to sell. Watching whether that is happening tells you if someone large is in trouble before they announce it.'],
+  B: ['Money leaving smaller banks',
+      'Depositors move money to bigger banks when they get nervous. A steady drain from small banks is the early shape of a banking scare - it showed up weeks before the failures in 2023.'],
+  C: ['A currency breaking outside the rich world',
+      'When the dollar is expensive and money is tight, the weakest currency goes first - and a government that loses control of its currency usually reaches for capital controls, import bans or an IMF programme, all of which are political events.'],
+  D: ['Automated selling feeding on itself',
+      'Much of the market is run by systems that sell when prices fall and borrowing costs rise. When funding costs jump, those systems sell together, which pushes prices down further. It is the mechanism that turns a bad day into a crash.'],
+};
+const LINE_WHY = [
+  [/10y|10[- ]?year/i, 'The 10-year yield above its line',
+   'The benchmark borrowing rate for the whole world. Above this level, mortgages, company debt and government interest bills all reprice upward at once - the desk treats it as the point where expensive money starts doing visible damage.'],
+  [/30y|30[- ]?year/i, 'The 30-year yield above its line',
+   'The long end is the market judging whether a government can keep paying over decades. Central banks can hold short rates down; they cannot hold this one down for long. When it leads the move, the market is pricing doubt rather than growth.'],
+  [/brent|oil|crude/i, 'Oil above its line',
+   'Above this level oil stops being a market story and becomes an inflation story: it feeds transport, fertiliser and plastics, so it reaches food and household bills within months and forces central banks to choose between growth and prices.'],
+  [/sofr|effr/i, 'The funding-rate gap',
+   'What banks actually pay to borrow overnight against what the central bank says they should pay. When the gap widens, someone is paying up for cash - it is the plumbing equivalent of a fever, and it moves before anything visible breaks.'],
+];
+function lineWhy(k) {
+  const t = String(k || '');
+  for (const [rx, title, body] of LINE_WHY) if (rx.test(t)) return { title, body };
+  return null;
+}
+
 // ── WHY A NUMBER MATTERS — the standing explanation behind each market print. ───────────────────
 // 2026-09-16 (user: "add a context button on why each stock price is significant. For example
 // explaining the 30 year yield or treasury"). The desk already writes a LIVE note on every series -
@@ -1542,21 +1606,23 @@ function LiveWatchlist({ items }) {
         const isOpen = open === i;
         return (
           <View key={i} style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line }}>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-              <Text style={[MONO, { color: C.text, fontSize: 12.5, flex: 1 }]}>{decode(x.k)}</Text>
-              <Text style={[MONO, { color: C.accent, fontSize: 15, fontWeight: '700' }]}>{x.v}</Text>
-              <Text style={[MONO, { color: trendC()[x.t] || C.muted, fontSize: 10.5, marginLeft: 8, minWidth: 54, textAlign: 'right' }]}>
-                {(x.t === 'up' ? '\u25b2 ' : x.t === 'dn' ? '\u25bc ' : '\u00b7 ') + (x.c || '')}
-              </Text>
-            </View>
-            {x.note ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>{decode(x.note)}</Text> : null}
-            {why ? (
-              <Pressable onPress={() => setOpen(isOpen ? null : i)} hitSlop={6} style={{ marginTop: 7 }}>
-                <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.1, fontWeight: '700' }]}>
-                  {(isOpen ? '\u2212 ' : '+ ') + 'WHY THIS NUMBER MATTERS'}
-                </Text>
-              </Pressable>
-            ) : null}
+            {/* 2026-09-16 (user: "fix the numbers to make it look better for the percentage ... just fold
+                all of these into a headline"). The change used to run off the right edge because value and
+                change shared one baseline row. Name on the left, value and change stacked on the right,
+                each with room; the note and the explainer only appear when the row is opened. */}
+            <Pressable onPress={() => setOpen(isOpen ? null : i)} style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+              <Text style={[MONO, { color: C.text, fontSize: 12.5, flex: 1, paddingRight: 10 }]} numberOfLines={2}>{decode(x.k)}</Text>
+              <View style={{ alignItems: 'flex-end', maxWidth: '46%' }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 16, fontWeight: '700' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{x.v}</Text>
+                {x.c ? (
+                  <Text style={[MONO, { color: trendC()[x.t] || C.muted, fontSize: 10, textAlign: 'right', marginTop: 2 }]} numberOfLines={2}>
+                    {(x.t === 'up' ? '\u25b2 ' : x.t === 'dn' ? '\u25bc ' : '') + x.c}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={{ color: C.accent, fontSize: 15, marginLeft: 8, marginTop: 1 }}>{isOpen ? '\u2212' : '\u203a'}</Text>
+            </Pressable>
+            {isOpen && x.note ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 8 }}>{decode(x.note)}</Text> : null}
             {isOpen && why ? (
               <View style={{ marginTop: 8, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 11, paddingBottom: 4 }}>
                 <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1, fontWeight: '700' }]}>{why.title.toUpperCase()}</Text>
@@ -1567,8 +1633,8 @@ function LiveWatchlist({ items }) {
         );
       })}
       <Text style={[s.foot, { paddingHorizontal: 0, marginTop: 10 }]}>
-        The grey line under each print is the desk's read on today's move. The explainer under it does not
-        change day to day - it is what the number is, and why it moves the world.
+        Tap any print for the desk's read on today's move, and for what the number is and why it moves
+        the world.
       </Text>
     </Section>
   );
@@ -2198,44 +2264,50 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
       <Chairs cards={data.brief} goArticle={goArticle} />
       <Calendar clocks={data.clocks} />
       <DeskCalls cards={data.brief} goArticle={goArticle} />
-      <Section title="The tracked book" extra={String(fcs.length)} fold>
-        <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
-        {fcs.map((f, i) => {
-          const d = f.prev != null ? f.p - f.prev : null;
-          return (
-            <Pressable key={i} onPress={() => setBook(book === i ? null : i)} style={s.pred}>
-              <View style={s.predtop}>
-                <Text style={s.predq}>{decode(f.q)}</Text>
-                <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
-              </View>
-              <ProbBar p={f.p} prev={f.prev} />
-              <View style={s.predmeta}>
-                {d ? <Text style={[s.chip, MONO, { color: d > 0 ? C.high : C.calm }]}>{(d > 0 ? '+' : '') + d}</Text> : null}
-                <Text style={s.predmetaTxt}>by {f.by}</Text>
-              </View>
-              {f.note && book === i ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
-              {f.note && book !== i ? <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1, marginTop: 6 }]}>+ WHY</Text> : null}
-            </Pressable>
-          );
-        })}
-      </Section>
-      <CalibrationTrack track={data.track} forecasts={data.forecasts} />
-      {hyps.length ? (
-        <Section title="Hidden-strategy lab" extra={hyps.length + ' live'} fold>
-          {hyps.map((h, i) => (
-            <View key={i} style={s.hyp}>
-              <Text style={[s.hypP, MONO]}>{h.p}%</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={s.hypName}>{decode(h.name)}.</Text>
-                <Text style={s.hypD}>{decode(h.d)}</Text>
-              </View>
-            </View>
-          ))}
+      {/* 2026-09-16 (user: "calls is much better logically but still way too many headlines to expand
+          and read - we need to condense it, it's a great tool"). Four doors, not nine: the reasoning,
+          the calls, the dates, and everything the desk keeps for itself behind one more. The logic is
+          untouched; only the number of things asking to be opened. */}
+      <Section title="More from the desk" extra="the book, the record, the lab" fold>
+        <Section title="The tracked book" extra={String(fcs.length)} fold>
+          <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
+          {fcs.map((f, i) => {
+            const d = f.prev != null ? f.p - f.prev : null;
+            return (
+              <Pressable key={i} onPress={() => setBook(book === i ? null : i)} style={s.pred}>
+                <View style={s.predtop}>
+                  <Text style={s.predq}>{decode(f.q)}</Text>
+                  <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
+                </View>
+                <ProbBar p={f.p} prev={f.prev} />
+                <View style={s.predmeta}>
+                  {d ? <Text style={[s.chip, MONO, { color: d > 0 ? C.high : C.calm }]}>{(d > 0 ? '+' : '') + d}</Text> : null}
+                  <Text style={s.predmetaTxt}>by {f.by}</Text>
+                </View>
+                {f.note && book === i ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
+                {f.note && book !== i ? <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1, marginTop: 6 }]}>+ WHY</Text> : null}
+              </Pressable>
+            );
+          })}
         </Section>
-      ) : null}
-      <Scenarios items={data.scenarios} />
-      <Watchlist tripwires={data.tripwires} />
-      <QuizSection quiz={data.quiz} />
+        <CalibrationTrack track={data.track} forecasts={data.forecasts} />
+        {hyps.length ? (
+          <Section title="Hidden-strategy lab" extra={hyps.length + ' live'} fold>
+            {hyps.map((h, i) => (
+              <View key={i} style={s.hyp}>
+                <Text style={[s.hypP, MONO]}>{h.p}%</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.hypName}>{decode(h.name)}.</Text>
+                  <Text style={s.hypD}>{decode(h.d)}</Text>
+                </View>
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        <Scenarios items={data.scenarios} />
+        <Watchlist tripwires={data.tripwires} />
+        <QuizSection quiz={data.quiz} />
+      </Section>
       <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
   );
