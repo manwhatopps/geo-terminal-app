@@ -2325,6 +2325,90 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   );
 }
 
+// Our own index, published with its weights and its code. Truflation's API starts at $1,999 a month
+// and its weighting is not fully published; asking a reader who came here because they trust nobody to
+// trust a black box would be the one thing this feature cannot afford. So: five bills that arrive every
+// week, public prices underneath, the weights on the screen, and the line moving when petrol moves
+// rather than a month later. It is NOT a rival to CPI and the panel says so - CPI measures everything
+// including what got cheaper; this measures the part of the basket people notice.
+function WeeklyBasket({ b }) {
+  const [openW, setOpenW] = useState(null);
+  const [method, setMethod] = useState(false);
+  if (!b || b.since == null) return null;
+  const gap = b.cpi_since != null ? Math.round((b.since - b.cpi_since) * 10) / 10 : null;
+  return (
+    <View style={{ marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 12, padding: 14 }}>
+      <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.6, fontWeight: '800' }]}>
+        {'THE WEEKLY BASKET \u00b7 OUR OWN INDEX'}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
+        <Text style={[MONO, { color: C.high, fontSize: 34, fontWeight: '800', lineHeight: 38 }]}>
+          {(b.since > 0 ? '+' : '') + b.since + '%'}
+        </Text>
+        <Text style={{ color: C.text, fontSize: 14.5, flex: 1, lineHeight: 20 }}>
+          {'what the weekly bills cost now against ' + b.base}
+        </Text>
+      </View>
+      {Array.isArray(b.series) && b.series.length >= 8 ? (
+        <View style={{ marginTop: 10 }}><Sparkline hist={b.series} w={320} h={44} /></View>
+      ) : null}
+      <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginTop: 6 }]}>
+        {'WEEK OF ' + String(b.asof || '') + (b.yoy != null ? '  \u00b7  ' + b.yoy + '% OVER 12 MONTHS' : '')
+          + (b.from ? '  \u00b7  LINE FROM ' + String(b.from).slice(0, 7) : '')}
+      </Text>
+      {gap != null ? (
+        <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 12, marginBottom: 0 }]}>
+          {'Official CPI is up ' + b.cpi_since + '% over the same window' + (b.cpi_yoy != null ? ' and ' + b.cpi_yoy + '% over 12 months' : '')
+            + '. The gap is ' + Math.abs(gap) + ' points, and it is not a contradiction: CPI measures everything a '
+            + 'household buys, including the things that got cheaper. This measures the five bills that arrive '
+            + 'every week.'}
+        </Text>
+      ) : null}
+      {(b.weights || []).map((w, i) => {
+        const open = openW === i;
+        return (
+          <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line, paddingTop: 10, marginTop: 10 }}>
+            <Pressable onPress={() => setOpenW(open ? null : i)} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+              <Text style={[MONO, { color: C.muted, fontSize: 11, width: 40 }]}>{Math.round(w.w * 100) + '%'}</Text>
+              <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{w.n}</Text>
+              <Text style={[MONO, { color: C.high, fontSize: 14, fontWeight: '800' }]}>
+                {(w.pct > 0 ? '+' : '') + w.pct + '%'}
+              </Text>
+              <Text style={{ color: C.accent, fontSize: 15 }}>{open ? '\u2212' : '+'}</Text>
+            </Pressable>
+            {open ? (
+              <View style={{ marginTop: 7 }}>
+                <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>{w.what}</Text>
+                {w.then != null ? (
+                  <Text style={[MONO, { color: C.muted, fontSize: 11, marginTop: 5 }]}>
+                    {'$' + w.then + ' \u2192 $' + w.now + '  \u00b7  ' + String(w.src).toUpperCase()
+                      + (w.asof ? '  \u00b7  ' + w.asof : '')}
+                  </Text>
+                ) : null}
+                {(w.items || []).map((it, j) => (
+                  <View key={j} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
+                    <Text style={{ color: C.text, fontSize: 13.5, flex: 1 }}>{it.n}</Text>
+                    <Text style={[MONO, { color: C.muted, fontSize: 11.5 }]}>{'$' + it.then + ' \u2192 $' + it.now}</Text>
+                    <Text style={[MONO, { color: C.high, fontSize: 12.5, fontWeight: '700', width: 58, textAlign: 'right' }]}>
+                      {(it.pct > 0 ? '+' : '') + it.pct + '%'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+      <Pressable onPress={() => setMethod((v) => !v)} hitSlop={6} style={{ marginTop: 12 }}>
+        <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>
+          {method ? 'HIDE HOW IT IS BUILT \u2039' : 'HOW IT IS BUILT, AND WHY THE WEIGHTS ARE OURS \u203a'}
+        </Text>
+      </Pressable>
+      {method ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19.5, marginTop: 7 }}>{decode(b.method)}</Text> : null}
+    </View>
+  );
+}
+
 // ── THE RECEIPTS — what the official number says, and what everything else says. ────────────────
 // 2026-09-16 (editor): "What if people feel like they are being lied to about what inflation is,
 // because prices are still high and savings are diminished... this news app is supposed to go through
@@ -2358,6 +2442,8 @@ function Receipts({ inf }) {
           printed beside it — the desk adds no estimates of its own here.
         </Text>
 
+        {inf.basket_index ? <WeeklyBasket b={inf.basket_index} /> : null}
+
         {lbl('WHAT THE GOVERNMENT SAYS')}
         {inf.official.map((o, i) => (
           <View key={i} style={{ marginTop: 10 }}>
@@ -2387,30 +2473,6 @@ function Receipts({ inf }) {
             <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.4, fontWeight: '800' }]}>THE GAP</Text>
             <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 5, marginBottom: 0 }]}>{decode(inf.gap.line)}</Text>
           </View>
-        ) : null}
-
-        {(inf.basket || []).length ? (
-          <>
-            {lbl('WHAT THINGS ACTUALLY COST', C.high)}
-            <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
-              {'A falling rate does not mean falling prices — it means they climb more slowly. This is the '
-                + 'level, from the same government survey, since ' + (inf.base || '') + '.'}
-            </Text>
-            {inf.basket.map((b, i) => (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 9,
-                borderTopWidth: i ? 1 : 0, borderTopColor: C.line, paddingTop: i ? 9 : 0 }}>
-                <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{b.name}
-                  <Text style={{ color: C.muted, fontSize: 12 }}>{'  ' + b.unit}</Text>
-                </Text>
-                <Text style={[MONO, { color: C.muted, fontSize: 12.5 }]}>{'$' + b.then + ' \u2192 $' + b.now}</Text>
-                <Text style={[MONO, { color: C.high, fontSize: 14, fontWeight: '800', width: 62, textAlign: 'right' }]}>
-                  {(b.pct > 0 ? '+' : '') + b.pct + '%'}
-                </Text>
-              </View>
-            ))}
-            {srcline('BLS AVERAGE PRICE SURVEY \u00b7 ' + (inf.asof || '') + ' \u00b7 AGAINST HEADLINE CPI +'
-              + (head.since != null ? head.since : '?') + '% OVER THE SAME WINDOW')}
-          </>
         ) : null}
 
         {inf.wages ? (
