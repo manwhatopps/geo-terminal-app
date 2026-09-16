@@ -1479,22 +1479,88 @@ function RedBoard({ board, compact, onPress }) {
 
 // ── LIVE WATCHLIST — the prints the economic read is built on (plumbing.series) ──
 const trendC = () => ({ up: C.high, dn: C.calm, flat: C.muted });
+// ── WHY A NUMBER MATTERS — the standing explanation behind each market print. ───────────────────
+// 2026-09-16 (user: "add a context button on why each stock price is significant. For example
+// explaining the 30 year yield or treasury"). The desk already writes a LIVE note on every series -
+// what moved today. What was missing is the durable half: what this number IS and why a reader who
+// has never traded should care. That does not change day to day, so it ships with the app instead of
+// costing a run. Matched on the series name, most specific pattern first.
+const WHY = [
+  [/30[- ]?y(ear)?\b|30y/i, 'The 30-year Treasury yield',
+   'What the US government pays to borrow for thirty years. It is the market\u2019s long-run verdict on inflation and on whether Washington can keep paying its bills - the one rate a central bank cannot simply set. It also sets the floor under mortgages and pension maths, so when it climbs the cost of housing and the value of every long-dated promise move with it.'],
+  [/10[- ]?y(ear)?\b|10y/i, 'The 10-year Treasury yield',
+   'The world\u2019s benchmark interest rate. Almost every other asset is priced off it, and a rising 10-year makes borrowing dearer everywhere at once - for companies, for mortgages, and for governments rolling over debt. It is the number to watch when a war, a deficit or an oil shock starts to cost real money.'],
+  [/\b2[- ]?y(ear)?\b|2y/i, 'The 2-year Treasury yield',
+   'The market\u2019s bet on where the central bank sets rates over the next two years. It moves on policy expectations rather than on long-run inflation, so the gap between it and the 10-year is the cleanest read on whether investors expect a slowdown.'],
+  [/brent|crude|wti/i, 'The oil price',
+   'The single fastest channel between a distant war and a household bill. Brent is the global benchmark; most of the world\u2019s crude prices off it. Because oil moves transport, fertiliser and plastics, an oil shock becomes a food and inflation shock within months - which is why an oil price is a political number, not only a financial one.'],
+  [/diesel|petrol|gasoline|pump/i, 'The pump price',
+   'Where an oil shock becomes politics. Diesel in particular moves freight, farming and construction, so it feeds into the price of nearly everything with a lag of weeks. It is also the most visible price in any economy, posted on signs, which makes it the one voters punish governments for.'],
+  [/hormuz|transits|strait|bab el|suez|canal/i, 'Chokepoint traffic',
+   'A count of how much actually moves through a passage that the world\u2019s energy trade cannot easily route around. Rhetoric about closing a strait is cheap; the transit count is the fact. When it falls, insurance, freight and crude prices follow - and the desk treats the count, not the threat, as the evidence.'],
+  [/yanbu|pipeline|export cover|loadings/i, 'Export capacity',
+   'Whether the oil can physically leave. A producer can hold vast reserves and still be cut off if a pipeline, terminal or loading berth is down, so export cover is what decides the price - not the size of the reserve. Watch storage: tanks cover an outage for a few days, and then exports stop.'],
+  [/cpi|inflation|ppi|core/i, 'The inflation print',
+   'The official measure of how fast prices are rising. It decides whether a central bank raises or cuts, which in turn moves every interest rate above. Look past the headline to the core and to the monthly change - the annual figure can fall while prices accelerate, because it is measured against last year.'],
+  [/usd\/jpy|yen|euro|eur\/usd|dxy|dollar/i, 'The currency cross',
+   'What one country\u2019s money buys of another\u2019s. A strong dollar makes commodities dearer for everyone who does not earn dollars and squeezes anyone holding dollar debt, which is most of the developing world. Sharp moves are often the first sign a government is losing control of its own rates.'],
+  [/gold|bullion/i, 'The gold price',
+   'What money costs when people stop trusting promises. Gold pays no interest, so holding it is a bet that currencies, bonds or governments are less safe than a metal. Central banks buying it in size is usually a statement about the dollar rather than about gold.'],
+  [/sofr|fed funds|policy rate|discount/i, 'The policy rate',
+   'The rate the central bank actually controls, and the anchor for short-term borrowing across the banking system. When market rates pull away from it, that gap is stress - it means someone is paying more than the official price to get funded.'],
+  [/vix|volatility/i, 'The volatility index',
+   'What it costs to insure against a fall in share prices, and so a direct reading of how frightened the market is. It spikes before it explains itself, which makes it useful as an alarm and useless as an argument.'],
+  [/freight|tanker|charter|shipping|insurance|war risk/i, 'Freight and war-risk rates',
+   'What it costs to move the cargo and to insure it through a dangerous stretch of water. These move before crude does, because a shipowner has to price the risk of the voyage before the cargo is sold - which makes them one of the earliest honest signals that a conflict is affecting trade.'],
+  [/wheat|grain|corn|food|fertil/i, 'The food price',
+   'The most politically dangerous number in this list. Bread prices have preceded more uprisings than any ideology, and grain markets are thin enough that one exporter\u2019s decision can move the world price. Watch export bans, not harvests.'],
+  [/gas|ttf|lng/i, 'The gas price',
+   'Heating, electricity and industry in one number, and unlike oil it is regional - gas cannot easily be shipped around a shortage without terminals to receive it. That is why a European gas price can triple while an American one does not move.'],
+];
+function whyOf(k) {
+  const t = String(k || '');
+  for (const [rx, title, body] of WHY) if (rx.test(t)) return { title, body };
+  return null;
+}
+
 function LiveWatchlist({ items }) {
+  const [open, setOpen] = useState(null);
   if (!items || !items.length) return null;
   return (
-    <Section title="Live watchlist" extra={items.length + ' prints'}>
-      {items.map((x, i) => (
-        <View key={i} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.line }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-            <Text style={[MONO, { color: C.text, fontSize: 12, flex: 1 }]}>{decode(x.k)}</Text>
-            <Text style={[MONO, { color: C.accent, fontSize: 14, fontWeight: '700' }]}>{x.v}</Text>
-            <Text style={[MONO, { color: trendC()[x.t] || C.muted, fontSize: 10.5, marginLeft: 8, minWidth: 54, textAlign: 'right' }]}>
-              {(x.t === 'up' ? '▲ ' : x.t === 'dn' ? '▼ ' : '· ') + (x.c || '')}
-            </Text>
+    <Section title="The money" extra={items.length + ' live prints'}>
+      {items.map((x, i) => {
+        const why = whyOf(x.k);
+        const isOpen = open === i;
+        return (
+          <View key={i} style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+              <Text style={[MONO, { color: C.text, fontSize: 12.5, flex: 1 }]}>{decode(x.k)}</Text>
+              <Text style={[MONO, { color: C.accent, fontSize: 15, fontWeight: '700' }]}>{x.v}</Text>
+              <Text style={[MONO, { color: trendC()[x.t] || C.muted, fontSize: 10.5, marginLeft: 8, minWidth: 54, textAlign: 'right' }]}>
+                {(x.t === 'up' ? '\u25b2 ' : x.t === 'dn' ? '\u25bc ' : '\u00b7 ') + (x.c || '')}
+              </Text>
+            </View>
+            {x.note ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>{decode(x.note)}</Text> : null}
+            {why ? (
+              <Pressable onPress={() => setOpen(isOpen ? null : i)} hitSlop={6} style={{ marginTop: 7 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.1, fontWeight: '700' }]}>
+                  {(isOpen ? '\u2212 ' : '+ ') + 'WHY THIS NUMBER MATTERS'}
+                </Text>
+              </Pressable>
+            ) : null}
+            {isOpen && why ? (
+              <View style={{ marginTop: 8, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 11, paddingBottom: 4 }}>
+                <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1, fontWeight: '700' }]}>{why.title.toUpperCase()}</Text>
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6 }]}>{why.body}</Text>
+              </View>
+            ) : null}
           </View>
-          {x.note ? <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{decode(x.note)}</Text> : null}
-        </View>
-      ))}
+        );
+      })}
+      <Text style={[s.foot, { paddingHorizontal: 0, marginTop: 10 }]}>
+        The grey line under each print is the desk's read on today's move. The explainer under it does not
+        change day to day - it is what the number is, and why it moves the world.
+      </Text>
     </Section>
   );
 }
@@ -2136,7 +2202,26 @@ function DataTab({ data, easy, world, hist }) {
   const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
-      {data.actors && data.actors.length ? (
+      {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
+          to scroll. I like the money reports"). The money leads; the players are a reference list and
+          sit at the bottom where a reader goes looking for them. */}
+      {data.plumbing ? (
+        <Section title="The economic read" extra={data.plumbing.stage ? 'live' : ''}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Text style={s.p}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+            {data.cost && data.cost.pct != null ? (
+              <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
+                {'WHAT A 2019 DOLLAR BUYS NOW \u00b7 +' + data.cost.pct + '% SINCE THEN \u00b7 AS OF ' + (data.cost.asof || '')}
+              </Text>
+            ) : null}
+          </View>
+        </Section>
+      ) : null}
+      {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
+      {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
+      <Dossiers items={data.dossiers} />
+      <WorldSections world={world} hist={hist} />
+            {data.actors && data.actors.length ? (
         <Section title="The players" extra={actors.length + ' tracked'}>
           <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
           {actors.map((a, i) => (
@@ -2151,22 +2236,6 @@ function DataTab({ data, easy, world, hist }) {
           ))}
         </Section>
       ) : null}
-      <Dossiers items={data.dossiers} />
-      <WorldSections world={world} hist={hist} />
-      {data.plumbing ? (
-        <Section title="The economic read" extra={data.plumbing.stage}>
-          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-            <Text style={s.p}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
-            {data.cost && data.cost.pct != null ? (
-              <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
-                {'WHAT A 2019 DOLLAR BUYS NOW · +' + data.cost.pct + '% SINCE THEN · AS OF ' + (data.cost.asof || '')}
-              </Text>
-            ) : null}
-          </View>
-        </Section>
-      ) : null}
-      {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
-      {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       <Text style={s.foot}>Every figure carries its source and vintage. Where the desk could not get a number, it says so.</Text>
     </View>
   );
