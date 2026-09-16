@@ -1622,10 +1622,16 @@ function LiveWatchlist({ items }) {
               </View>
               <Text style={{ color: C.accent, fontSize: 15, marginLeft: 8, marginTop: 1 }}>{isOpen ? '\u2212' : '\u203a'}</Text>
             </Pressable>
-            {isOpen && x.note ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 8 }}>{decode(x.note)}</Text> : null}
+            {isOpen && x.note ? (
+              <View style={{ marginTop: 10 }}>
+                <Text style={[MONO, { color: C.elev, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>WHAT MOVED IT TODAY</Text>
+                <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 5 }}>{decode(x.note)}</Text>
+              </View>
+            ) : null}
             {isOpen && why ? (
-              <View style={{ marginTop: 8, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 11, paddingBottom: 4 }}>
-                <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1, fontWeight: '700' }]}>{why.title.toUpperCase()}</Text>
+              <View style={{ marginTop: 12, borderLeftWidth: 2, borderLeftColor: C.accentDim, paddingLeft: 11, paddingBottom: 4 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>WHAT THIS NUMBER IS</Text>
+                <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1, fontWeight: '700', marginTop: 5 }]}>{why.title.toUpperCase()}</Text>
                 <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6 }]}>{why.body}</Text>
               </View>
             ) : null}
@@ -2424,6 +2430,7 @@ function Watchlist({ tripwires }) {
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
 function DataTab({ data, easy, world, hist }) {
   const [region, setRegion] = useState('ALL');
+  const [fullRead, setFullRead] = useState(false);
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
   const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
@@ -2434,7 +2441,13 @@ function DataTab({ data, easy, world, hist }) {
       {data.plumbing ? (
         <Section title="The economic read" extra={data.plumbing.stage ? 'live' : ''}>
           <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-            <Text style={s.p}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+            {/* 2026-09-16: the read is a dense desk paragraph. Four lines of it, then the rest on
+                request - the reader who wants the whole thing asks for it, and everyone else gets
+                the top of it and the chart below. */}
+            <Text style={s.p} numberOfLines={fullRead ? undefined : 4}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+            <Pressable onPress={() => setFullRead((v) => !v)} hitSlop={6} style={{ marginTop: 8 }}>
+              <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS ‹' : 'READ THE FULL READ ›'}</Text>
+            </Pressable>
             {data.cost && data.cost.pct != null ? (
               <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
                 {'WHAT A 2019 DOLLAR BUYS NOW \u00b7 +' + data.cost.pct + '% SINCE THEN \u00b7 AS OF ' + (data.cost.asof || '')}
