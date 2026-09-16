@@ -879,9 +879,16 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 14 }]}>{fullStamp(item.ts)}</Text>
-        {/* 2026-09-15 (user): the two doors sit at the TOP of every story, before the read - the desk's
-            analysis (and its calls), and what the boards say. The pane opens right under the buttons. */}
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
+        {/* Three doors at the TOP of every story, before the read: the 30-second version, the desk's
+            own analysis and call, and what the boards are saying. The pane opens under the buttons.
+            2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
+            every card already carries `t` (the desk's 2-4 sentence lede) and `context` (one plain
+            paragraph, no labels). Reading time is measured from the full read, not the summary. */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
+          <Pressable onPress={() => setPane(pane === 'sum' ? null : 'sum')} style={[s.artbtn, { borderColor: C.calm }, pane === 'sum' && s.artbtnOn]}>
+            <Text style={[s.artbtnT, MONO, { color: C.calm }]}>≡ SUMMARY</Text>
+            <Text style={s.artbtnS}>the story in 30 seconds</Text>
+          </Pressable>
           <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO]}>◉ GEOPOLITICAL ANALYST</Text>
             <Text style={s.artbtnS}>{item.hist && item.hist.call && item.hist.call.p != null
@@ -893,6 +900,36 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
           </Pressable>
         </View>
+        {pane === 'sum' ? (
+          <View style={[s.storycard, { borderColor: C.calm, marginBottom: 18 }]}>
+            <Text style={[s.ctxlbl, MONO, { color: C.calm }]}>THE STORY IN SHORT</Text>
+            {item.h ? <Text style={[s.p, { marginTop: 8 }]}>{decode(item.h)}</Text> : null}
+            {item.t ? <Text style={[s.p, { marginTop: 10 }]}>{decode(item.t)}</Text> : null}
+            {item.context ? (
+              <>
+                <Text style={[s.ctxlbl, MONO, { color: C.calm, marginTop: 16 }]}>WHY IT MATTERS, PLAINLY</Text>
+                <Text style={[s.p, { marginTop: 6 }]}>{decode(item.context)}</Text>
+              </>
+            ) : null}
+            {item.hist && item.hist.call && item.hist.call.event ? (
+              <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12 }}>
+                <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>AND THE DESK'S CALL</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 6 }}>
+                  <Text style={[MONO, { color: C.accent, fontSize: 24, fontWeight: '800', width: 68, lineHeight: 27 }]}>
+                    {Math.round(Number(item.hist.call.p) || 0) + '%'}
+                  </Text>
+                  <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, flex: 1 }}>{decode(item.hist.call.event)}</Text>
+                </View>
+                <Pressable onPress={() => setPane('analyst')} style={{ marginTop: 10 }}>
+                  <Text style={[s.readmore, MONO]}>SEE THE CASE FOR AND AGAINST ›</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {!item.h && !item.t && !item.context ? (
+              <Text style={[s.foot, { marginTop: 10 }]}>No summary was filed for this story — the full read is below.</Text>
+            ) : null}
+          </View>
+        ) : null}
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}><AnalystPanel item={item} specMatches={specMatches} /></View>
         ) : null}
@@ -3042,10 +3079,10 @@ function buildStyles() {
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
   rctl: { color: C.muted, fontSize: 13, fontWeight: '600' },
-  artbtn: { flex: 1, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, backgroundColor: C.panel },
+  artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
-  artbtnT: { color: C.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
-  artbtnS: { color: C.muted, fontSize: 11.5, marginTop: 4 },
+  artbtnT: { color: C.accent, fontSize: 9.5, fontWeight: '800', letterSpacing: 0.8 },   // three doors in one row
+  artbtnS: { color: C.muted, fontSize: 9, marginTop: 3, lineHeight: 12 },
   hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
   hrowH: { fontFamily: 'Charter', fontSize: 24, lineHeight: 29, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
   hrowMeta: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
