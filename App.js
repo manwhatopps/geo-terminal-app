@@ -281,7 +281,12 @@ const TABS = [
   { key: 'home', label: 'HOME', g: '⌂' },
   { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'boards', label: 'BOARDS', g: '☍' },
-  { key: 'strategy', label: 'STRATEGY', g: '♟' },
+  // 2026-09-16 (user: "broaden the menu so everything doesn't feel so crammed and long ... instead of
+  // everything included in everything"). STRATEGY held eleven sections in one endless scroll AND an
+  // accordion that re-rendered STRATEGY inside itself. Split by the question each tab answers:
+  // CALLS = what does the desk predict and is it any good. DATA = what are the underlying numbers.
+  { key: 'calls', label: 'CALLS', g: '◉' },
+  { key: 'data', label: 'DATA', g: '▦' },
 ];
 // 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
 // record that logic for the bot's brain." The history/base-rate reasoning now lives in each article as THE DESK'S
@@ -1747,16 +1752,25 @@ function FrontPage({ data, goTab, goArticle, read }) {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
-        {tile('strategy', '♟', 'STRATEGY', (data.actors || []).length, 'players tracked')}
-        {tile('strategy', '◷', 'THE RECORD', data.track && data.track.resolved != null ? data.track.resolved : '—', 'forecasts scored')}
+        {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
+        {tile('data', '▦', 'DATA', (data.actors || []).length, 'players tracked')}
       </View>
+
+      {/* this week's deep dive - it was buried in the old strategy scroll */}
+      {data.lecture && data.lecture.title ? (
+        <Pressable onPress={() => goTab('calls')} style={s.fpBoards}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>{"THIS WEEK'S DEEP DIVE · " + (data.lecture.date || '')}</Text>
+          <Text style={[s.idxH, SERIF, { fontSize: 19, lineHeight: 25, marginTop: 8 }]} numberOfLines={3}>{decode(data.lecture.title)}</Text>
+          {data.lecture.sub ? <Text style={s.leadDek} numberOfLines={2}>{decode(data.lecture.sub)}</Text> : null}
+        </Pressable>
+      ) : null}
 
       {/* today's lesson, the thing the desk wants you to keep */}
       {data.lesson ? (
         <View style={s.fpLesson}>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8 }]}>TODAY'S LESSON</Text>
           <Text style={[s.p, { fontSize: 15, lineHeight: 24, marginTop: 7 }]} numberOfLines={6}>{decode(data.lesson)}</Text>
-          <Text style={[s.readmore, MONO, { marginTop: 9 }]} onPress={() => goTab('strategy')}>MORE FROM THE DESK ›</Text>
+          <Text style={[s.readmore, MONO, { marginTop: 9 }]} onPress={() => goTab('calls')}>TEST YOURSELF ON TODAY'S READ ›</Text>
         </View>
       ) : null}
 
@@ -1847,7 +1861,6 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
           </Section>
         </View>
       ) : null}
-      <View style={{ marginTop: 24 }}><QuizSection quiz={data.quiz} /></View>
     </View>
   );
 }
@@ -2056,16 +2069,18 @@ function SocialFeed({ social }) {
   );
 }
 
-function ConspiracyTab({ data, easy, deep, goArticle, read, saved }) {
+// ── CALLS — everything predictive, and nothing else: what the desk thinks happens next, whether it
+// has been right, the branches it is watching, the hypotheses it has not proved, the tripwires, and a
+// quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
+function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const [region, setRegion] = useState('ALL');
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
-  const specs = (data.speculation || []).filter((sp) => region === 'ALL' || (sp.region || inferRegion(sp.obs + ' ' + sp.read)) === region);
-  const movedN = (data.forecasts || []).filter((f) => f.prev != null && f.p !== f.prev).length;
   return (
     <View style={s.stack}>
       <Section title="Calls on the board" extra={String(fcs.length)}>
+        <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
         {fcs.map((f, i) => {
           const d = f.prev != null ? f.p - f.prev : null;
           return (
@@ -2098,44 +2113,11 @@ function ConspiracyTab({ data, easy, deep, goArticle, read, saved }) {
           ))}
         </Section>
       ) : null}
+      <Scenarios items={data.scenarios} />
       <Watchlist tripwires={data.tripwires} />
-      <MoreFromTheDesk data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />
+      <QuizSection quiz={data.quiz} />
       <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
-  );
-}
-
-// ── MORE FROM THE DESK — everything that is not news, one tap deep instead of on the front. ──
-function MoreFromTheDesk({ data, easy, deep, goArticle, read, saved }) {
-  const [open, setOpen] = useState(null);
-  const rows = [
-    ['strategy', 'Strategy desk', 'players, dossiers, scenarios, the red board, this week\'s deep dive'],
-    ['watch', 'What to watch', (data.watch || []).length + ' items'],
-    // 2026-09-16: the desk writes a teaching note every daily run (prompt.txt `lesson`: the history or
-    // framework behind one of today's stories, from the canon) and nothing in the app had ever shown it.
-    ['lesson', "Today's lesson", 'the framework behind one of today\'s stories'],
-    ['quiz', 'Quiz', 'test the read'],
-    ['analyst', 'Ask the analyst', 'chat with the desk on Telegram'],
-  ];
-  return (
-    <Section title="More from the desk">
-      {rows.map(([k, t, sub]) => (
-        <View key={k}>
-          <Pressable onPress={() => (k === 'analyst' ? Linking.openURL('https://t.me/Claudeyyybot') : setOpen(open === k ? null : k))} style={s.morerow}>
-            <View style={{ flex: 1 }}><Text style={s.moreT}>{t}</Text><Text style={s.moreS}>{sub}</Text></View>
-            <Text style={{ color: C.accent, fontSize: 20 }}>{k === 'analyst' ? '↗' : open === k ? '−' : '›'}</Text>
-          </Pressable>
-          {open === k && k === 'strategy' ? <View style={{ padding: 12 }}><StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} compact /></View> : null}
-          {open === k && k === 'watch' ? (data.watch || []).map((w, i) => <Text key={i} style={s.li}><Text style={{ color: C.accent }}>› </Text>{decode(w)}</Text>) : null}
-          {open === k && k === 'lesson' && data.lesson ? (
-            <View style={{ paddingHorizontal: 12, paddingBottom: 14 }}>
-              <Text style={[s.p, { marginVertical: 0 }]}>{decode(data.lesson)}</Text>
-            </View>
-          ) : null}
-          {open === k && k === 'quiz' ? <View style={{ padding: 12 }}><QuizSection quiz={data.quiz} /></View> : null}
-        </View>
-      ))}
-    </Section>
   );
 }
 
@@ -2246,37 +2228,14 @@ function Watchlist({ tripwires }) {
   );
 }
 
-function StrategyTab({ data, easy, deep, goArticle, read, saved, compact, world, hist }) {
-  const lec = data.lecture;
-  // The desk opens on the wire, not the roster: newest stories first, same index
-  // furniture as NEWS (lead panel + hairline rows), then the players below.
-  const simple = (easy && data.easy && data.easy.brief) || [];
-  const latest = briefSorted(data.brief).slice(0, 5);
+// ── DATA — the reference layer: who the players are, what the countries measure, what is physically
+// happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
+function DataTab({ data, easy, world, hist }) {
   const [region, setRegion] = useState('ALL');
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
   const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
-      {latest.length && !compact ? (
-        <View>
-          <View style={s.masthead}>
-            <Text style={s.mastT}>Latest</Text>
-            <Text style={[s.mastD, MONO]}>{(data.brief || []).length + ' STORIES · ' + (data.updated || '')}</Text>
-          </View>
-          {latest.map(({ s: st, i }, n) => {
-            const id = storyId(st);
-            const props = { item: st, simpleText: simple[i], easy, deep, onOpen: () => goArticle && goArticle(i),
-                            isRead: !!(read && read[id]), isSaved: !!(saved && saved[id]) };
-            return n === 0 ? <LeadStory key={i} {...props} /> : <IndexRow key={i} {...props} dense={n >= 3} />;
-          })}
-        </View>
-      ) : null}
-      <StatStrip stats={[
-        [(data.actors || []).length, 'PLAYERS'],
-        [data.lecture ? (data.lecture.date || 'LIVE') : '—', 'DEEP DIVE'],
-        [data.plumbing ? (data.plumbing.stage || 'LIVE') : '—', 'ECON READ'],
-        [data.plumbing && data.plumbing.board ? data.plumbing.board.color : '—', 'RED BOARD'],
-      ]} />
       {data.actors && data.actors.length ? (
         <Section title="The players" extra={actors.length + ' tracked'}>
           <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
@@ -2284,41 +2243,26 @@ function StrategyTab({ data, easy, deep, goArticle, read, saved, compact, world,
             <View key={i} style={s.actor}>
               <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
               <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{decode(a.w)}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{decode(a.g)}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{decode(a.m)}</Text>
-              <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{decode(a.l)}</Text>
+              {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{decode(a.w)}</Text> : null}
+              {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{decode(a.g)}</Text> : null}
+              {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{decode(a.m)}</Text> : null}
+              {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{decode(a.l)}</Text> : null}
             </View>
           ))}
         </Section>
       ) : null}
       <Dossiers items={data.dossiers} />
-      {!compact ? <WorldSections world={world} hist={hist} /> : null}
-      <Scenarios items={data.scenarios} />
-      {lec ? (
-        <Section title="This week's deep dive" extra={lec.date}>
-          <View style={s.prose}>
-            <Text style={[s.h3, SERIF]}>{decode(lec.title)}</Text>
-            {lec.sections.map((part, i) => (
-              <View key={i}>
-                <Text style={[s.kicker, MONO]}>{decode(part.h).toUpperCase()}</Text>
-                <Text style={s.p}>{decode(part.t)}</Text>
-              </View>
-            ))}
-          </View>
-        </Section>
-      ) : null}
+      <WorldSections world={world} hist={hist} />
       {data.plumbing ? (
         <Section title="The economic read" extra={data.plumbing.stage}>
-          <View style={s.prose}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
             <Text style={s.p}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
           </View>
         </Section>
       ) : null}
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
       {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
-      <QuizSection quiz={data.quiz} />
-      <Text style={s.foot}>Deep analysis and opinion, for information only. Not financial, legal, or safety advice.</Text>
+      <Text style={s.foot}>Every figure carries its source and vintage. Where the desk could not get a number, it says so.</Text>
     </View>
   );
 }
@@ -2903,7 +2847,7 @@ export default function App() {
     const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist)]);
     setWorldErr(errs.find(Boolean) || null);
   }, []);
-  useEffect(() => { if (tab === 'strategy' && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
+  useEffect(() => { if (tab === 'data' && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
   // older stories: the 30-day archive, pulled only when the reader asks for it at the foot of the wire
   const [older, setOlder] = useState('idle');   // idle | loading | done | error
   const loadOlder = useCallback(async () => {
@@ -2916,7 +2860,7 @@ export default function App() {
       setOlder('done');
     } catch (e) { setOlder('error'); }
   }, []);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'strategy') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'data') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
 
   if (acked === null) {
     return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
@@ -2966,7 +2910,8 @@ export default function App() {
                 {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} />}
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
-                {tab === 'strategy' && <StrategyTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} world={world} hist={hist} />}
+                {tab === 'calls' && <CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
+                {tab === 'data' && <DataTab data={data} easy={easy} world={world} hist={hist} />}
               </>
             )}
             <LegalFooter />
