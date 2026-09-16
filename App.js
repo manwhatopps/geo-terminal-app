@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Svg, { Circle, Line, Path as SvgPath, Rect } from 'react-native-svg';
+import Svg, { Circle, Line, Path as SvgPath, Rect, Text as SvgText } from 'react-native-svg';
 import { LAND_PATH } from './worldmap';
 
 const FEED = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/data.json';
@@ -666,6 +666,86 @@ function ConspiracyPanel({ items, forceOpen }) {
 }
 
 // ── ARTICLE — the page you land on after tapping a headline. One story, nothing else. ──
+// ── SHARE CARD — the desk's call as a picture, because the call is the argument. ────────────────
+// 2026-09-16. Distribution is the binding constraint, not depth: the desk writes a dated probability
+// with a case for and against twelve times a day, and none of it could leave the phone except as a
+// headline and a link. A call renders as an image people argue with, which is how geopolitics travels.
+// Built on react-native-svg (already a dependency) + toDataURL, so there is no screenshot library and
+// no view-hierarchy capture; if the image path fails at any step the text share still goes out.
+const CARD_W = 1080, CARD_H = 1080;
+function wrapSvg(text, perLine, maxLines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = []; let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > perLine) { lines.push(cur.trim()); cur = w; if (lines.length === maxLines) break; }
+    else cur = (cur + ' ' + w).trim();
+  }
+  if (lines.length < maxLines && cur) lines.push(cur.trim());
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length + 1) {
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/[.,;:]?$/, '') + '…';
+  }
+  return lines;
+}
+function CallCard({ item, svgRef }) {
+  const call = (item.hist || {}).call || {};
+  const p = Math.max(0, Math.min(100, Math.round(Number(call.p) || 0)));
+  const claim = wrapSvg(decode(call.event || item.head || ''), 42, 4);
+  const pro = ((item.hist || {}).for || []).slice(0, 2).map((x) => wrapSvg(decode(x), 40, 1)[0]);
+  const con = ((item.hist || {}).against || []).slice(0, 2).map((x) => wrapSvg(decode(x), 40, 1)[0]);
+  const T = (x, y, t, o) => <SvgText key={String(x) + '-' + y + '-' + t} x={x} y={y} fill={(o && o.fill) || C.text}
+    fontSize={(o && o.size) || 30} fontWeight={(o && o.weight) || '400'} opacity={(o && o.op) || 1}
+    letterSpacing={(o && o.ls) || 0}>{t}</SvgText>;
+  return (
+    <Svg ref={svgRef} width={CARD_W} height={CARD_H} viewBox={`0 0 ${CARD_W} ${CARD_H}`}>
+      <Rect x="0" y="0" width={CARD_W} height={CARD_H} fill={C.ink} />
+      <Rect x="0" y="0" width="14" height={CARD_H} fill={C.accent} />
+      {T(70, 92, 'PARALLAX', { size: 30, weight: '800', ls: 7, fill: C.text })}
+      {T(70, 138, "THE DESK'S CALL", { size: 24, weight: '700', ls: 4, fill: C.accent })}
+      {T(70, 320, p + '%', { size: 200, weight: '800', fill: C.accent })}
+      {claim.map((ln, i) => T(70, 400 + i * 46, ln, { size: 37, weight: '600' }))}
+      <Rect x="70" y={410 + claim.length * 46} width={CARD_W - 140} height="2" fill={C.line} />
+      {T(70, 470 + claim.length * 46, 'THE CASE FOR', { size: 22, weight: '800', ls: 3, fill: C.calm })}
+      {pro.map((ln, i) => T(70, 512 + claim.length * 46 + i * 38, '+ ' + ln, { size: 27, op: 0.9 }))}
+      {T(70, 600 + claim.length * 46, 'THE CASE AGAINST', { size: 22, weight: '800', ls: 3, fill: C.high })}
+      {con.map((ln, i) => T(70, 642 + claim.length * 46 + i * 38, '- ' + ln, { size: 27, op: 0.9 }))}
+      {T(70, CARD_H - 112, String(call.horizon || '').toUpperCase() + (call.conf ? '  ·  CONFIDENCE ' + String(call.conf).toUpperCase() : ''),
+        { size: 23, ls: 2, fill: C.muted })}
+      {T(70, CARD_H - 62, 'Analysis and opinion, not advice. The desk publishes its misses.', { size: 22, fill: C.muted, op: 0.85 })}
+    </Svg>
+  );
+}
+
+// Share the card if every piece of the image path is available; otherwise share the same argument as
+// text. The fallback is not a degraded feature - a call with its for/against reads fine as text.
+async function shareCall(item, svgRef) {
+  const call = (item.hist || {}).call || {};
+  const p = Math.round(Number(call.p) || 0);
+  const lines = [
+    call.event ? `The desk says ${p}%: ${decode(call.event)}` : decode(item.head || ''),
+    ((item.hist || {}).for || []).length ? '\nFOR\n' + ((item.hist || {}).for || []).slice(0, 2).map((x) => '+ ' + decode(x)).join('\n') : '',
+    ((item.hist || {}).against || []).length ? '\nAGAINST\n' + ((item.hist || {}).against || []).slice(0, 2).map((x) => '- ' + decode(x)).join('\n') : '',
+    '\nvia Parallax — analysis and opinion, not advice.',
+  ].filter(Boolean).join('\n');
+  try {
+    // expo-file-system moved to a File/Directory API in SDK 54; the base64 write we need still lives
+    // on the legacy entry, which Expo ships deliberately for exactly this. Checked against the
+    // installed module rather than assumed.
+    const FS = require('expo-file-system/legacy');
+    const Sharing = require('expo-sharing');
+    if (svgRef.current && svgRef.current.toDataURL && FS.cacheDirectory && (await Sharing.isAvailableAsync())) {
+      const b64 = await new Promise((res, rej) => {
+        const t = setTimeout(() => rej(new Error('timeout')), 5000);
+        svgRef.current.toDataURL((d) => { clearTimeout(t); d ? res(d) : rej(new Error('no data')); });
+      });
+      const uri = FS.cacheDirectory + 'parallax-call.png';
+      await FS.writeAsStringAsync(uri, b64, { encoding: 'base64' });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: "The desk's call" });
+      return;
+    }
+  } catch (e) { /* fall through to text */ }
+  Share.share({ message: lines });
+}
+
 // ── THE GEOPOLITICAL ANALYST — one panel, read in time order. ─────────────────
 // 2026-09-16 (user: "it's good with all the information but way too much all over the place -
 // condense and organize, maybe go in chronological order"). Before this, the button opened two
@@ -815,7 +895,8 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
   const { head, stand, longHead } = articleParts(item);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
-  const [pane, setPane] = useState(null);           // 'analyst' | 'consp' | null
+  const [pane, setPane] = useState(null);
+  const cardRef = useRef(null);   // the off-screen SVG the share card rasterises from           // 'analyst' | 'consp' | null
   const conspItems = chatterFor(item);
   // NYT's article furniture: back to the section, save it, send it to someone.
   const share = () => {
@@ -900,7 +981,20 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
           </View>
         ) : null}
         {pane === 'analyst' ? (
-          <View style={{ marginBottom: 18 }}><AnalystPanel item={item} specMatches={specMatches} /></View>
+          <View style={{ marginBottom: 18 }}>
+            <AnalystPanel item={item} specMatches={specMatches} />
+            {item.hist && item.hist.call && item.hist.call.event ? (
+              <>
+                <Pressable onPress={() => shareCall(item, cardRef)} style={s.sharebtn}>
+                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>↗  SHARE THIS CALL</Text>
+                  <Text style={s.artbtnS}>the number, and the case for and against it</Text>
+                </Pressable>
+                <View style={{ position: 'absolute', left: -9999, top: 0 }} pointerEvents="none">
+                  <CallCard item={item} svgRef={cardRef} />
+                </View>
+              </>
+            ) : null}
+          </View>
         ) : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
         {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
@@ -2749,6 +2843,7 @@ function buildStyles() {
   rctl: { color: C.muted, fontSize: 13, fontWeight: '600' },
   artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
+  sharebtn: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center' },
   artbtnT: { color: C.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.9 },   // one word per door, one line, never broken
   artbtnS: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 13.5 },
   hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
