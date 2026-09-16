@@ -314,15 +314,6 @@ function ProbBar({ p, prev }) {
   );
 }
 
-function PlainLead({ text }) {
-  if (!text) return null;
-  return (
-    <View style={s.plainLead}>
-      <Text style={[s.plainLbl, MONO]}>IN PLAIN ENGLISH</Text>
-      <Text style={s.plainP}>{decode(text)}</Text>
-    </View>
-  );
-}
 
 // The WHY behind the posture is a drop-down, not a wall of text on the front door —
 // the gauge answers "how bad", the reader chooses whether to ask "why".
@@ -533,50 +524,7 @@ function DayRule({ label }) {
   );
 }
 
-// ── LEAD — the one story above the fold. Big serif headline, three lines of dek. ──
-function LeadStory({ item, simpleText, easy, deep, onOpen, isRead, isSaved }) {
-  const { head, stand, longHead } = articleParts(item);
-  const dek = stand || firstSentences(bodyFor(item, simpleText, easy, deep), 2);
-  const nsrc = (item.srcs || []).length;
-  return (
-    <Pressable onPress={onOpen} style={s.lead}>
-      <View style={s.idxmeta}>
-        <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(item)}</Text>
-        <Text style={[s.idxtime, MONO]}>{timeOnly(item.ts)}</Text>
-      </View>
-      <Text style={[s.leadH, SERIF, isRead && s.readH]} numberOfLines={4}>{longHead || head}</Text>
-      <Text style={s.leadDek} numberOfLines={3}>{dek}</Text>
-      <View style={s.idxfoot}>
-        <Text style={[s.readmore, MONO, isRead && { color: C.muted }]}>{isRead ? 'READ AGAIN ›' : 'READ THE FULL BRIEF ›'}</Text>
-        {isSaved ? <Text style={[s.idxsrc, MONO, { color: C.accent, marginLeft: 10 }]}>★ SAVED</Text> : null}
-        {nsrc ? <Text style={[s.idxsrc, MONO]}>{nsrc + (nsrc === 1 ? ' SOURCE' : ' SOURCES')}</Text> : null}
-      </View>
-    </Pressable>
-  );
-}
 
-// ── INDEX ROW — everything after the lead. Headline-first, hairline-separated. ──
-// `dense` rows drop the dek entirely: further down the page you are scanning titles.
-function IndexRow({ item, simpleText, easy, deep, dense, onOpen, isRead, isSaved }) {
-  const { head, stand } = articleParts(item);
-  const dek = stand || firstSentences(bodyFor(item, simpleText, easy, deep), 1);
-  const nsrc = (item.srcs || []).length;
-  return (
-    <Pressable onPress={onOpen} style={s.idxrow}>
-      <View style={s.idxmeta}>
-        <Text style={[s.kick, MONO, isRead && { color: C.accentDim }]} numberOfLines={1}>{kickerOf(item)}</Text>
-        <Text style={[s.idxtime, MONO]}>{timeOnly(item.ts)}</Text>
-      </View>
-      <Text style={[s.idxH, SERIF, isRead && s.readH]} numberOfLines={3}>{head}</Text>
-      {!dense ? <Text style={s.idxDek} numberOfLines={2}>{dek}</Text> : null}
-      {!dense ? (
-        <Text style={[s.idxsrc, MONO, { marginTop: 7, marginLeft: 0 }]}>
-          {(isSaved ? '★ SAVED · ' : '') + (isRead ? 'READ · ' : '') + (nsrc ? nsrc + (nsrc === 1 ? ' SOURCE · ' : ' SOURCES · ') : '') + 'OPEN ›'}
-        </Text>
-      ) : null}
-    </Pressable>
-  );
-}
 
 // ── THE CONTEXT PANEL — the decode that used to live inline on every card. ──
 // ── THE CONSPIRACY — what the boards are saying about THIS story. ─────────────
@@ -1010,12 +958,6 @@ function FilterDrop({ pairs, active, onPick }) {
   );
 }
 
-// terminal cursor after the wordmark — the little tell that the desk is live
-function BlinkCursor() {
-  const [on, setOn] = useState(true);
-  useEffect(() => { const id = setInterval(() => setOn((v) => !v), 550); return () => clearInterval(id); }, []);
-  return <Text style={{ color: C.accent, opacity: on ? 1 : 0 }}>▮</Text>;
-}
 
 const SPARK = '▁▂▃▄▅▆▇█';
 function sparkline(sArr) { return (sArr || []).map((v) => SPARK[Math.max(0, Math.min(7, v))]).join(''); }
@@ -1155,7 +1097,7 @@ function WorldMap({ events, sel, onSelect, onFilter, goTab, data }) {
                 return (
                   <>
                     {n ? <WebLink label={'READ THE COVERAGE · ' + r.toUpperCase() + ' (' + n + ') ↓'} onPress={() => onFilter(r)} /> : null}
-                    {calls ? <WebLink label={'OUR CALLS ON THIS (' + calls + ') →'} onPress={() => goTab('conspiracy')} /> : null}
+                    {calls ? <WebLink label={'OUR CALLS ON THIS (' + calls + ') →'} onPress={() => goTab('calls')} /> : null}
                   </>
                 );
               })()}
@@ -1320,50 +1262,6 @@ function DecodeCard({ item, easy, deep, coverageRegion, onCoverage }) {
   );
 }
 
-function DecodeTab({ data, easy, deep, goTab }) {
-  const items = data.decode || [];
-  const [vf, setVf] = useState('ALL');
-  const vcounts = {};
-  items.forEach((d) => { vcounts[d.verdict] = (vcounts[d.verdict] || 0) + 1; });
-  const shown = items.filter((d) => vf === 'ALL' || d.verdict === vf);
-  // claim -> the news coverage of the same theater: pre-set the region filter (NewsTab reads
-  // it from storage on mount - tabs remount on switch), then jump
-  const seeCoverage = (r) => {
-    AsyncStorage.setItem(REGION_KEY, r).catch(() => {});
-    goTab('news');
-  };
-  return (
-    <View style={s.stack}>
-      <StatStrip stats={[
-        [items.length, 'CLAIMS'],
-        [(vcounts.framing || 0) + (vcounts.false || 0), 'FRAMING/FALSE'],
-        [(vcounts.true || 0) + (vcounts.partly || 0), 'TRUE/PARTLY'],
-      ]} />
-      <View style={s.briefhead}>
-        <Text style={[s.briefT, MONO]}>CLAIMS DECODED</Text>
-        <Text style={[s.briefD, MONO]}>{data.updated}</Text>
-      </View>
-      {items.length ? (
-        <FilterDrop
-          pairs={[['ALL', 'All', items.length]].concat(
-            ['true', 'partly', 'framing', 'false'].filter((v) => vcounts[v]).map((v) => [v, VERDICT_META[v].label, vcounts[v]]))}
-          active={vf} onPick={setVf} />
-      ) : null}
-      {items.length
-        ? shown.map((d, i) => {
-            const dr = inferRegion((d.claim || '') + ' ' + (d.source || ''));
-            const hasCoverage = dr && (data.brief || []).some((c) => c.region === dr);
-            return (
-              <DecodeCard key={i} item={d} easy={easy} deep={deep}
-                coverageRegion={hasCoverage ? dr : null} onCoverage={seeCoverage} />
-            );
-          })
-        : <Text style={s.foot}>No claims decoded yet — check back after the next run.</Text>}
-      <QuizSection quiz={data.quiz} />
-      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
-    </View>
-  );
-}
 
 // ── HOME — the dashboard (mockup shape): threat level, the $100 test, top developments, analyst tools ──
 function CostCard({ cost }) {
@@ -1469,38 +1367,6 @@ function LiveWatchlist({ items }) {
   );
 }
 
-// ── THE CHATTER — raw narrative monitoring: what the boards are saying. Unverified BY DESIGN. ──
-function Chatter({ items, onStory }) {
-  if (!items || !items.length) return null;
-  return (
-    <Section title="The chatter" extra={items.length + ' circulating'}>
-      <Text style={[s.conspWarn, { paddingHorizontal: 16 }]}>UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED</Text>
-      {items.map((c, i) => (
-        <View key={i} style={[s.storycard, { marginHorizontal: 12, marginBottom: 12 }]}>
-          <View style={s.cardmeta}>
-            <Text style={[s.ktag, { marginBottom: 0, color: c.story ? C.accent : C.high }]}>{c.story ? 'ON A STORY' : (c.region || 'CIRCULATING').toUpperCase()}</Text>
-            {fullStamp(c.ts) ? <Text style={s.stime}>{fullStamp(c.ts)}</Text> : null}
-          </View>
-          <Text style={[s.ctxP, T(18, 27), { fontWeight: '700' }]}>{decode(c.claim)}</Text>
-          {c.spread ? <Text style={[s.ctxP, T(15, 23), { color: C.muted, marginTop: 8 }]}>{decode(c.spread)}</Text> : null}
-          {c.read ? (
-            <>
-              <Text style={[s.ctxlbl, { marginTop: 12, color: C.accent }]}>THE DESK'S READ</Text>
-              {paragraphs(decode(c.read)).map((para, k) => (
-                <Text key={k} style={[s.ctxP, T(17, 27), k > 0 && { marginTop: 10 }]}>{para}</Text>
-              ))}
-            </>
-          ) : null}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-            {c.story && onStory ? <WebLink label={'THE STORY: ' + articleParts(c.story).head.toUpperCase().slice(0, 40) + '… ›'} onPress={() => onStory(c.storyIdx)} /> : null}
-            {c.u ? <WebLink label="SEE THE POST ↗" onPress={() => Linking.openURL(c.u)} /> : null}
-          </View>
-        </View>
-      ))}
-      <Text style={s.foot}>What anonymous boards and social feeds are circulating — monitored so you can see the narratives forming, never endorsed.</Text>
-    </Section>
-  );
-}
 
 // ── THE WATCHTOWER — OSINT-tracker observations with no official story yet. Attributed,
 // graded, falsifiable; the fact is that the observation was MADE, never the event itself. ──
@@ -1536,103 +1402,7 @@ function Watchtower({ items }) {
   );
 }
 
-function HomeTab({ data, easy, deep, goTab, goArticle, read }) {
-  const rline = data.risk.line;
-  const tiles = [
-    ['news', '▤', 'NEWS', (data.brief || []).length, 'stories on the wire'],
-    ['conspiracy', '◉', 'ANALYSIS', (data.forecasts || []).length, 'live calls, publicly scored'],
-    ['strategy', '♟', 'STRATEGY', (data.actors || []).length, 'decision-makers tracked'],
-    ['boards', '☍', 'THE BOARDS', (data.chatter || []).length, 'claims circulating today'],
-  ];
-  const topDevs = briefSorted(data.brief).slice(0, 3);
-  return (
-    <View style={s.stack}>
-      {/* from the boards — the three loudest claims of the day; tap opens BOARDS */}
-      {(data.chatter || []).length ? (
-        <Pressable onPress={() => goTab('boards')} style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 14, padding: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 8 }}>
-            <Text style={[s.h2, { fontSize: 18 }]}>From the boards</Text>
-            <Text style={[s.conspWarn, { marginLeft: 'auto', marginBottom: 0 }]}>UNVERIFIED</Text>
-          </View>
-          {(data.chatter || []).slice(0, 3).map((c, i) => (
-            <Text key={i} style={[s.ctxP, T(16, 24), i > 0 && { marginTop: 8 }]} numberOfLines={2}>
-              <Text style={{ color: C.high }}>› </Text>{decode(c.claim)}
-            </Text>
-          ))}
-          <Text style={[s.readmore, { marginTop: 12 }]}>{(data.chatter || []).length + ' circulating · open the boards ›'}</Text>
-        </Pressable>
-      ) : null}
-      {/* daily intelligence brief door (mockup: START) */}
-      <Pressable onPress={() => goTab('news')}
-        style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.accentDim, borderRadius: 8, padding: 13, flexDirection: 'row', alignItems: 'center' }}>
-        <View style={{ flex: 1 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.5 }]}>DAILY INTELLIGENCE BRIEF</Text>
-          <Text style={{ color: C.muted, fontSize: 11, marginTop: 3 }}>{(data.brief || []).length + ' developments · updated ' + (data.updated || '')}</Text>
-        </View>
-        <View style={{ backgroundColor: C.accent, borderRadius: 5, paddingVertical: 7, paddingHorizontal: 14 }}>
-          <Text style={[MONO, { color: C.ink, fontWeight: '700', fontSize: 11 }]}>START ›</Text>
-        </View>
-      </Pressable>
-      <ThreatGauge risk={data.risk} events={data.events} forecasts={data.forecasts} />
-      <WhyPosture text={rline} deep={deep} />
-      <Pressable onPress={() => Linking.openURL('https://t.me/Claudeyyybot')}
-        style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 13, flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, marginRight: 10 }}>🗨</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.5 }]}>ASK THE ANALYST</Text>
-          <Text style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Chat with the desk — ask anything on the board, or paste any article link for a decode</Text>
-        </View>
-        <Text style={{ color: C.accent, fontSize: 16 }}>›</Text>
-      </Pressable>
-      <CostCard cost={data.cost} />
-      {data.plumbing ? <RedBoard board={data.plumbing.board} compact onPress={() => goTab('strategy')} /> : null}
-      <Section title="Top developments" extra="SEE ALL ›">
-        {topDevs.map(({ s: st, i: bi }, n) => (
-          <Pressable key={bi} onPress={() => goArticle(bi)}
-            style={{ flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: n < topDevs.length - 1 ? 1 : 0, borderColor: C.line }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, marginRight: 10, marginTop: 6, backgroundColor: riskColor[(data.events || []).find((e) => evRegion(e) === st.region)?.sev] || C.elev }} />
-            <View style={{ flex: 1 }}>
-              <View style={s.idxmeta}>
-                <Text style={[s.kick, MONO]} numberOfLines={1}>{kickerOf(st)}</Text>
-                <Text style={[s.idxtime, MONO]}>{timeOnly(st.ts)}</Text>
-              </View>
-              <Text style={[s.teaseH, SERIF, read && read[storyId(st)] && s.readH]} numberOfLines={3}>{articleParts(st).head}</Text>
-            </View>
-          </Pressable>
-        ))}
-      </Section>
-      <Section title="Analyst tools">
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-          {tiles.map(([key, g, label, n, sub]) => (
-            <Pressable key={key} onPress={() => goTab(key)}
-              style={{ width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 13, marginBottom: 10 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: C.accent, fontSize: 18 }}>{g}</Text>
-                <Text style={[MONO, { color: C.accent, fontSize: 20, fontWeight: '700' }]}>{n}</Text>
-              </View>
-              <Text style={[MONO, { color: C.text, fontSize: 11.5, letterSpacing: 1.2, marginTop: 6 }]}>{label + ' ›'}</Text>
-              <Text style={{ color: C.muted, fontSize: 10.5, marginTop: 2 }}>{sub}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </Section>
-      <Text style={s.foot}>Analysis and opinion, for information only — not advice.</Text>
-    </View>
-  );
-}
 
-// ── MAP — the board gets its own room (mockup: map is a destination, not homepage furniture) ──
-function MapTab({ data, easy, goTab, boardSel, setBoardSel }) {
-  const goCoverage = (r) => { AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); goTab('news'); };
-  return (
-    <View style={s.stack}>
-      <WorldMap events={data.events} sel={boardSel} onSelect={setBoardSel}
-        onFilter={goCoverage} goTab={goTab} data={data} />
-      <ClocksStrip clocks={data.clocks} />
-      <Text style={s.foot}>Points are analyst-geocoded from the day's brief; rings are live USGS seismic. Analysis and opinion — not advice.</Text>
-    </View>
-  );
-}
 
 // ── NEWS — a front page, not a stack of slabs. ──────────────────────────────
 // Two states share the tab: the INDEX (scan) and an ARTICLE (read). Order stays
@@ -1906,7 +1676,7 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
       ))}
       {calls.length ? <Text style={s.searchH}>CALLS</Text> : null}
       {calls.map((f, i) => (
-        <Pressable key={'c' + i} onPress={() => goTab('conspiracy')} style={[s.hrow, { flexDirection: 'row', gap: 14, alignItems: 'baseline' }]}>
+        <Pressable key={'c' + i} onPress={() => goTab('calls')} style={[s.hrow, { flexDirection: 'row', gap: 14, alignItems: 'baseline' }]}>
           <Text style={[s.predp, MONO]}>{f.p}%</Text>
           <Text style={[s.predq, { flex: 1 }]}>{decode(f.q)}</Text>
         </Pressable>
@@ -2027,44 +1797,41 @@ function BoardsTab({ data, goArticle }) {
   );
 }
 
-// ── FROM X AND REDDIT — the raw posts the desk read this pass (script-owned DATA.social). Source
-// material, shown as posted, with attribution and reach; the desk's a-g reads sit below in The chatter. ──
-function SocialFeed({ social }) {
-  const [tab, setTab] = useState('x');
-  const [more, setMore] = useState(false);
-  if (!social || (!(social.x || []).length && !(social.reddit || []).length)) return null;
-  const xs = social.x || [], rs = social.reddit || [];
-  const list = tab === 'x' ? xs : rs;
-  const shown = more ? list : list.slice(0, 8);
-  const when = (iso) => { try { const d = new Date(iso); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+
+// ── THE CALENDAR — the dated decision points the desk's calls turn on. `clocks` has been in the feed
+// all along (votes, rulings, auctions, summits, each with the forecast it decides) and had no surface
+// after the legacy home screen went. It belongs at the top of CALLS: a forecast without its clock is
+// an opinion, and step 6 of the policy protocol asks whose constraint binds FIRST. ──
+function Calendar({ clocks }) {
+  if (!Array.isArray(clocks) || !clocks.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = clocks.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const when = (d) => {
+    if (!d) return '';
+    const n = Math.round((Date.parse(d + 'T12:00:00Z') - Date.parse(today + 'T12:00:00Z')) / 86400000);
+    return n < 0 ? 'passed' : n === 0 ? 'today' : n === 1 ? 'tomorrow' : 'in ' + n + ' days';
+  };
   return (
-    <Section title="From X and Reddit" extra={'as of ' + (social.asof || '').slice(5, 16)}>
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
-        {[['x', 'X · ' + xs.length], ['reddit', 'Reddit · ' + rs.length]].map(([k, lab]) => (
-          <Pressable key={k} onPress={() => { setTab(k); setMore(false); }} style={[s.rchip, tab === k && s.rchipOn]}>
-            <Text style={[s.rchipTxt, tab === k && { color: C.text }]}>{lab}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <Text style={[s.conspWarn, { paddingHorizontal: 16 }]}>AS POSTED · ATTRIBUTED, NOT VERIFIED</Text>
-      {shown.map((p, i) => (
-        <Pressable key={i} onPress={() => p.url && Linking.openURL(p.url)} style={s.morerow}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-              <Text style={[s.hrowMeta, { marginTop: 0 }]}>{tab === 'x' ? '@' + p.account : 'r/' + p.sub}</Text>
-              {tab === 'x' && p.ts ? <Text style={{ color: C.muted, fontSize: 12 }}>{when(p.ts)}</Text> : null}
-              {tab === 'x' ? <Text style={{ color: C.muted, fontSize: 12, marginLeft: 'auto' }}>{(p.likes || 0) + ' ♥ · ' + (p.rts || 0) + ' ↻'}</Text> : null}
+    <Section title="The calendar" extra={rows.length + ' dated'}>
+      {rows.map((c, i) => {
+        const soon = String(c.date || '') <= today;
+        return (
+          <View key={i} style={[s.clockRow, i === 0 && { borderTopWidth: 0 }]}>
+            <View style={{ width: 86 }}>
+              <Text style={[MONO, { color: soon ? C.high : C.accent, fontSize: 12, fontWeight: '800' }]}>
+                {String(c.date || '').slice(5)}
+              </Text>
+              <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: 2 }]}>{when(c.date)}</Text>
             </View>
-            <Text style={[s.ctxP, T(16, 24), { marginTop: 6 }]}>{decode(tab === 'x' ? p.text : p.title)}</Text>
-            {tab === 'reddit' && p.body ? <Text style={[s.ctxP, T(14.5, 21), { color: C.muted, marginTop: 4 }]}>{decode(p.body)}</Text> : null}
+            <View style={{ flex: 1 }}>
+              <Text style={[MONO, { color: C.text, fontSize: 11.5, letterSpacing: 1.1, fontWeight: '700' }]}>
+                {String(c.label || '').toUpperCase()}
+              </Text>
+              {c.why ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 19, marginTop: 5 }}>{decode(c.why)}</Text> : null}
+            </View>
           </View>
-        </Pressable>
-      ))}
-      {list.length > 8 ? (
-        <Pressable onPress={() => setMore((v) => !v)} style={[s.morerow, { justifyContent: 'center' }]}>
-          <Text style={[s.readmore]}>{more ? 'Show fewer' : 'Show all ' + list.length + ' ›'}</Text>
-        </Pressable>
-      ) : null}
+        );
+      })}
     </Section>
   );
 }
@@ -2079,6 +1846,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
   return (
     <View style={s.stack}>
+      <Calendar clocks={data.clocks} />
       <Section title="Calls on the board" extra={String(fcs.length)}>
         <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
         {fcs.map((f, i) => {
@@ -2257,6 +2025,11 @@ function DataTab({ data, easy, world, hist }) {
         <Section title="The economic read" extra={data.plumbing.stage}>
           <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
             <Text style={s.p}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+            {data.cost && data.cost.pct != null ? (
+              <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
+                {'WHAT A 2019 DOLLAR BUYS NOW · +' + data.cost.pct + '% SINCE THEN · AS OF ' + (data.cost.asof || '')}
+              </Text>
+            ) : null}
           </View>
         </Section>
       ) : null}
@@ -2485,99 +2258,6 @@ function SituationRoom({ sit, sources }) {
   );
 }
 
-function WorldTab({ world, hist, err, onRetry }) {
-  const [room, setRoom] = useState(null);
-  const [iso, setIso] = useState(null);
-  const [moreEv, setMoreEv] = useState(false);
-  if (!world && !hist) {
-    return (
-      <View style={s.section}>
-        <Pressable onPress={onRetry} style={s.storycard}>
-          <Text style={[MONO, { color: C.muted, fontSize: 11, letterSpacing: 1 }]}>{err ? 'WORLD DATA UNAVAILABLE · ' + err + ' · TAP TO RETRY' : 'LOADING PRIMARY-SOURCE DATA…'}</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  const m = (world && world.markets) || {};
-  const sits = (hist && hist.situations) || {};
-  const sitKeys = Object.keys(sits);
-  const isos = Object.keys((world && world.countries) || {});
-  const names = (world && world.names) || {};
-  const quakes = ((world && world.events) || {}).seismic || [];
-  const hazards = ((world && world.events) || {}).hazards || [];
-  const gaps = (world && world.intelligence_gaps) || [];
-  return (
-    <>
-      {Object.keys(m).length ? (
-        <Section title="Markets" extra={'FRED · ' + (m.brent ? m.brent.year : '')}>
-          <StatStrip stats={[['brent', 'BRENT'], ['us10y', 'US 10Y'], ['vix', 'VIX'], ['nat_gas_henry_hub', 'HH GAS']].filter(([k]) => m[k]).map(([k, l]) => [fmtCell(m[k].v, m[k].unit), l + (m[k].chg_pct != null ? ' ' + (m[k].chg_pct > 0 ? '▲' : '▼') + Math.abs(m[k].chg_pct).toFixed(1) + '%' : '')])} />
-        </Section>
-      ) : null}
-      {sitKeys.length ? (
-        <Section title="Situation rooms" extra={sitKeys.length + ' tracked'}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
-            {sitKeys.map((k) => (
-              <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
-                <Text style={[s.rchipTxt, MONO, room === k && { color: C.text, fontWeight: '700' }]}>{sits[k].title}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          {room ? <SituationRoom sit={sits[room]} sources={hist.sources || {}} /> : (
-            <Text style={[{ color: C.muted, fontSize: 12.5, paddingHorizontal: 4 }]}>Pick a situation. You get the five to nine events that explain today, base rates from comparable cases, and the claims on the territory kept apart from who actually controls it.</Text>
-          )}
-        </Section>
-      ) : null}
-      {isos.length ? (
-        <Section title="Country intelligence" extra={isos.length + ' profiles'}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
-            {isos.map((k) => (
-              <Pressable key={k} onPress={() => setIso(iso === k ? null : k)} style={[s.rchip, iso === k && s.rchipOn]}>
-                <Text style={[s.rchipTxt, MONO, iso === k && { color: C.text, fontWeight: '700' }]}>{names[k] || k}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          {iso ? <CountryProfile iso={iso} world={world} hist={hist} /> : (
-            <Text style={[{ color: C.muted, fontSize: 12.5, paddingHorizontal: 4 }]}>Pick a country. Every figure carries its source and vintage; tap nothing, trust nothing you cannot see the source of.</Text>
-          )}
-        </Section>
-      ) : null}
-      {quakes.length || hazards.length ? (
-        <Section title="Live physical events" extra="USGS · NASA">
-          {quakes.slice(0, moreEv ? 40 : 5).map((q, i) => (
-            <Pressable key={'q' + i} onPress={() => q.url && Linking.openURL(q.url)} style={{ flexDirection: 'row', paddingVertical: 4 }}>
-              <Text style={[MONO, { color: q.mag >= 7 ? C.crit : q.mag >= 6 ? C.high : C.elev, fontSize: 12, width: 46, fontWeight: '700' }]}>{'M' + (q.mag != null ? q.mag.toFixed(1) : '?')}</Text>
-              <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }} numberOfLines={1}>{q.place}</Text>
-              <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>{String(q.time || '').slice(5, 16).replace('T', ' ')}</Text>
-            </Pressable>
-          ))}
-          {hazards.slice(0, moreEv ? 30 : 5).map((h, i) => (
-            <Pressable key={'h' + i} onPress={() => h.url && Linking.openURL(h.url)} style={{ flexDirection: 'row', paddingVertical: 4 }}>
-              <Text style={[MONO, { color: C.elev, fontSize: 10, width: 46 }]} numberOfLines={1}>{String((h.categories || [])[0] || 'EVENT').toUpperCase().slice(0, 6)}</Text>
-              <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }} numberOfLines={1}>{decode(h.title)}</Text>
-              <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>{String(h.date || '').slice(5, 10)}</Text>
-            </Pressable>
-          ))}
-          <Pressable onPress={() => setMoreEv(!moreEv)} style={{ paddingVertical: 6 }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1 }]}>{moreEv ? '− FEWER' : '› ALL ' + (quakes.length + hazards.length) + ' EVENTS'}</Text>
-          </Pressable>
-        </Section>
-      ) : null}
-      {gaps.length ? (
-        <Section title="Intelligence gaps" extra={gaps.length + ' declared'}>
-          {gaps.map((g, i) => (
-            <Text key={i} style={s.li}><Text style={{ color: C.high }}>› </Text>{decode(g.gap)}<Text style={{ color: C.muted }}>{' — ' + decode(g.why)}</Text></Text>
-          ))}
-        </Section>
-      ) : null}
-      {world && world.sources ? (
-        <Section title="Sources" extra={(world.generated || '').slice(0, 10)}>
-          <Text style={[MONO, { color: C.muted, fontSize: 10, lineHeight: 15 }]}>{'LIVE · ' + (world.sources.keyless_live || []).join(' · ')}</Text>
-          <Text style={[MONO, { color: C.muted, fontSize: 10, lineHeight: 15, marginTop: 4 }]}>{'PENDING KEY · ' + (world.sources.key_required || []).join(' · ')}</Text>
-        </Section>
-      ) : null}
-    </>
-  );
-}
 
 // ── ARTICLE HOST — one story, opened from ANY tab (headlines, boards, strategy, search), rendered above
 // that tab so Back returns to where the reader was. Prev/next walk the whole wire, newest first. ──
@@ -2753,7 +2433,6 @@ export default function App() {
   const [prefs, setPrefs] = useState(false);   // reading controls, off the page by default
   const [query, setQuery] = useState('');
   const [boardSel, setBoardSel] = useState(null);   // board selection lives here so any tab can point at the map
-  const goBoard = (i) => { setBoardSel(i); setTab('map'); };
   // Which story NEWS is showing as an article (null = the index). Lives up here so HOME
   // can hand the reader straight into a story, the way a front-page teaser does.
   const [article, setArticle] = useState(null);
@@ -3097,6 +2776,7 @@ function buildStyles() {
   fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 3, backgroundColor: C.accent },
   tick: { position: 'absolute', top: -3, width: 2, height: 11, backgroundColor: C.muted },
   // actors
+  clockRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderTopWidth: 1, borderTopColor: C.line },
   actor: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   actorName: { color: C.text, fontSize: 19, letterSpacing: -0.2, fontWeight: '700' },
   actorRole: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, marginTop: 2, marginBottom: 6 },
