@@ -1807,41 +1807,156 @@ function HeadlineRow({ item, onOpen, isRead, isSaved }) {
 }
 
 // ── SEARCH — one field, results grouped the way the tabs are. ──
+// ── SEARCH — every word, everywhere in the piece, ranked, with the line it matched. ────────────
+// 2026-09-16 (user: "make sure the search bar for every menu can search correctly when someone uses
+// key words or phrases on articles they want to read"). The old search took the WHOLE query as one
+// substring and looked at four fields, so "ai chips" found nothing unless those exact eight
+// characters sat side by side in a headline, and a term that appeared in the body of an article -
+// which is where almost every term appears - was invisible. Three fixes:
+//   EVERY WORD MUST MATCH, ANYWHERE (AND across terms, not one blind substring), so word order and
+//     the words in between stop mattering;
+//   "IN QUOTES" STILL MEANS EXACTLY THAT, for the reader who wants the phrase;
+//   AND IT SEARCHES THE WHOLE PIECE - headline, standfirst, tag, region, every section of the read,
+//     the desk's call and the case for and against it, the board claim with its counter, the
+//     speculation and its conditional read - all entity-decoded first, because the feed carries
+//     &#39; and a reader types an apostrophe.
+// Results are ranked (a headline hit beats a body hit) and each row shows the sentence it matched,
+// so the reader can see WHY it came back.
+function parseQuery(raw) {
+  const terms = [];
+  const phrases = String(raw || '').toLowerCase().match(/"[^"]+"/g) || [];
+  let rest = String(raw || '').toLowerCase();
+  phrases.forEach((p) => { rest = rest.replace(p, ' '); terms.push({ t: p.slice(1, -1).trim(), phrase: true }); });
+  rest.split(/[^a-z0-9$%.\u2019'-]+/).filter((w) => w.length >= 2).forEach((w) => terms.push({ t: w, phrase: false }));
+  return terms.filter((x) => x.t);
+}
+// the searchable text of anything the app holds, decoded
+function hayOf(o) {
+  const parts = [];
+  const push = (v) => { if (v) parts.push(decode(String(v))); };
+  push(o.head); push(o.h); push(o.t); push(o.tag); push(o.region); push(o.context); push(o.claim);
+  push(o.spread); push(o.counter); push(o.read); push(o.obs); push(o.if_true); push(o.q); push(o.name);
+  (o.read && Array.isArray(o.read) ? o.read : []).forEach((sec) => { push(sec.h); push(sec.p); });
+  (o.reads || []).forEach((sec) => { push(sec.h); push(sec.p); });
+  const h = o.hist || {};
+  if (h.call) { push(h.call.event); push(h.call.update); }
+  (h.for || []).forEach(push); (h.against || []).forEach(push);
+  (h.precedents || []).forEach((p) => push(p.line));
+  (o.consp ? (Array.isArray(o.consp) ? o.consp : [o.consp]) : []).forEach((c) => { push(c.head); push(c.claim); push(c.counter); });
+  return parts.join('  \u00b7  ');
+}
+// A bare word matches at a WORD BOUNDARY, not as a substring: searching "ai" must not return every
+// story containing Ukraine, claim, said or air - which it did, all 74 of them, on the first test run.
+// The boundary is at the START of the word so "sanction" still finds "sanctions" - but a SHORT term
+// gets both ends, because \bai also prefix-matches aid, air and aircraft, and "ai" came back with 59
+// of 74 stories on the second test run. Three characters or fewer must match the whole word.
+const rxCache = new Map();
+function termRx(t) {
+  let r = rxCache.get(t);
+  if (!r) {
+    const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    r = new RegExp('\\b' + esc + (t.length <= 3 ? '\\b' : ''), 'i');
+    rxCache.set(t, r);
+  }
+  return r;
+}
+const inText = (term, txt) => (term.phrase ? txt.toLowerCase().includes(term.t) : termRx(term.t).test(txt));
+const callHay = (b) => {
+  const h = b.hist || {}, c = h.call || {};
+  return [c.event, c.update, b.head, b.region, ...(h.for || []), ...(h.against || [])]
+    .filter(Boolean).map((x) => decode(String(x))).join('  ·  ');
+};
+function scoreHit(terms, title, hay) {
+  const T = String(title || ''), H = String(hay || '');
+  let score = 0;
+  for (const term of terms) {
+    if (!inText(term, H)) return 0;               // AND: every term must appear somewhere
+    score += inText(term, T) ? 3 : 1;             // a headline hit is worth more than a body hit
+  }
+  return score;
+}
+// the sentence the first term landed in, so the row shows why it matched
+function snippetOf(terms, hay) {
+  const H = String(hay || '');
+  const m = terms[0].phrase ? { index: H.toLowerCase().indexOf(terms[0].t) } : termRx(terms[0].t).exec(H);
+  const i = m ? m.index : -1;
+  if (i < 0) return '';
+  const from = Math.max(0, H.lastIndexOf(' ', Math.max(0, i - 60)));
+  return (from > 0 ? '\u2026' : '') + H.slice(from, Math.min(H.length, i + 120)).trim() + '\u2026';
+}
 function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
-  const q = query.trim().toLowerCase();
-  const hit = (txt) => q.length >= 2 && String(txt || '').toLowerCase().includes(q);
-  const stories = (data.brief || []).map((b, i) => ({ b, i })).filter(({ b }) => hit(b.head + ' ' + b.h + ' ' + b.t + ' ' + b.region + ' ' + b.tag));
-  const boards = (data.chatter || []).filter((c) => hit(c.claim + ' ' + (c.read || '')));
-  const calls = (data.forecasts || []).filter((f) => hit(f.q));
+  const terms = parseQuery(query);
+  const enough = terms.length > 0 && query.trim().length >= 2;
+  const rank = (items, title) => (enough ? items
+    .map((x) => ({ x, sc: scoreHit(terms, title(x.o || x), x.hay || hayOf(x.o || x)) }))
+    .filter((r) => r.sc > 0)
+    .sort((a, b) => b.sc - a.sc) : []);
+
+  const stories = rank((data.brief || []).map((b, i) => ({ o: b, i })), (b) => articleParts(b).head + ' ' + (b.tag || ''));
+  const boardItems = (data.chatter || []).map((c) => ({ o: c }))
+    .concat((data.brief || []).flatMap((b, i) => (b.consp ? (Array.isArray(b.consp) ? b.consp : [b.consp]) : [])
+      .map((c) => ({ o: { ...c, region: b.region } }))));
+  const boards = rank(boardItems, (c) => c.head || c.claim || '');
+  const callItems = (data.brief || []).map((b, i) => ({ o: b, i }))
+    .filter(({ o }) => (o.hist || {}).call && o.hist.call.event);
+  // a call is its own object: score it on the call's own words, or every card match returns a call too
+  const calls = rank(callItems.map((x) => ({ ...x, hay: callHay(x.o) })), (b) => decode((b.hist.call || {}).event || ''));
+  const specs = rank((data.speculation || []).map((sp) => ({ o: sp })), (sp) => sp.head || sp.obs || '');
+  const total = stories.length + boards.length + calls.length + specs.length;
+
+  const Row = ({ title, meta, snip, onPress, tint }) => (
+    <Pressable onPress={onPress} style={s.hrow}>
+      <Text style={[s.hrowH, { fontSize: 19, lineHeight: 24 }]}>{title}</Text>
+      {snip ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }} numberOfLines={2}>{snip}</Text> : null}
+      {meta ? <Text style={[s.hrowMeta, tint ? { color: tint } : null]}>{meta}</Text> : null}
+    </Pressable>
+  );
   return (
     <View>
       <View style={s.searchbox}>
-        <TextInput value={query} onChangeText={setQuery} autoFocus placeholder="Search stories, places, people" placeholderTextColor={C.muted}
-          style={[s.searchin, { color: C.text }]} returnKeyType="search" autoCorrect={false} />
+        <TextInput value={query} onChangeText={setQuery} autoFocus
+          placeholder={'Search everything \u2014 try: ai chips, or "strait of hormuz"'} placeholderTextColor={C.muted}
+          style={[s.searchin, { color: C.text }]} returnKeyType="search" autoCorrect={false} autoCapitalize="none" />
         {query ? <Pressable onPress={() => setQuery('')} hitSlop={8}><Text style={{ color: C.accent, fontWeight: '600' }}>Clear</Text></Pressable> : null}
       </View>
-      {q.length < 2 ? <Text style={[s.foot, { marginTop: 18 }]}>Type at least two letters. Results group into stories, boards and calls.</Text> : null}
-      {stories.length ? <Text style={s.searchH}>STORIES</Text> : null}
-      {stories.map(({ b, i }) => (
-        <Pressable key={'s' + i} onPress={() => goArticle(i)} style={s.hrow}>
-          <Text style={[s.hrowH, { fontSize: 19, lineHeight: 24 }]}>{articleParts(b).head}</Text>
-          <Text style={s.hrowMeta}>{String(b.region || '').toUpperCase()}</Text>
-        </Pressable>
+      {!enough ? (
+        <Text style={[s.foot, { marginTop: 18 }]}>
+          Type at least two letters. Every word has to appear somewhere in the piece — headline, body,
+          the desk's call, the boards — so "ai chips" finds stories carrying both. Put a phrase in
+          quotes to match it exactly.
+        </Text>
+      ) : (
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.2, paddingHorizontal: 6, paddingTop: 14 }]}>
+          {total + (total === 1 ? ' RESULT FOR ' : ' RESULTS FOR ') + terms.map((t) => (t.phrase ? '"' + t.t + '"' : t.t)).join(' + ').toUpperCase()}
+        </Text>
+      )}
+      {stories.length ? <Text style={s.searchH}>{'STORIES \u00b7 ' + stories.length}</Text> : null}
+      {stories.map(({ x }, n) => (
+        <Row key={'s' + n} title={articleParts(x.o).head} meta={String(x.o.region || '').toUpperCase()}
+          snip={snippetOf(terms, hayOf(x.o))} onPress={() => goArticle(x.i)} />
       ))}
-      {boards.length ? <Text style={[s.searchH, { color: C.high }]}>BOARDS</Text> : null}
-      {boards.map((c, i) => (
-        <Pressable key={'b' + i} onPress={() => goTab('boards')} style={s.hrow}>
-          <Text style={[s.ctxP, T(16, 23)]}>{decode(c.claim)}</Text>
-        </Pressable>
+      {calls.length ? <Text style={s.searchH}>{'CALLS \u00b7 ' + calls.length}</Text> : null}
+      {calls.map(({ x }, n) => (
+        <Row key={'c' + n} title={decode((x.o.hist.call || {}).event || '')}
+          meta={String(x.o.region || '').toUpperCase() + (x.o.hist.call.horizon ? '  \u00b7  ' + String(x.o.hist.call.horizon).toUpperCase() : '')}
+          onPress={() => goArticle(x.i)} />
       ))}
-      {calls.length ? <Text style={s.searchH}>CALLS</Text> : null}
-      {calls.map((f, i) => (
-        <Pressable key={'c' + i} onPress={() => goTab('calls')} style={[s.hrow, { flexDirection: 'row', gap: 14, alignItems: 'baseline' }]}>
-          <Text style={[s.predp, MONO]}>{f.p}%</Text>
-          <Text style={[s.predq, { flex: 1 }]}>{decode(f.q)}</Text>
-        </Pressable>
+      {boards.length ? <Text style={[s.searchH, { color: C.high }]}>{'BOARDS \u00b7 ' + boards.length}</Text> : null}
+      {boards.map(({ x }, n) => (
+        <Row key={'b' + n} title={decode(x.o.head || x.o.claim || '')} tint={C.high}
+          meta={'UNVERIFIED' + (x.o.region ? '  \u00b7  ' + String(x.o.region).toUpperCase() : '')}
+          snip={snippetOf(terms, hayOf(x.o))} onPress={() => goTab('boards')} />
       ))}
-      {q.length >= 2 && !stories.length && !boards.length && !calls.length ? <Text style={[s.foot, { marginTop: 18 }]}>Nothing matches in today's brief.</Text> : null}
+      {specs.length ? <Text style={[s.searchH, { color: C.elev }]}>{'SPECULATION \u00b7 ' + specs.length}</Text> : null}
+      {specs.map(({ x }, n) => (
+        <Row key={'p' + n} title={decode(x.o.head || String(x.o.obs || '').slice(0, 110))} tint={C.elev}
+          meta={String(x.o.grade || 'unverified').toUpperCase()} onPress={() => goTab('boards')} />
+      ))}
+      {enough && !total ? (
+        <Text style={[s.foot, { marginTop: 18 }]}>
+          Nothing carries all of those words. Try fewer of them, or drop the quotes.
+        </Text>
+      ) : null}
     </View>
   );
 }
