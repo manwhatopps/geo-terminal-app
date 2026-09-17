@@ -1618,12 +1618,95 @@ function FrontPage({ data, goTab, goArticle, read }) {
   );
 }
 
+// one taxonomy for every menu: a story, a board claim and a call are all classified the same way,
+
+const topicOfStory = (st) => domainOf(decode(st.head || '') + ' ' + decode(st.tag || ''),
+  decode(st.t || '') + ' ' + decode(st.context || ''));
+const topicOfClaim = (c) => domainOf(decode(c.head || '') + ' ' + decode(c.claim || ''), decode(c.read || ''));
+
+// ── FILTERS YOU CAN COMBINE. ───────────────────────────────────────────────────────────────────
+// 2026-09-16 (user: "we should do multiple filters on all menus. Like for example say I only want to
+// read articles about ai and finance and the conspiracy that they are soft loading on the public...
+// because they are bracing for a bubble pop"). One filter at a time could not express that, and it is
+// a completely ordinary way to read: a reader has two or three interests, not one. So every list now
+// takes a SET.
+//
+// The semantics are the ones people already expect from every shop and every job board: OR inside a
+// group (AI or MONEY shows both), AND between groups (that subject AND that region). Nothing selected
+// in a group means the group is not filtering at all, which is why ALL is a state rather than a chip
+// you have to remember to deselect.
+const selHas = (sel, g, v) => !!(sel[g] || []).includes(v);
+function selToggle(sel, g, v) {
+  const cur = sel[g] || [];
+  return { ...sel, [g]: cur.includes(v) ? cur.filter((x) => x !== v) : cur.concat([v]) };
+}
+const selCount = (sel) => Object.keys(sel).reduce((n, g) => n + (sel[g] || []).length, 0);
+function selMatch(sel, groups, item) {
+  for (const g of groups) {
+    const picked = sel[g.key] || [];
+    if (!picked.length) continue;                       // this group is not filtering
+    const v = g.valueOf(item);
+    const vals = Array.isArray(v) ? v : [v];
+    if (!vals.some((x) => picked.includes(x))) return false;   // AND between groups
+  }
+  return true;
+}
+function MultiFilter({ groups, sel, onChange, total, shown }) {
+  const n = selCount(sel);
+  return (
+    <View style={{ paddingBottom: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.3, fontWeight: '700', flex: 1 }]}>
+          {n ? 'SHOWING ' + shown + ' OF ' + total : 'FILTER \u00b7 PICK AS MANY AS YOU LIKE'}
+        </Text>
+        {n ? (
+          <Pressable onPress={() => onChange({})} hitSlop={8}>
+            <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>CLEAR ALL</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {groups.map((g) => (
+        (g.chips || []).length ? (
+          <View key={g.key}>
+            <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.4, paddingHorizontal: 16, paddingTop: 10 }]}>{g.label}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.rfilter, { paddingHorizontal: 12 }]}>
+              {g.chips.map(([v, count]) => {
+                const on = selHas(sel, g.key, v);
+                return (
+                  <Pressable key={String(v)} onPress={() => onChange(selToggle(sel, g.key, v))} style={[s.rchip, on && s.rchipOn]}>
+                    <Text style={[s.rchipTxt, MONO, on && { color: C.text, fontWeight: '700' }]}>
+                      {(on ? '\u2713 ' : '') + String(v) + (count != null ? '  ' + count : '')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null
+      ))}
+    </View>
+  );
+}
+// the chips for a group, counted over the items actually present
+function chipsOf(items, valueOf) {
+  const c = new Map();
+  (items || []).forEach((it) => {
+    const v = valueOf(it);
+    (Array.isArray(v) ? v : [v]).filter(Boolean).forEach((x) => c.set(x, (c.get(x) || 0) + 1));
+  });
+  return [...c.entries()].sort((a, b) => b[1] - a[1]);
+}
+
 function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
                    older, loadOlder }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
-  useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => { if (v) setRegion(v); }).catch(() => {}); }, []);
+  const [sel, setSelRaw] = useState({});
+  useEffect(() => { AsyncStorage.getItem(REGION_KEY).then((v) => {
+    try { if (v && v.startsWith('{')) setSelRaw(JSON.parse(v)); } catch (e) {}
+  }).catch(() => {}); }, []);
+  const setSel = (next) => { setSelRaw(next); setArticle(null); AsyncStorage.setItem(REGION_KEY, JSON.stringify(next)).catch(() => {}); };
   const choose = (r) => { setRegion(r); setArticle(null); AsyncStorage.setItem(REGION_KEY, r).catch(() => {}); };
 
   const regions = regionsPresent(data.brief);
@@ -1632,11 +1715,17 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
   const active = valid ? region : 'ALL';
   const counts = {}; for (const st of (data.brief || [])) if (st.region) counts[st.region] = (counts[st.region] || 0) + 1;
   // "Saved" is a section front of its own, exactly where NYT puts it — in the filter bar.
-  const chips = [['ALL', 'All', (data.brief || []).length]]
-    .concat(nsaved ? [['SAVED', '★ Saved', nsaved]] : [])
-    .concat(regions.map((r) => [r, r, counts[r] || 0]));
-  const rows = briefSorted(data.brief).filter(({ s: st }) =>
-    active === 'ALL' ? true : active === 'SAVED' ? !!saved[storyId(st)] : st.region === active);
+  // 2026-09-16: one filter at a time could not say "AI and finance", so NEWS takes a set. Subject and
+  // region are separate groups - OR inside each, AND between them - and Saved is a group of one.
+  const allRows = briefSorted(data.brief);
+  const GROUPS = [
+    { key: 'topic', label: 'SUBJECT', valueOf: ({ s: st }) => topicOfStory(st),
+      chips: chipsOf(allRows, ({ s: st }) => topicOfStory(st)) },
+    { key: 'region', label: 'WHERE', valueOf: ({ s: st }) => st.region,
+      chips: chipsOf(allRows, ({ s: st }) => st.region) },
+  ].concat(nsaved ? [{ key: 'saved', label: 'YOURS', valueOf: ({ s: st }) => (saved[storyId(st)] ? '\u2605 Saved' : null),
+      chips: [['\u2605 Saved', nsaved]] }] : []);
+  const rows = allRows.filter((r) => selMatch(sel, GROUPS, r));
 
   const open = (i) => {
     const hit = (data.brief || [])[i];
@@ -1668,11 +1757,13 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
   }
 
   // INDEX STATE — the front page (Direction C): headlines only, serif, newest first, a rule between days.
-  const all = briefSorted(data.brief);
+  // 2026-09-16: the filter bar is back and it takes a SET - the reader who only wants AI and money
+  // picks both. It was computed here and never rendered, which is why NEWS listed everything.
   let seen = null;
   return (
     <View>
-      {all.length ? all.map(({ s: st, i }) => {
+      <MultiFilter groups={GROUPS} sel={sel} onChange={setSel} total={allRows.length} shown={rows.length} />
+      {rows.length ? rows.map(({ s: st, i }) => {
         const k = dayKey(st.ts);
         const rule = k !== seen ? <DayRule key={'d' + k} label={dayLabel(st.ts)} /> : null;
         seen = k;
@@ -1683,7 +1774,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
             <HeadlineRow item={st} onOpen={() => open(i)} isRead={!!read[id]} isSaved={!!saved[id]} />
           </View>
         );
-      }) : <Text style={s.foot}>No headlines right now.</Text>}
+      }) : <Text style={s.foot}>{selCount(sel) ? 'Nothing matches those filters. Tap CLEAR ALL to see everything.' : 'No headlines right now.'}</Text>}
       {loadOlder && older !== 'done' ? (
         <Pressable onPress={older === 'loading' ? null : loadOlder} style={{ paddingVertical: 14, alignItems: 'center' }}>
           <Text style={[MONO, { color: older === 'error' ? C.high : C.accent, fontSize: 11, letterSpacing: 1 }]}>
@@ -1830,23 +1921,72 @@ function BoardArticle({ c, onBack, onStory }) {
     </View>
   );
 }
+// ── WHAT THE WORLD IS TALKING ABOUT — GDELT news volume per theatre. ───────────────────────────
+// 2026-09-16 audit. `attention` was written every pass and rendered nowhere: it was surfaced only
+// inside the situation-room map, which was stripped, and an orphaned key is desk output nobody can
+// read. Reading it before deleting it turned up two bugs behind it (a partial day that was never
+// dropped, and a concurrent fetch that GDELT answered with 429 every single time, so the numbers had
+// been FROZEN while a log line blamed the upstream). Both fixed; it earns a surface on BOARDS,
+// because how loudly the world is covering a theatre is narrative data, which is what this tab is.
+// Every reading carries its own date and a stale one is not drawn - a coverage ratio from last week
+// is not a fact about today.
+function Attention({ att }) {
+  const rows = Object.keys(att || {})
+    .map((k) => ({ n: k, ...(att[k] || {}) }))
+    .filter((x) => x.d && typeof x.r === 'number' && Array.isArray(x.s) && x.s.length >= 8
+      && (Date.now() - Date.parse(x.d + 'T12:00:00Z')) < 3 * 86400000)
+    .sort((a, b) => b.r - a.r);
+  if (rows.length < 3) return null;
+  const word = (r) => (r >= 1.5 ? 'far louder than usual' : r >= 1.15 ? 'louder than usual'
+    : r <= 0.6 ? 'far quieter than usual' : r <= 0.85 ? 'quieter than usual' : 'about as usual');
+  return (
+    <Section title="What the world is talking about" extra={rows[0].d || ''}>
+      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 6 }}>
+        How much of the world's news is going to each theatre today, against its own fourteen-day average.
+        Coverage is not importance — a theatre going quiet is sometimes the story.
+      </Text>
+      {rows.map((x, i) => (
+        <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line, paddingHorizontal: 16, paddingVertical: 11 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={{ color: C.text, fontSize: 14.5, flex: 1 }}>{decode(x.n)}</Text>
+            <View style={{ width: 96 }}><Sparkline hist={x.s} w={96} h={22} /></View>
+            <Text style={[MONO, { color: x.r >= 1.15 ? C.high : x.r <= 0.85 ? C.calm : C.muted,
+              fontSize: 13.5, fontWeight: '800', width: 52, textAlign: 'right' }]}>{x.r + '\u00d7'}</Text>
+          </View>
+          <Text style={{ color: C.muted, fontSize: 12.5, marginTop: 3 }}>{word(x.r)}</Text>
+        </View>
+      ))}
+      <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, paddingHorizontal: 16, paddingVertical: 10 }]}>
+        GDELT ARTICLE VOLUME, 14-DAY WINDOW
+      </Text>
+    </Section>
+  );
+}
+
 function BoardsTab({ data, goArticle }) {
-  const [region, setRegion] = useState('ALL');
+  const [sel, setSel] = useState({});
   const [spec, setSpec] = useState(null);
   const [open, setOpen] = useState(null);
   const pinned = (data.brief || []).flatMap((b, i) =>
     (b.consp ? (Array.isArray(b.consp) ? b.consp : [b.consp]) : []).map((c) => ({ ...c, story: b, storyIdx: i, region: b.region, ts: c.ts || b.ts })));
   const loose = (data.chatter || []).map((c) => ({ ...c, region: c.region || inferRegion(c.claim + ' ' + (c.read || '')) }));
   const all = pinned.concat(loose).map((c, k) => ({ ...c, k }));
-  const items = all.filter((c) => region === 'ALL' || c.region === region)
+  // subject and region are separate groups: OR inside each, AND between them
+  const BGROUPS = [
+    { key: 'topic', label: 'SUBJECT', valueOf: topicOfClaim, chips: chipsOf(all, topicOfClaim) },
+    { key: 'region', label: 'WHERE', valueOf: (c) => c.region, chips: chipsOf(all, (c) => c.region) },
+  ];
+  const items = all.filter((c) => selMatch(sel, BGROUPS, c))
     .sort((a, b) => (Date.parse(b.ts || '') || 0) - (Date.parse(a.ts || '') || 0));
-  const specs = (data.speculation || []).filter((sp) => region === 'ALL' || (sp.region || inferRegion(sp.obs + ' ' + (sp.read || ''))) === region);
+  const specs = (data.speculation || []).filter((sp) => selMatch(sel, BGROUPS,
+    { ...sp, claim: sp.obs, head: sp.head, read: sp.read,
+      region: sp.region || inferRegion(sp.obs + ' ' + (sp.read || '')) }));
   const cur = open != null ? all.find((c) => c.k === open) : null;
   if (cur) return <BoardArticle c={cur} onBack={() => setOpen(null)} onStory={goArticle} />;
   let seen = null;
   return (
     <View style={s.stack}>
-      <FilterDrop pairs={textRegionPairs(all, (c) => c.claim + ' ' + (c.read || ''))} active={region} onPick={setRegion} />
+      <MultiFilter groups={BGROUPS} sel={sel} onChange={setSel} total={all.length} shown={items.length} />
       <Text style={[s.conspWarn, { paddingHorizontal: 4 }]}>{items.length + ' CIRCULATING · UNVERIFIED · WHAT PEOPLE BELIEVE, NOT WHAT IS CONFIRMED'}</Text>
       {/* 2026-09-16 (user: "count every rumour from these accounts - maybe put a speculation category
           for the boards"). `speculation` was computed here and never rendered outside an article: it is
@@ -1923,6 +2063,7 @@ function BoardsTab({ data, goArticle }) {
         );
       })}
       {!items.length ? <Text style={s.foot}>Nothing circulating in this filter right now.</Text> : null}
+      <Attention att={data.attention} />
       <Watchtower items={specs} />
     </View>
   );
@@ -2059,12 +2200,14 @@ const inDays = (n) => (n == null ? '' : n < 0 ? 'overdue' : n === 0 ? 'today' : 
 const DOMAINS = [
   ['COURTS', /\b(court|indict|tribunal|prosecut|ruling|charges|arrest|icc\b|lawsuit|sentenc|convict|subpoena|contempt|warrant|grand jury|judge|extradit)/i],
   ['WAR', /\b(strike|struck|missile|drone|shelling|offensive|troops?|forces|combat|casualt|killed|wounded|ceasefire|truce|air ?defen[cs]e|interceptor|airstrike|bomb|artillery|front ?line|incursion|naval|warship|mobilis|mobiliz|war\b|fighting|militar|attack|seiz|blockad|raid|sabotage|assassinat|hostage|cyber|liberat|captur|recaptur|f-\d\d|arms (sale|transfer|package|deal)|weapons?|munitions?|fighter jets?|submarine|nuclear (test|weapon|warhead))/i],
+  ['TECH', /\b(a\.?i\.?\b|artificial intelligence|machine learning|\bllm\b|model weights|chips?\b|semiconductor|foundry|nvidia|tsmc|asml|data ?cent(?:er|re)|compute cluster|\bgpus?\b|quantum|robotics?\b|automation|algorithm|cloud provider|starlink|satellite internet|encryption|facial recognition|biometric|surveillance technology)/i],
   ['MONEY', /\b(price|prices|barrel|brent|yield|oil|crude|gas\b|lng|export|import|tariff|sanction|designat|embargo|bank|currency|rouble|ruble|yuan|dollar|debt|bond|market|trade|inflation|budget|fund|imf\b|world bank|revenue|shipment|cargo|loading|refiner|pipeline|freight|insurance|transit|tanker|strait|chokepoint|barrels|gdp|investment|asset freeze|fomc|federal reserve|interest rate|target range|central bank|ecb|rate (cut|hike|rise|decision)|commercial|contract|licen[cs]e|concession|joint venture)/i],
   ['CRISES', /\b(flood|earthquake|collapse|death toll|dead|missing|famine|drought|displace|refugee|evacuat|cholera|outbreak|disease|aid convoy|humanitarian|wildfire|storm|cyclone|landslide)/i],
   ['POLITICS', /\b(elect|vote|votes|voted|ballot|parliament|duma|riksdag|congress|senate|house\b|seats|coalition|cabinet|minister|impeach|resign|president|prime minister|referendum|poll|party|legislat|\bbill\b|confidence motion|appoint|swear|inaugurat|no-confidence)/i],
   ['DIPLOMACY', /\b(talks|summit|meet|meeting|agreement|treaty|accord|\bdeal\b|recogni[sz]|ambassador|normali[sz]|mediat|delegation|joint statement|communiqu|visit|readout|envoy|negotiat|memorandum|protocol|resolution|declaration|council|conclusions|endorse|border|boundary|demarcat|survey|framework)/i],
 ];
 const DOMAIN_SUB = { WAR: 'fighting, weapons and who is arming whom', MONEY: 'prices, trade, sanctions and the money behind them',
+  TECH: 'AI, chips, compute and the companies that hold them',
   POLITICS: 'elections, parliaments and who holds the chair', DIPLOMACY: 'talks, treaties, recognition and the rooms they happen in',
   COURTS: 'indictments, rulings and where the law bites', CRISES: 'disasters, tolls and the people moved by them' };
 function domainOf(ev, extra) {
@@ -2251,7 +2394,7 @@ function Rooms({ chairs, goArticle }) {
 function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const [region, setRegion] = useState('ALL');
   const [book, setBook] = useState(null);   // the tracked book opens one row at a time
-  const [subject, setSubject] = useState('ALL');
+  const [sel, setSel] = useState({});
   const [allCalls, setAllCalls] = useState(false);
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
@@ -2260,11 +2403,15 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   const counts = new Map();
   calls.forEach((x) => counts.set(x.domain, (counts.get(x.domain) || 0) + 1));
   const subjects = DOMAINS.map(([n]) => [n, counts.get(n) || 0]).filter(([, n]) => n > 0);
-  const hit = subject === 'ALL' ? calls : calls.filter((x) => x.domain === subject);
+  const CGROUPS = [
+    { key: 'topic', label: 'SUBJECT', valueOf: (x) => x.domain, chips: subjects },
+    { key: 'theatre', label: 'WHERE', valueOf: (x) => x.theatre, chips: chipsOf(calls, (x) => x.theatre) },
+  ];
+  const hit = calls.filter((x) => selMatch(sel, CGROUPS, x));
   // the lede is the soonest call the desk is actually confident about, not merely the soonest
   const lede = hit.find((x) => x.days != null && x.days <= 45 && Math.abs(x.p - 50) >= 20) || hit[0];
   const rest = hit.filter((x) => x !== lede);
-  const shown = allCalls || subject !== 'ALL' ? rest : rest.slice(0, 14);
+  const shown = allCalls || selCount(sel) ? rest : rest.slice(0, 14);
   const chairs = chairsFrom(data.brief);
   const groups = [];
   BUCKETS.forEach((b, bi) => {
@@ -2276,18 +2423,11 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
     <View style={s.stack}>
       <CallsLede x={lede} goArticle={goArticle} />
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.rfilter, { paddingHorizontal: 12, paddingBottom: 12 }]}>
-          {[['ALL', calls.length]].concat(subjects).map(([nm, n]) => (
-            <Pressable key={nm} onPress={() => { setSubject(nm); setAllCalls(false); }} style={[s.rchip, subject === nm && s.rchipOn]}>
-              <Text style={[s.rchipTxt, MONO, subject === nm && { color: C.text, fontWeight: '700' }]}>
-                {(nm === 'ALL' ? 'EVERYTHING' : nm) + '  ' + n}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        {subject !== 'ALL' ? (
+        <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => { setSel(nx); setAllCalls(false); }}
+          total={calls.length} shown={hit.length} />
+        {selCount(sel) === 1 && (sel.topic || []).length === 1 ? (
           <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 16, paddingBottom: 14 }}>
-            {(DOMAIN_SUB[subject] || '') + ' \u2014 ' + hit.length + (hit.length === 1 ? ' call' : ' calls')
+            {(DOMAIN_SUB[(sel.topic || [])[0]] || '') + ' \u2014 ' + hit.length + (hit.length === 1 ? ' call' : ' calls')
               + (hit[0] && hit[0].due ? ', the next resolving ' + fmtDue(hit[0].due).replace('BY ', '').toLowerCase() : '')}
           </Text>
         ) : null}
@@ -2300,7 +2440,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
             {g.rows.map((x, j) => <CallRow key={j} x={x} goArticle={goArticle} />)}
           </View>
         ))}
-        {!allCalls && subject === 'ALL' && rest.length > shown.length ? (
+        {!allCalls && !selCount(sel) && rest.length > shown.length ? (
           <Pressable onPress={() => setAllCalls(true)} style={{ paddingVertical: 15, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
             <Text style={[s.readmore, MONO]}>{'THE REMAINING ' + (rest.length - shown.length) + ' CALLS \u203a'}</Text>
           </Pressable>
