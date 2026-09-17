@@ -1884,6 +1884,17 @@ function snippetOf(terms, hay) {
   const from = Math.max(0, H.lastIndexOf(' ', Math.max(0, i - 60)));
   return (from > 0 ? '\u2026' : '') + H.slice(from, Math.min(H.length, i + 120)).trim() + '\u2026';
 }
+// one result row, hoisted out of SearchScreen: an inner component is a new type on every keystroke,
+// which throws away the list's reconciliation, and it reads as an undefined component to the audit
+function SearchRow({ title, meta, snip, onPress, tint }) {
+  return (
+    <Pressable onPress={onPress} style={s.hrow}>
+      <Text style={[s.hrowH, { fontSize: 19, lineHeight: 24 }]}>{title}</Text>
+      {snip ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }} numberOfLines={2}>{snip}</Text> : null}
+      {meta ? <Text style={[s.hrowMeta, tint ? { color: tint } : null]}>{meta}</Text> : null}
+    </Pressable>
+  );
+}
 function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
   const terms = parseQuery(query);
   const enough = terms.length > 0 && query.trim().length >= 2;
@@ -1904,13 +1915,6 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
   const specs = rank((data.speculation || []).map((sp) => ({ o: sp })), (sp) => sp.head || sp.obs || '');
   const total = stories.length + boards.length + calls.length + specs.length;
 
-  const Row = ({ title, meta, snip, onPress, tint }) => (
-    <Pressable onPress={onPress} style={s.hrow}>
-      <Text style={[s.hrowH, { fontSize: 19, lineHeight: 24 }]}>{title}</Text>
-      {snip ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }} numberOfLines={2}>{snip}</Text> : null}
-      {meta ? <Text style={[s.hrowMeta, tint ? { color: tint } : null]}>{meta}</Text> : null}
-    </Pressable>
-  );
   return (
     <View>
       <View style={s.searchbox}>
@@ -1932,24 +1936,24 @@ function SearchScreen({ data, query, setQuery, goArticle, goTab }) {
       )}
       {stories.length ? <Text style={s.searchH}>{'STORIES \u00b7 ' + stories.length}</Text> : null}
       {stories.map(({ x }, n) => (
-        <Row key={'s' + n} title={articleParts(x.o).head} meta={String(x.o.region || '').toUpperCase()}
+        <SearchRow key={'s' + n} title={articleParts(x.o).head} meta={String(x.o.region || '').toUpperCase()}
           snip={snippetOf(terms, hayOf(x.o))} onPress={() => goArticle(x.i)} />
       ))}
       {calls.length ? <Text style={s.searchH}>{'CALLS \u00b7 ' + calls.length}</Text> : null}
       {calls.map(({ x }, n) => (
-        <Row key={'c' + n} title={decode((x.o.hist.call || {}).event || '')}
+        <SearchRow key={'c' + n} title={decode((x.o.hist.call || {}).event || '')}
           meta={String(x.o.region || '').toUpperCase() + (x.o.hist.call.horizon ? '  \u00b7  ' + String(x.o.hist.call.horizon).toUpperCase() : '')}
           onPress={() => goArticle(x.i)} />
       ))}
       {boards.length ? <Text style={[s.searchH, { color: C.high }]}>{'BOARDS \u00b7 ' + boards.length}</Text> : null}
       {boards.map(({ x }, n) => (
-        <Row key={'b' + n} title={decode(x.o.head || x.o.claim || '')} tint={C.high}
+        <SearchRow key={'b' + n} title={decode(x.o.head || x.o.claim || '')} tint={C.high}
           meta={'UNVERIFIED' + (x.o.region ? '  \u00b7  ' + String(x.o.region).toUpperCase() : '')}
           snip={snippetOf(terms, hayOf(x.o))} onPress={() => goTab('boards')} />
       ))}
       {specs.length ? <Text style={[s.searchH, { color: C.elev }]}>{'SPECULATION \u00b7 ' + specs.length}</Text> : null}
       {specs.map(({ x }, n) => (
-        <Row key={'p' + n} title={decode(x.o.head || String(x.o.obs || '').slice(0, 110))} tint={C.elev}
+        <SearchRow key={'p' + n} title={decode(x.o.head || String(x.o.obs || '').slice(0, 110))} tint={C.elev}
           meta={String(x.o.grade || 'unverified').toUpperCase()} onPress={() => goTab('boards')} />
       ))}
       {enough && !total ? (
