@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView,
+  ActivityIndicator, AppState, Keyboard, Linking, Pressable, RefreshControl, ScrollView,
   Share, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -924,17 +924,15 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             paragraph, no labels). Reading time is measured from the full read, not the summary. */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
           <Pressable onPress={() => setPane(pane === 'sum' ? null : 'sum')} style={[s.artbtn, { borderColor: C.calm }, pane === 'sum' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.calm }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>≡ SUMMARY</Text>
+            <Text style={[s.artbtnT, MONO, { color: C.calm }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>≡ SUMMARY</Text>
             <Text style={s.artbtnS}>the story in 30 seconds</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>◉ ANALYST</Text>
-            <Text style={s.artbtnS}>{item.hist && item.hist.call && item.hist.call.p != null
-              ? "the desk's call on this story: " + Math.round(Number(item.hist.call.p)) + '%'
-              : "the desk's read on this story"}</Text>
+            <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>◉ ANALYST</Text>
+            <Text style={s.artbtnS}>the desk's read and its call</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>☍ CONSPIRACY</Text>
+            <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>☍ CONSPIRACY</Text>
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
           </Pressable>
         </View>
@@ -3707,14 +3705,14 @@ export default function App() {
           </Pressable>
         ) : null}
         {data && (
-          <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
+          <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {article != null ? (
               <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
                 read={read} saved={saved} toggleSave={toggleSave} markRead={markRead}
                 tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />
             ) : searching ? (
               <SearchScreen data={data} query={query} setQuery={setQuery}
-                goArticle={(i) => { setSearching(false); goArticle(i); }} goTab={(k) => { setSearching(false); setTab(k); scrollTop(); }} />
+                goArticle={(i) => { Keyboard.dismiss(); setSearching(false); goArticle(i); }} goTab={(k) => { Keyboard.dismiss(); setSearching(false); setTab(k); scrollTop(); }} />
             ) : (
               <>
                 {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} />}
@@ -3807,11 +3805,11 @@ function buildStyles() {
   backtxt: { color: C.accent, fontSize: 14, fontWeight: '600' },
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
-  artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: C.panel },
+  artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
   sumdoor: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14 },
   sharebtn: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center' },
-  artbtnT: { color: C.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.9 },   // one word per door, one line, never broken
+  artbtnT: { color: C.accent, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.3 },   // one word per door, one line, never broken (2026-09-17: CONSPIRACY clipped at 0.9 spacing on a 375pt phone)
   artbtnS: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 13.5 },
   hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
   hrowH: { fontFamily: 'Charter', fontSize: 24, lineHeight: 29, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
