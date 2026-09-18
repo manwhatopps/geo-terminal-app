@@ -2779,6 +2779,11 @@ const ODDS = [[85, 'NEAR CERTAIN'], [65, 'LIKELY'], [55, 'LEANS THIS WAY'], [45,
   [35, 'LEANS AGAINST'], [15, 'UNLIKELY'], [0, 'NEARLY RULED OUT']];
 const oddsWord = (p) => (ODDS.find(([n]) => p >= n) || ODDS[ODDS.length - 1])[1];
 
+function beatOf(hist, head) {
+  const c = (hist && Array.isArray(hist.chain)) ? hist.chain : [];
+  const hit = c.find((x) => x && String(x.h || '').trim().toUpperCase() === head);
+  return hit && hit.p ? String(hit.p) : null;
+}
 function callsFrom(cards, clocks) {
   const out = [];
   (cards || []).forEach((c, idx) => {
@@ -2792,6 +2797,11 @@ function callsFrom(cards, clocks) {
       event: String(k.event).replace(DUE_TAIL, '').trim(), due: d,
       days: d ? Math.round((Date.parse(d + 'T12:00:00Z') - Date.now()) / 86400000) : null,
       pro: (h.for || [])[0], con: (h.against || [])[0],
+      // 2026-09-18 (editor: "this is what I mean by calls - these analytic chains, not some Polymarket
+      // prediction table"). A call is the END of a piece of reasoning, so the row carries the reasoning:
+      // the hinge (is the stated incapacity real) and the exit map (what closes this, and what has already
+      // been tried and failed). Both come from the card's chain; the number is the conclusion, not the row.
+      hinge: beatOf(h, "CAN'T OR WON'T"), ends: beatOf(h, 'HOW THIS ENDS'),
       conf: k.conf, update: k.update, clock: null });
     out.push(row(call, due));
     // 2026-09-17 (editor: "make long term predictions"): the card's FURTHER OUT call is a call of its
@@ -2847,32 +2857,40 @@ const BUCKETS = [{ lab: 'THE NEXT TWO WEEKS', sub: 'resolve inside a fortnight',
 // One call, written out. The number never appears without the position that produced it (L14), which
 // is why FOR and BUT are printed here rather than hidden behind the row.
 function CallRow({ x, goArticle, lede, pick, hasScenarios }) {
-  const hs = lede ? 25 : 18.5;
+  // The claim first, then why the desk believes it, then the number and the date - in that order. A row
+  // that opens with "LIKELY · BY 26 SEP · 8 DAYS" is a betting slip; the desk's product is the argument.
+  const hs = lede ? 25 : 19.5;
+  const [open, setOpen] = useState(!!lede);
+  const body = { fontSize: 15, lineHeight: 23, marginTop: 9, marginBottom: 0 };
+  const tag = (color) => [MONO, { color, fontSize: 10, letterSpacing: 1.1, fontWeight: '800' }];
   return (
-    <View style={{ borderTopWidth: lede ? 0 : 1, borderTopColor: C.line, paddingHorizontal: 16, paddingTop: lede ? 0 : 15, paddingBottom: lede ? 0 : 17 }}>
-      <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700' }]}>
-        <Text style={{ color: C.accent }}>{oddsWord(x.p)}</Text>
-        <Text style={{ color: C.muted }}>
-          {'  \u00b7  ' + [fmtDue(x.due), inDays(x.days).toUpperCase(), String(x.theatre || '').toUpperCase()].filter(Boolean).join('  \u00b7  ')}
-        </Text>
-      </Text>
+    <View style={{ borderTopWidth: lede ? 0 : 1, borderTopColor: C.line, paddingHorizontal: 16, paddingTop: lede ? 0 : 16, paddingBottom: lede ? 0 : 18 }}>
       <Pressable onPress={() => goArticle && goArticle(x.idx)}>
-        <Text style={[SERIF, { color: C.text, fontSize: hs, lineHeight: Math.round(hs * 1.34), fontWeight: '600', marginTop: 7 }]}>{decode(x.event)}</Text>
+        <Text style={[SERIF, { color: C.text, fontSize: hs, lineHeight: Math.round(hs * 1.34), fontWeight: '600' }]}>{decode(x.event)}</Text>
       </Pressable>
-      {x.pro ? (
-        <Text style={[s.p, { fontSize: 15, lineHeight: 22.5, marginTop: 11, marginBottom: 0 }]}>
-          <Text style={[MONO, { color: C.calm, fontSize: 10, letterSpacing: 1.1, fontWeight: '800' }]}>{'FOR  '}</Text>{decode(String(x.pro))}
-        </Text>
+      {x.pro ? <Text style={[s.p, body]}><Text style={tag(C.calm)}>{'FOR  '}</Text>{decode(String(x.pro))}</Text> : null}
+      {x.con ? <Text style={[s.p, body]}><Text style={tag(C.crit)}>{'BUT  '}</Text>{decode(String(x.con))}</Text> : null}
+      {open ? (
+        <>
+          {x.hinge ? <Text style={[s.p, body]}><Text style={tag(C.accent)}>{"CAN'T OR WON'T  "}</Text>{decode(x.hinge)}</Text> : null}
+          {x.ends ? <Text style={[s.p, body]}><Text style={tag(C.accent)}>{'HOW THIS ENDS  '}</Text>{decode(x.ends)}</Text> : null}
+          {x.update ? <Text style={[s.p, { ...body, color: C.muted }]}>{decode(x.update)}</Text> : null}
+        </>
       ) : null}
-      {x.con ? (
-        <Text style={[s.p, { fontSize: 15, lineHeight: 22.5, marginTop: 7, marginBottom: 0 }]}>
-          <Text style={[MONO, { color: C.crit, fontSize: 10, letterSpacing: 1.1, fontWeight: '800' }]}>{'BUT  '}</Text>{decode(String(x.con))}
-        </Text>
+      {!open && (x.hinge || x.ends || x.update) ? (
+        <Pressable onPress={() => setOpen(true)} hitSlop={6} style={{ marginTop: 10 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{'\u2261 THE REASONING'}</Text>
+        </Pressable>
       ) : null}
-      {lede && x.update ? <Text style={[s.p, { color: C.muted, fontSize: 15, lineHeight: 22.5, marginTop: 11, marginBottom: 0 }]}>{decode(x.update)}</Text> : null}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 11 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 13 }}>
+        <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>
+          <Text style={{ color: C.accent }}>{oddsWord(x.p)}</Text>
+          <Text style={{ color: C.muted }}>
+            {'  \u00b7  ' + [fmtDue(x.due), inDays(x.days).toUpperCase(), x.conf ? String(x.conf).toUpperCase() + ' CONFIDENCE' : null,
+              String(x.theatre || '').toUpperCase()].filter(Boolean).join('  \u00b7  ')}
+          </Text>
+        </Text>
         {x.also ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>{'+' + x.also + ' MORE ' + (x.also === 1 ? 'STORY' : 'STORIES') + ' TURN ON THIS'}</Text> : null}
-        {x.conf ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>{String(x.conf).toUpperCase() + ' CONFIDENCE'}</Text> : null}
         {x.clock ? (
           <Text style={[MONO, { color: C.high, fontSize: 9.5, letterSpacing: 1.1 }]}>
             {'SETTLED BY ' + String(x.clock.label || '').toUpperCase() + ' ' + String(x.clock.date || '').slice(5)}
@@ -2890,6 +2908,7 @@ function CallRow({ x, goArticle, lede, pick, hasScenarios }) {
     </View>
   );
 }
+
 
 // The page opens the way a front page does: one thing, said properly.
 function CallsLede({ x, goArticle }) {
@@ -3010,7 +3029,9 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
     <View style={s.stack}>
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 10 }}>
-          Soonest first, the long book last. Each call is dated, falsifiable and scored when it resolves.
+          Each call is an argument that ends in a number, not a betting line: the case for it, the case
+          against, whether the thing an actor says it cannot do is one it will not do, and what closes it.
+          Soonest first, the long book last, every one scored when it resolves.
         </Text>
         <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => { setSel(nx); setAllCalls(false); }}
           total={calls.length} shown={hit.length} />
