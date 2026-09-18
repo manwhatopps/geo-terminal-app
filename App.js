@@ -293,7 +293,7 @@ const TABS = [
   // CALLS = what does the desk predict and is it any good. DATA = what are the underlying numbers.
   { key: 'calls', label: 'CALLS', g: '◉' },
   // 2026-09-17 (editor): the rooms are their own thing, not a section of DATA - DATA opens on the receipts
-  { key: 'rooms', label: 'ROOMS', g: '◫' },
+  { key: 'rooms', label: 'HISTORY', g: '◫' },
   { key: 'data', label: 'DATA', g: '▦' },
 ];
 // 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
@@ -1904,7 +1904,7 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
           boards first, the wire last - because the wire has its own tab and this is the front page. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
-        {tile('rooms', '◫', 'ROOMS', Object.keys((hist && hist.situations) || {}).length, 'the history behind each war')}
+        {tile('rooms', '\u25eb', 'HISTORY', Object.keys((hist && hist.situations) || {}).length || '\u00b7', 'why each war looks like this')}
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
         {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
         {tile('data', '▦', 'DATA', ((data.chokepoints || {}).n || 0) + Object.keys((data.inflation || {}).official || {}).length + Object.keys((data.inflation || {}).independent || {}).length, 'the receipts, the straits, the money')}
@@ -2037,20 +2037,27 @@ function selMatch(sel, groups, item) {
   return true;
 }
 function MultiFilter({ groups, sel, onChange, total, shown }) {
+  // 2026-09-18 (editor: "don't start the filters, make the filters an expandable"). Filters were the
+  // first thing on BOARDS and CALLS - two rows of chips and a legend before a single headline. Now one
+  // quiet line: what is filtered, tapped to open. The reader came to read, not to configure.
+  const [open, setOpen] = useState(false);
   const n = selCount(sel);
+  const active = groups.flatMap((g) => (sel[g.key] || []).map((v) => String(v)));
   return (
-    <View style={{ paddingBottom: 6 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
-        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.3, fontWeight: '700', flex: 1 }]}>
-          {n ? 'SHOWING ' + shown + ' OF ' + total : 'FILTER \u00b7 PICK AS MANY AS YOU LIKE'}
-        </Text>
+    <View style={{ paddingBottom: open ? 6 : 0 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6, gap: 12 }}>
+        <Pressable onPress={() => setOpen((v) => !v)} hitSlop={8} style={{ flex: 1 }}>
+          <Text style={[MONO, { color: n ? C.accent : C.muted, fontSize: 10, letterSpacing: 1.3, fontWeight: '700' }]} numberOfLines={1}>
+            {(open ? '\u2212 ' : '\u2261 ') + (n ? active.join(', ').toUpperCase() + '  \u00b7  ' + shown + ' OF ' + total : 'FILTER')}
+          </Text>
+        </Pressable>
         {n ? (
           <Pressable onPress={() => onChange({})} hitSlop={8}>
-            <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>CLEAR ALL</Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, fontWeight: '700' }]}>CLEAR</Text>
           </Pressable>
         ) : null}
       </View>
-      {groups.map((g) => (
+      {open ? groups.map((g) => (
         (g.chips || []).length ? (
           <View key={g.key}>
             <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.4, paddingHorizontal: 16, paddingTop: 10 }]}>{g.label}</Text>
@@ -2068,10 +2075,11 @@ function MultiFilter({ groups, sel, onChange, total, shown }) {
             </ScrollView>
           </View>
         ) : null
-      ))}
+      )) : null}
     </View>
   );
 }
+
 // the chips for a group, counted over the items actually present
 function chipsOf(items, valueOf) {
   const c = new Map();
@@ -2496,7 +2504,10 @@ function BoardsTab({ data, goArticle }) {
   return (
     <View style={s.stack}>
       <MultiFilter groups={BGROUPS} sel={sel} onChange={setSel} total={all.length} shown={items.length} />
-      <Text style={[s.conspWarn, { paddingHorizontal: 4 }]}>{items.length + ' CIRCULATING · UNVERIFIED · WHAT PEOPLE BELIEVE, NOT WHAT IS CONFIRMED'}</Text>
+      <Text style={{ color: C.high, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 4, paddingBottom: 2 }}>
+        <Text style={[MONO, { fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{'UNVERIFIED  '}</Text>
+        {items.length + ' claims circulating. What people believe, not what is confirmed.'}
+      </Text>
       {/* 2026-09-16 (user: "count every rumour from these accounts - maybe put a speculation category
           for the boards"). `speculation` was computed here and never rendered outside an article: it is
           the desk's record of what trackers and tracked accounts are claiming, each with a grade and the
@@ -2984,9 +2995,8 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   return (
     <View style={s.stack}>
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
-        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 12 }}>
-          Every call is falsifiable, dated, and scored when it resolves: soonest first, the long book
-          last. The case for it and against it is printed with it, because the number alone would be a betting line.
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 10 }}>
+          Soonest first, the long book last. Each call is dated, falsifiable and scored when it resolves.
         </Text>
         <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => { setSel(nx); setAllCalls(false); }}
           total={calls.length} shown={hit.length} />
@@ -4234,10 +4244,10 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
   if (!keys.length) return null;
   const cur = room && sits[room] ? { ...sits[room], key: room } : null;
   return (
-    <Section title="Situation rooms" extra={keys.length + ' tracked'}>
+    <Section title="The wars, explained" extra={keys.length + ' files'}>
       <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
-        One room per war: the history that explains today, the doctrines and patterns of each side,
-        and the stories on the wire that belong to it. Sourced event by event.
+        One file per war: the history that explains today, what each side has committed to and done
+        before, and the stories on the wire that belong to it. Sourced event by event.
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
         {keys.map((k) => (
@@ -4581,7 +4591,9 @@ export default function App() {
     const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist)]);
     setWorldErr(errs.find(Boolean) || null);
   }, []);
-  useEffect(() => { if ((tab === 'data' || tab === 'rooms') && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
+  // 2026-09-18: the history used to load only when its tab opened, so HOME advertised "ROOMS 0" - the
+  // front page counting a thing it had not fetched. It loads with everything else now.
+  useEffect(() => { if (!world && !hist) loadWorld(); }, [world, hist, loadWorld]);
   // older stories: the 30-day archive, pulled only when the reader asks for it at the foot of the wire
   const [older, setOlder] = useState('idle');   // idle | loading | done | error
   const loadOlder = useCallback(async () => {
