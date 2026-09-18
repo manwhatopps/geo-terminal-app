@@ -3311,11 +3311,22 @@ const MARKETS_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-
 const MARKETS_CACHE_KEY = 'geo-markets-cache-v1';
 const TICKER = [
   ['brent', 'BRENT', (v) => '$' + Number(v).toFixed(2)],
+  ['wti', 'WTI', (v) => '$' + Number(v).toFixed(2)],
   ['nat_gas_henry_hub', 'GAS', (v) => '$' + Number(v).toFixed(2)],
   ['us10y', 'US 10Y', (v) => Number(v).toFixed(2) + '%'],
+  ['gold', 'GOLD', (v) => '$' + Math.round(Number(v)).toLocaleString('en-US')],
   ['vix', 'VIX', (v) => Number(v).toFixed(1)],
   ['usd_broad', 'DOLLAR', (v) => Number(v).toFixed(1)],
 ];
+// 2026-09-18: a price on a screen has to say when it was true. The first strip ran off a spot series that
+// publishes two to three days late and showed a three-day-old $130.80 while Brent traded at $99.69 - under
+// a masthead whose own lede said Brent had fallen below $100. Anything older than a day is dimmed and
+// stamped with its date rather than shown as current.
+const TICK_STALE_MS = 26 * 3600 * 1000;
+function asofAge(d) {
+  const t = Date.parse(String((d && d.asof) || '').replace(' ', 'T').replace('Z', ':00Z'));
+  return Number.isNaN(t) ? null : Date.now() - t;
+}
 function MarketStrip({ onPress }) {
   const [m, setM] = useState(null);
   useEffect(() => {
@@ -3333,10 +3344,12 @@ function MarketStrip({ onPress }) {
         contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 7, alignItems: 'center', gap: 18 }}>
         {rows.map(([label, d, fmt], i) => {
           const up = Number(d.chg_pct) > 0, flat = !d.chg_pct || Math.abs(Number(d.chg_pct)) < 0.05;
+          const age = asofAge(d), stale = d.stale || (age != null && age > TICK_STALE_MS);
           return (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, opacity: stale ? 0.45 : 1 }}>
               <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.1 }]}>{label}</Text>
               <Text style={[MONO, { color: C.text, fontSize: 12, fontWeight: '800' }]}>{fmt(d.v)}</Text>
+              {stale ? <Text style={[MONO, { color: C.muted, fontSize: 9 }]}>{String(d.asof || '').slice(5, 10)}</Text> : null}
               {!flat ? (
                 <Text style={[MONO, { color: up ? C.high : C.calm, fontSize: 10, fontWeight: '700' }]}>
                   {(up ? '▲' : '▼') + Math.abs(Number(d.chg_pct)).toFixed(1) + '%'}
