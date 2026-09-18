@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, Keyboard, Linking, Pressable, RefreshControl, ScrollView,
   Share, StyleSheet, Text, TextInput, View,
@@ -302,8 +302,62 @@ const TABS = [
 // everything, it takes too long to scroll through all of this"). `fold` turns a section into a
 // headline that opens on tap. Opt-in, so NEWS and HOME keep reading top to bottom the way a front
 // page should; the reference tabs become an index you choose from.
+// ── CONTENTS — 2026-09-17 (editor: "a mini table of contents ... a table of contents button and if
+// they want to jump to a certain section they can click that button and it expands"). One quiet button;
+// open, it lists the sections; a tap scrolls the root ScrollView to that section. Articles list their
+// read's headers; a tab lists the Sections it renders (each Section registers itself on mount). The jump
+// measures the target and the scroll frame in window space, so it works at any nesting depth, on iOS
+// and on the web. ──
+const ScrollCtx = createContext({ jumpTo: () => {} });
+const TocCtx = createContext(null);
+function Toc({ items, color }) {
+  const { jumpTo } = useContext(ScrollCtx);
+  const [open, setOpen] = useState(false);
+  const list = (items || []).filter((x) => x && x.label);
+  if (list.length < 2) return null;
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Pressable onPress={() => setOpen((v) => !v)} hitSlop={6} style={{ alignSelf: 'flex-start' }}>
+        <Text style={[MONO, { color: color || C.muted, fontSize: 10, letterSpacing: 1.4, fontWeight: '700' }]}>
+          {(open ? '\u2212 ' : '\u2261 ') + 'CONTENTS \u00b7 ' + list.length}
+        </Text>
+      </Pressable>
+      {open ? (
+        <View style={{ marginTop: 8, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: C.line }}>
+          {list.map((it, i) => (
+            <Pressable key={i} onPress={() => { setOpen(false); jumpTo(it.get ? it.get() : null); }} hitSlop={4} style={{ paddingVertical: 4 }}>
+              <Text style={[MONO, { color: color || C.accent, fontSize: 10.5, letterSpacing: 0.9 }]}>{'\u203a ' + String(it.label).toUpperCase()}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+// A tab's contents: every top-level Section inside registers itself; nested Sections do not.
+function TocHost({ children, color }) {
+  const [items, setItems] = useState([]);
+  const reg = useMemo(() => ({
+    add: (title, get) => setItems((cur) => (cur.some((x) => x.title === title) ? cur : cur.concat([{ title, get }]))),
+    remove: (title) => setItems((cur) => cur.filter((x) => x.title !== title)),
+  }), []);
+  return (
+    <TocCtx.Provider value={reg}>
+      <View style={{ paddingHorizontal: 4 }}><Toc items={items.map((x) => ({ label: x.title, get: x.get }))} color={color} /></View>
+      {children}
+    </TocCtx.Provider>
+  );
+}
+
 function Section({ title, extra, children, fold, open: openInit }) {
   const [open, setOpen] = useState(!fold || !!openInit);
+  const reg = useContext(TocCtx);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!reg || !title) return undefined;
+    reg.add(title, () => box.current);
+    return () => reg.remove(title);
+  }, [reg, title]);
   const head = (
     <View style={s.h2row}>
       <Text style={s.h2}>{title}</Text>
@@ -313,9 +367,9 @@ function Section({ title, extra, children, fold, open: openInit }) {
     </View>
   );
   return (
-    <View style={s.section}>
+    <View style={s.section} ref={box}>
       {fold ? <Pressable onPress={() => setOpen((v) => !v)}>{head}</Pressable> : head}
-      {open ? children : null}
+      {open ? <TocCtx.Provider value={null}>{children}</TocCtx.Provider> : null}
     </View>
   );
 }
@@ -426,7 +480,7 @@ function sectionize(txt) {
   }
   return out.filter((x) => x.p);
 }
-function Sections({ items, size, color }) {
+function Sections({ items, size, color, refs }) {
   if (!items || !items.length) return null;
   const fs = size || 17, lh = Math.round(fs * 1.62);
   return (
@@ -439,7 +493,7 @@ function Sections({ items, size, color }) {
           ? sec.verdicts.map((v) => ({ label: v.claim || v.label || '', p: Number(v.p) || 0, shown: (Number(v.p) || 0) + '%' }))
           : (/VERDICT|HAPPENS NEXT|BASE RATE|PROBABILIT|THE CALL/i.test(sec.h || '') ? probsFrom(sec.p) : []);
         return (
-          <View key={i} style={{ marginTop: i ? 18 : 4 }}>
+          <View key={i} style={{ marginTop: i ? 18 : 4 }} ref={refs ? (el) => { refs.current[i] = el; } : undefined}>
             {sec.h ? <Text style={[MONO, { color: color || C.accent, fontSize: 11.5, letterSpacing: 1.6, fontWeight: '800', marginBottom: 6 }]}>{String(sec.h).toUpperCase()}</Text> : null}
             <ProbList items={probs} color={color} />
             {numbered ? lines.map((ln, j) => (
@@ -1043,6 +1097,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
                        tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved }) {
   const { head, stand, longHead } = articleParts(item);
+  const secRefs = useRef([]);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
   const [pane, setPane] = useState(null);
@@ -1079,6 +1134,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 14 }]}>{fullStamp(item.ts)}</Text>
+        {!simple && Array.isArray(item.read) ? <Toc items={item.read.map((sec, i) => ({ label: sec.h, get: () => secRefs.current[i] }))} /> : null}
         {/* Three doors at the TOP of every story, before the read: the 30-second version, the desk's
             own analysis and call, and what the boards are saying. The pane opens under the buttons.
             2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
@@ -1184,7 +1240,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         {!simple && Array.isArray(item.read) && item.read.length ? (
           <>
             <Text style={[s.storyP, T(18, 30), { marginBottom: 6 }]}>{decode(item.t || '')}</Text>
-            <Sections items={item.read} size={18} />
+            <Sections items={item.read} size={18} refs={secRefs} />
           </>
         ) : (
           <>
@@ -2180,6 +2236,7 @@ function boardHead(c) {
   return first.slice(0, cut > 36 ? cut : 76).replace(/[.,;:]+$/, '') + '…';
 }
 function BoardArticle({ c, onBack, onStory }) {
+  const secRefs = useRef([]);
   const reads = Array.isArray(c.reads) && c.reads.length
     ? c.reads.map((sec) => (/VERDICT/i.test(sec.h || '') && Array.isArray(c.verdicts) ? { ...sec, verdicts: c.verdicts } : sec))
     : sectionize(c.read);
@@ -2196,6 +2253,7 @@ function BoardArticle({ c, onBack, onStory }) {
         <View style={s.artrule} />
         <Text style={[s.conspWarn]}>UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED</Text>
         {fullStamp(c.ts) ? <Text style={[s.stime, MONO, { marginBottom: 12 }]}>{fullStamp(c.ts)}</Text> : null}
+        <Toc items={reads.map((sec, i) => ({ label: sec.h, get: () => secRefs.current[i] }))} color={C.high} />
         {c.spread ? (
           <>
             <Text style={[s.ctxlbl, MONO]}>WHERE IT'S SPREADING</Text>
@@ -2206,7 +2264,7 @@ function BoardArticle({ c, onBack, onStory }) {
         {reads.length ? (
           <>
             <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE DESK'S READ</Text>
-            <Sections items={reads} color={C.high} />
+            <Sections items={reads} color={C.high} refs={secRefs} />
           </>
         ) : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 16 }}>
@@ -3002,10 +3060,10 @@ function PricedIn({ p }) {
 // 2026-09-17 (editor, on THE RECEIPTS: "too small of font ... avoid these long paragraphs by default,
 // make it a click to read like the other buttons"): the standing explanation of a print sits behind a
 // door styled like the article doors, and opens at reading size, not footnote size.
-function Explainer({ label, sub, children, color }) {
+function Explainer({ label, sub, children, color, boxRef }) {
   const [open, setOpen] = useState(false);
   return (
-    <View style={{ marginTop: 14 }}>
+    <View style={{ marginTop: 14 }} ref={boxRef}>
       <Pressable onPress={() => setOpen((o) => !o)} style={[s.artbtn, { borderColor: color || C.accentDim }, open && s.artbtnOn]}>
         <Text style={[s.artbtnT, MONO, { color: color || C.accent }]} numberOfLines={1}>{(open ? '− ' : '≡ ') + label}</Text>
         {sub ? <Text style={s.artbtnS}>{sub}</Text> : null}
@@ -3550,6 +3608,11 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
   const name = (ref) => { const e = byId[ref]; return e ? String(e.date || '').slice(0, 4) + ' · ' + (e.line || e.name) : String(ref).replace(/^[a-z]+:/, '').replace(/_/g, ' '); };
   const actor = (id) => String(id || '').replace(/^country:/, '').replace(/_/g, ' ');
   const live = roomCards(sit.key, cards || []);
+  const doors = useRef({});
+  const door = (k) => (el) => { doors.current[k] = el; };
+  const layers = [['THE ACTORS', (sit.actors || []).length], ['THE DOCTRINES', (sit.lessons || []).length], ['THE PATTERNS', (sit.tendencies || []).length],
+    ['HOW WE GOT HERE', (sit.path_dependencies || []).length], ['THE STORIES EACH SIDE TELLS', (sit.narratives || []).length], ['THE GROUND', (sit.territories || []).length],
+    ['BASE RATES', Object.keys(sit.base_rates || {}).length], ['THE FULL TIMELINE', (sit.timeline || []).length]].filter((x) => x[1]);
   const eventRow = (e, i, full) => (
     <Pressable key={e.id || i} onPress={() => setSrcOpen(srcOpen === e.id ? null : e.id)} style={{ flexDirection: 'row', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line }}>
       <Text style={[MONO, { color: C.accent, fontSize: 11.5, width: 78, paddingTop: 3 }]}>{String(e.date || '').slice(0, 10)}</Text>
@@ -3568,6 +3631,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
     <View style={s.storycard}>
       <Text style={[s.artH, SERIF, T(26, 32)]}>{sit.title}</Text>
       <View style={s.artrule} />
+      <Toc items={layers.map(([k]) => ({ label: k, get: () => doors.current[k] }))} />
       <Text style={[s.ctxlbl, MONO]}>WHY THIS HISTORY MATTERS</Text>
       {(sit.why_it_matters || []).map((e, i) => eventRow(e, i, false))}
 
@@ -3592,7 +3656,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {(sit.actors || []).length ? (
-        <Explainer label="THE ACTORS" sub={(sit.actors || []).length + ' states and movements in this room'}>
+        <Explainer boxRef={door('THE ACTORS')} label="THE ACTORS" sub={(sit.actors || []).length + ' states and movements in this room'}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {(sit.actors || []).map((a, i) => (
               <View key={i} style={[s.rchip, { marginRight: 0 }]}>
@@ -3604,7 +3668,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {(sit.lessons || []).length ? (
-        <Explainer label="THE DOCTRINES" sub="what each capital has committed itself to, on the record">
+        <Explainer boxRef={door('THE DOCTRINES')} label="THE DOCTRINES" sub="what each capital has committed itself to, on the record">
           {(sit.lessons || []).map((l, i) => (
             <View key={i} style={{ marginTop: i ? 16 : 0 }}>
               <Text style={ROOM_K}>{[(l.actors || []).map(actor).join(', '), String(l.tier || '').replace(/_/g, ' ')].filter(Boolean).join(' · ').toUpperCase()}</Text>
@@ -3617,7 +3681,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {(sit.tendencies || []).length ? (
-        <Explainer label="THE PATTERNS" sub="how each side has behaved when it mattered, and the cases against">
+        <Explainer boxRef={door('THE PATTERNS')} label="THE PATTERNS" sub="how each side has behaved when it mattered, and the cases against">
           {(sit.tendencies || []).map((t, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={ROOM_K}>{[(t.actors || []).map(actor).join(', '), 'CONFIDENCE ' + String(t.confidence || '?')].join(' · ').toUpperCase()}</Text>
@@ -3629,7 +3693,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {(sit.path_dependencies || []).length ? (
-        <Explainer label="HOW WE GOT HERE" sub="the path dependencies - each arrow is a hypothesis">
+        <Explainer boxRef={door('HOW WE GOT HERE')} label="HOW WE GOT HERE" sub="the path dependencies - each arrow is a hypothesis">
           {(sit.path_dependencies || []).map((pd, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={[ROOM_H]}>{decode(pd.name || '')}</Text>
@@ -3642,7 +3706,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {(sit.narratives || []).length ? (
-        <Explainer label="THE STORIES EACH SIDE TELLS" sub="the history each capital cites, and what it makes of it today">
+        <Explainer boxRef={door('THE STORIES EACH SIDE TELLS')} label="THE STORIES EACH SIDE TELLS" sub="the history each capital cites, and what it makes of it today">
           {(sit.narratives || []).map((n, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={ROOM_K}>{(n.actors || []).map(actor).join(', ').toUpperCase()}</Text>
@@ -3655,7 +3719,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {(sit.territories || []).length ? (
-        <Explainer label="THE GROUND" sub="who holds what, who claims what, and since when">
+        <Explainer boxRef={door('THE GROUND')} label="THE GROUND" sub="who holds what, who claims what, and since when">
           {(sit.territories || []).map((t, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={ROOM_H}>{decode(t.name)}</Text>
@@ -3674,13 +3738,13 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
       ) : null}
 
       {Object.keys(sit.base_rates || {}).length ? (
-        <Explainer label="BASE RATES" sub="what comparable cases did, with n">
+        <Explainer boxRef={door('BASE RATES')} label="BASE RATES" sub="what comparable cases did, with n">
           {Object.entries(sit.base_rates).map(([k, b]) => <BaseRateCard key={k} id={k} b={b} />)}
         </Explainer>
       ) : null}
 
       {(sit.timeline || []).length ? (
-        <Explainer label="THE FULL TIMELINE" sub={(sit.timeline || []).length + ' dated events, tap one for its source'}>
+        <Explainer boxRef={door('THE FULL TIMELINE')} label="THE FULL TIMELINE" sub={(sit.timeline || []).length + ' dated events, tap one for its source'}>
           {(sit.timeline || []).map((e, i) => eventRow(e, i, true))}
         </Explainer>
       ) : null}
@@ -3916,7 +3980,17 @@ export default function App() {
   // can hand the reader straight into a story, the way a front-page teaser does.
   const [article, setArticle] = useState(null);
   const scrollRef = useRef(null);
+  const scrollBox = useRef(null);    // the frame around the ScrollView, measured in window space for CONTENTS jumps
+  const scrollY = useRef(0);
   const scrollTop = () => { if (scrollRef.current) scrollRef.current.scrollTo({ y: 0, animated: false }); };
+  const jumpTo = useCallback((node) => {
+    const sv = scrollRef.current, box = scrollBox.current;
+    if (!node || !sv || !box || !node.measureInWindow) return;
+    node.measureInWindow((x, y) => {
+      box.measureInWindow((bx, by) => { sv.scrollTo({ y: Math.max(0, scrollY.current + (y - by) - 10), animated: true }); });
+    });
+  }, []);
+  const scrollCtx = useMemo(() => ({ jumpTo }), [jumpTo]);
   const goArticle = (i) => {
     const hit = data && (data.brief || [])[i];
     if (hit) markRead(storyId(hit));
@@ -4087,7 +4161,9 @@ export default function App() {
           </Pressable>
         ) : null}
         {data && (
-          <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
+          <ScrollCtx.Provider value={scrollCtx}><View ref={scrollBox} style={{ flex: 1 }}>
+          <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+            onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {article != null ? (
               <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
                 read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res}
@@ -4097,15 +4173,16 @@ export default function App() {
                 goArticle={(i) => { Keyboard.dismiss(); setSearching(false); goArticle(i); }} goTab={(k) => { Keyboard.dismiss(); setSearching(false); setTab(k); scrollTop(); }} />
             ) : (
               <>
-                {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} />}
+                {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} />}
-                {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
-                {tab === 'calls' && <CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} />}
-                {tab === 'data' && <DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} />}
+                {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
+                {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} /></TocHost>}
+                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} /></TocHost>}
               </>
             )}
             <LegalFooter />
           </ScrollView>
+          </View></ScrollCtx.Provider>
         )}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
