@@ -3277,12 +3277,16 @@ function WordingEvent({ ev, compact }) {
           ))}
           {(ev.contrasts || []).length ? (
             <View style={{ marginTop: 12, borderLeftWidth: 2, borderLeftColor: C.accent, paddingLeft: 11 }}>
-              <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700' }]}>WHERE THEY DIFFER</Text>
+              <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700' }]}>EVERY VARIANT, COUNTED</Text>
               {ev.contrasts.map((c, i) => (
                 <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 5 }}>{c}</Text>
               ))}
             </View>
-          ) : null}
+          ) : (
+            <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 10, fontStyle: 'italic' }}>
+              Too few distinct voices on this one to count the variants. The headlines above are the evidence; the desk is not drawing a conclusion from four of them.
+            </Text>
+          )}
         </>
       ) : null}
     </View>
@@ -3294,7 +3298,9 @@ function wordingFor(w, item) {
   return (w.events || []).find((e) => e.card === id) || null;
 }
 function Wording({ w }) {
-  const evs = ((w && w.events) || []).filter((e) => (e.contrasts || []).length).slice(0, 12);
+  // the headlines are evidence and always show; the census of differences is a claim, and it only
+  // prints when enough distinct voices covered the event (the gate the feed carries)
+  const evs = ((w && w.events) || []).slice(0, 12);
   if (!evs.length) return null;
   return (
     <Section title="The wording" extra={evs.length + ' events'}>
@@ -3302,7 +3308,9 @@ function Wording({ w }) {
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
           One event, every outlet that carried it, and the choices each one made: who is named as having
           done it, what the dead are called, which word the act gets, whose account is hedged. The same
-          test is applied to all of them, including the ones the desk agrees with. No verdicts here.
+          test is applied to all of them, including the ones the desk agrees with. Agency copy running
+          under several mastheads counts once. No verdicts, no scores, and no conclusion drawn from a
+          handful of headlines.
         </Text>
         {evs.map((ev, i) => (
           <View key={i} style={{ marginTop: 18, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, paddingTop: i ? 14 : 0 }}>
