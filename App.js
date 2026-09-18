@@ -2731,8 +2731,29 @@ function callsFrom(cards, clocks) {
     if (bn >= 3) x.clock = best;
   });
   // chronological: soonest resolution first, and the sharper call first where two land the same day
-  return out.sort((a, b) => (a.days == null ? 1 : b.days == null ? -1 : a.days - b.days)
+  out.sort((a, b) => (a.days == null ? 1 : b.days == null ? -1 : a.days - b.days)
     || Math.abs(b.p - 50) - Math.abs(a.p - 50));
+  // 2026-09-17 (editor: "this is extremely repetitive, we can't have this"). Three cards asked the same
+  // Duma question three ways and the book printed all three in a row. The pipeline now refuses that, but
+  // the archive already carries them: collapse near-identical calls here too, keeping the one that
+  // resolves first, and note on it that other stories turn on the same question.
+  const kept = [];
+  for (const x of out) {
+    const tk = callTokens(x.event);
+    const twin = kept.find((k) => jaccard(k.tk, tk) > 0.55);
+    if (twin) { twin.row.also = (twin.row.also || 0) + 1; continue; }
+    kept.push({ tk, row: x });
+  }
+  return kept.map((k) => k.row);
+}
+const CALL_STOP = new Set(['before', 'after', 'than', 'that', 'this', 'with', 'from', 'into', 'over', 'least', 'more', 'most', 'published', 'official', 'results', 'preliminary']);
+function callTokens(s) {
+  return new Set(String(s || '').toLowerCase().match(/[a-z]{4,}/g) ?.filter((w) => !CALL_STOP.has(w)) || []);
+}
+function jaccard(a, b) {
+  if (!a.size || !b.size) return 0;
+  let n = 0; a.forEach((w) => { if (b.has(w)) n++; });
+  return n / (a.size + b.size - n);
 }
 
 // plain-English horizons, so the spine of the page answers "what happens next" without a legend
@@ -2769,6 +2790,7 @@ function CallRow({ x, goArticle, lede, pick, hasScenarios }) {
       ) : null}
       {lede && x.update ? <Text style={[s.p, { color: C.muted, fontSize: 15, lineHeight: 22.5, marginTop: 11, marginBottom: 0 }]}>{decode(x.update)}</Text> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 11 }}>
+        {x.also ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>{'+' + x.also + ' MORE ' + (x.also === 1 ? 'STORY' : 'STORIES') + ' TURN ON THIS'}</Text> : null}
         {x.conf ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>{String(x.conf).toUpperCase() + ' CONFIDENCE'}</Text> : null}
         {x.clock ? (
           <Text style={[MONO, { color: C.high, fontSize: 9.5, letterSpacing: 1.1 }]}>
