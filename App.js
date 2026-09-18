@@ -1466,7 +1466,24 @@ function Watchtower({ items }) {
 // every block on it is a door into the tab that owns the detail. Order is the newsroom's own —
 // the state of the board, the story of the day, the desk's sharpest call, what it is watching,
 // what the boards are claiming, and the lesson underneath it all.
-function FrontPage({ data, goTab, goArticle, read }) {
+// 2026-09-17 (editor: "way too long on the home page"): a watch item is the observable, one line or
+// two; the desk's number and the kill line behind it open on a tap.
+function WatchItem({ text }) {
+  const [open, setOpen] = useState(false);
+  const t = decode(text);
+  const cut = t.search(/\s*\((?:desk|the desk)[:\s]/i);
+  const head = cut > 0 ? t.slice(0, cut) : t;
+  const tail = cut > 0 ? t.slice(cut).trim().replace(/^\(|\)\.?$/g, '') : '';
+  return (
+    <Pressable onPress={() => tail && setOpen((v) => !v)} style={{ marginTop: 6 }}>
+      <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 20 }} numberOfLines={open ? undefined : 2}>
+        <Text style={{ color: C.accent }}>› </Text>{head}{tail && !open ? <Text style={[MONO, { color: C.accent, fontSize: 10 }]}>{'  THE DESK ›'}</Text> : null}
+      </Text>
+      {open && tail ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 4, paddingLeft: 12 }}>{tail}</Text> : null}
+    </Pressable>
+  );
+}
+function FrontPage({ data, goTab, goArticle, read, hist }) {
   const [lessonOpen, setLessonOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const cards = data.brief || [];
@@ -1498,6 +1515,7 @@ function FrontPage({ data, goTab, goArticle, read }) {
           boards first, the wire last - because the wire has its own tab and this is the front page. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
+        {tile('data', '◫', 'SITUATION ROOMS', Object.keys((hist && hist.situations) || {}).length, 'the history behind each war')}
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
         {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
         {tile('data', '▦', 'DATA', (data.actors || []).length, 'players tracked')}
@@ -1551,11 +1569,7 @@ function FrontPage({ data, goTab, goArticle, read }) {
       {(data.watch || []).length ? (
         <View>
           <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 2, marginBottom: 7 }]}>WHAT THE DESK IS WATCHING</Text>
-          {(data.watch || []).slice(0, 4).map((w, i) => (
-            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
-              <Text style={{ color: C.accent }}>› </Text>{decode(w)}
-            </Text>
-          ))}
+          {(data.watch || []).slice(0, 4).map((w, i) => <WatchItem key={i} text={w} />)}
         </View>
       ) : null}
 
@@ -3126,7 +3140,7 @@ function Watchlist({ tripwires }) {
 
 // ── DATA — the reference layer: who the players are, what the countries measure, what is physically
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
-function DataTab({ data, easy, world, hist }) {
+function DataTab({ data, easy, world, hist, goArticle, room }) {
   const [region, setRegion] = useState('ALL');
   const [fullRead, setFullRead] = useState(false);
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
@@ -3136,6 +3150,7 @@ function DataTab({ data, easy, world, hist }) {
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
+      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} initial={room} />
       <Receipts inf={data.inflation} />
       <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
@@ -3336,65 +3351,210 @@ function BaseRateCard({ id, b }) {
   );
 }
 
-function SituationRoom({ sit, sources }) {
-  const [full, setFull] = useState(false);
+// 2026-09-17 (editor: "the situation room is a fantastic feature, we should expand on that heavy").
+// The history engine already writes seven layers per room - the app drew three of them in footnote
+// type inside a fold on DATA. Now: the room is a reading page in the article's own style, every layer
+// has a door (doctrines, patterns, path dependencies, each side's narrative, the ground, base rates,
+// the full timeline), and the room is LIVE - the stories on the wire that belong to it, with the
+// desk's call on each, open from inside it. The rooms lead DATA and have a door on HOME.
+const SITUATION_WORDS = {
+  iran_hormuz: ['iran', 'hormuz', 'tehran', 'irgc', 'gulf', 'strait', 'aramco', 'khamenei'],
+  israel_palestine: ['israel', 'gaza', 'west bank', 'hamas', 'idf', 'palestin', 'netanyahu', 'jerusalem'],
+  resistance_axis: ['hezbollah', 'houthi', 'ansar', 'yemen', 'marib', 'lebanon', 'iraqi militia', 'resistance axis', 'sanaa'],
+  korean_peninsula: ['korea', 'pyongyang', 'kim jong', 'seoul', 'dmz'],
+  india_pakistan: ['india', 'pakistan', 'kashmir', 'delhi', 'islamabad', 'line of control'],
+  us_israel_iran_policy: ['iran', 'israel', 'white house', 'pentagon', 'centcom'],
+};
+function roomCards(key, cards) {
+  const words = SITUATION_WORDS[key] || [String(key).replace(/_/g, ' ')];
+  return briefSorted(cards).filter(({ s: c }) => {
+    const t = (String(c.head || '') + ' ' + String(c.h || '') + ' ' + String(c.tag || '') + ' ' + String(c.region || '')).toLowerCase();
+    return words.some((w) => t.includes(w));
+  }).slice(0, 8);
+}
+const ROOM_H = { color: C.text, fontSize: 15.5, lineHeight: 22, fontWeight: '700' };
+const ROOM_P = { color: C.text, fontSize: 15, lineHeight: 23, marginTop: 6 };
+const ROOM_K = [MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1, marginTop: 8 }];
+function SituationRoom({ sit, sources, cards, goArticle }) {
   const [srcOpen, setSrcOpen] = useState(null);
   const srcLine = (ids) => (ids || []).map((id) => (sources[id] || {}).publisher || id).filter((x, i, a) => a.indexOf(x) === i).join(' · ');
-  const events = full ? sit.timeline : sit.why_it_matters;
+  const byId = {}; (sit.timeline || []).forEach((e) => { byId[e.id] = e; });
+  const name = (ref) => { const e = byId[ref]; return e ? String(e.date || '').slice(0, 4) + ' · ' + (e.line || e.name) : String(ref).replace(/^[a-z]+:/, '').replace(/_/g, ' '); };
+  const actor = (id) => String(id || '').replace(/^country:/, '').replace(/_/g, ' ');
+  const live = roomCards(sit.key, cards || []);
+  const eventRow = (e, i, full) => (
+    <Pressable key={e.id || i} onPress={() => setSrcOpen(srcOpen === e.id ? null : e.id)} style={{ flexDirection: 'row', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line }}>
+      <Text style={[MONO, { color: C.accent, fontSize: 11.5, width: 78, paddingTop: 3 }]}>{String(e.date || '').slice(0, 10)}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 21 }}>{decode(e.line || e.name || '')}</Text>
+        {full && e.description && srcOpen === e.id ? <Text style={[ROOM_P, { color: C.muted, fontSize: 14 }]}>{decode(e.description)}</Text> : null}
+        {srcOpen === e.id ? (
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: 4 }]}>
+            <Text style={{ color: confColor(e.confidence) }}>{String(e.confidence || '').toUpperCase()}</Text>{' · ' + (srcLine(e.sources) || 'UNVERIFIED')}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
   return (
     <View style={s.storycard}>
-      <Text style={[s.storyH3, SERIF]}>{sit.title}</Text>
-      <Text style={[s.ctxlbl, MONO, { marginTop: 6 }]}>{full ? 'FULL TIMELINE · ' + sit.timeline.length + ' EVENTS' : 'WHY THIS HISTORY MATTERS'}</Text>
-      {events.map((e, i) => (
-        <Pressable key={e.id || i} onPress={() => setSrcOpen(srcOpen === e.id ? null : e.id)} style={{ flexDirection: 'row', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 11, width: 74 }]}>{String(e.date || '').slice(0, 10)}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: C.text, fontSize: 13, lineHeight: 18 }}>{decode(e.line || e.name || '')}</Text>
-            {full && e.description && srcOpen === e.id ? <Text style={[s.ctxP, { color: C.muted, marginTop: 3 }]}>{decode(e.description)}</Text> : null}
-            {srcOpen === e.id ? (
-              <Text style={[MONO, { color: C.muted, fontSize: 9, marginTop: 3 }]}>
-                <Text style={{ color: confColor(e.confidence) }}>{String(e.confidence || '').toUpperCase()}</Text>{' · ' + (srcLine(e.sources) || 'UNVERIFIED')}
-              </Text>
-            ) : null}
-          </View>
-        </Pressable>
-      ))}
-      <Pressable onPress={() => setFull(!full)} style={{ paddingVertical: 8 }}>
-        <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1 }]}>{full ? '− COLLAPSE TO WHY IT MATTERS' : '› EXPLORE FULL HISTORY'}</Text>
-      </Pressable>
-      {Object.keys(sit.base_rates || {}).length ? (
+      <Text style={[s.artH, SERIF, T(26, 32)]}>{sit.title}</Text>
+      <View style={s.artrule} />
+      <Text style={[s.ctxlbl, MONO]}>WHY THIS HISTORY MATTERS</Text>
+      {(sit.why_it_matters || []).map((e, i) => eventRow(e, i, false))}
+
+      {live.length ? (
         <>
-          <Text style={[s.ctxlbl, MONO, { marginTop: 4 }]}>BASE RATES · WHAT COMPARABLE CASES DID</Text>
-          {Object.entries(sit.base_rates).map(([k, b]) => <BaseRateCard key={k} id={k} b={b} />)}
+          <Text style={[s.ctxlbl, MONO, { marginTop: 18, color: C.high }]}>{'LIVE IN THIS ROOM · ' + live.length + (live.length === 1 ? ' STORY' : ' STORIES')}</Text>
+          {live.map(({ s: c, i }, j) => {
+            const call = (c.hist || {}).call;
+            return (
+              <Pressable key={j} onPress={() => goArticle && goArticle(i)} style={{ paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line }}>
+                <Text style={ROOM_H}>{articleParts(c).head}</Text>
+                {call && call.event ? (
+                  <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 4 }}>
+                    <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1 }]}>{oddsWord(Number(call.p) || 0).toUpperCase() + '  '}</Text>
+                    {decode(call.event)}
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </>
       ) : null}
-      {(sit.tendencies || []).map((t, i) => {
-        const byId = {}; (sit.timeline || []).forEach((e) => { byId[e.id] = e; });
-        const name = (ref) => { const e = byId[ref]; return e ? String(e.date || '').slice(0, 4) + ' · ' + (e.line || e.name) : String(ref).replace(/^case:/, '').replace(/_/g, ' '); };
-        return (
-          <View key={i} style={{ marginTop: 12 }}>
-            <Text style={[s.ctxlbl, MONO]}>{'THE PATTERN · CONFIDENCE ' + String(t.confidence || '').toUpperCase()}</Text>
-            <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, fontWeight: '600' }}>{decode(t.name)}</Text>
-            <ForAgainst pro={(t.supporting || []).map(name)} con={(t.contradicting || []).map((c) => (String(c).startsWith('case:') ? name(c) : c))} caveat={t.caveat} />
+
+      {(sit.actors || []).length ? (
+        <Explainer label="THE ACTORS" sub={(sit.actors || []).length + ' states and movements in this room'}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {(sit.actors || []).map((a, i) => (
+              <View key={i} style={[s.rchip, { marginRight: 0 }]}>
+                <Text style={[s.rchipTxt, MONO]}>{decode(a.name || actor(a.id))}{a.from ? '  ' + String(a.from).slice(0, 4) + (a.to ? '–' + String(a.to).slice(0, 4) : '') : ''}</Text>
+              </View>
+            ))}
           </View>
-        );
-      })}
-      {(sit.territories || []).map((t, i) => (
-        <View key={i} style={{ marginTop: 8 }}>
-          <Text style={[s.ctxlbl, MONO]}>{'TERRITORY · ' + String(t.name).toUpperCase()}</Text>
-          <Text style={s.li}><Text style={{ color: C.accent }}>{'› DE FACTO CONTROL  '}</Text>{String(t.de_facto_control || '').replace('country:', '')}</Text>
-          <Text style={s.li}><Text style={{ color: C.accent }}>{'› CLAIMS  '}</Text>{(t.current_claims || []).map((c) => String(c.claimant).replace('country:', '')).join(', ')}</Text>
-          <Text style={s.li}><Text style={{ color: C.accent }}>{'› RECOGNITION  '}</Text>{decode(t.recognition || '')}</Text>
-          <Text style={s.li}><Text style={{ color: C.accent }}>{'› HISTORICAL CONTROL  '}</Text>{(t.historical_control || []).map((h) => String(h.controller).replace('country:', '') + ' ' + (h.from || '') + '–' + (h.to || 'now')).join('; ')}</Text>
-        </View>
-      ))}
-      {(sit.path_dependencies || []).map((p, i) => (
-        <View key={i} style={{ marginTop: 8 }}>
-          <Text style={[s.ctxlbl, MONO]}>{'PATH DEPENDENCY · EACH ARROW IS A HYPOTHESIS'}</Text>
-          {(p.chain || []).map((st, j) => <Text key={j} style={s.li}><Text style={{ color: C.accent }}>{j ? '↓ ' : '› '}</Text>{decode(st.step)}</Text>)}
-        </View>
-      ))}
+        </Explainer>
+      ) : null}
+
+      {(sit.lessons || []).length ? (
+        <Explainer label="THE DOCTRINES" sub="what each capital has committed itself to, on the record">
+          {(sit.lessons || []).map((l, i) => (
+            <View key={i} style={{ marginTop: i ? 16 : 0 }}>
+              <Text style={ROOM_K}>{[(l.actors || []).map(actor).join(', '), String(l.tier || '').replace(/_/g, ' ')].filter(Boolean).join(' · ').toUpperCase()}</Text>
+              <Text style={[ROOM_H, { marginTop: 3 }]}>{decode(l.name)}</Text>
+              {l.description ? <Text style={ROOM_P}>{decode(l.description)}</Text> : null}
+              {(l.evidence || []).length ? <Text style={[MONO, { color: C.muted, fontSize: 10, marginTop: 5 }]}>{'EVIDENCE · ' + (l.evidence || []).map(name).join(' · ')}</Text> : null}
+            </View>
+          ))}
+        </Explainer>
+      ) : null}
+
+      {(sit.tendencies || []).length ? (
+        <Explainer label="THE PATTERNS" sub="how each side has behaved when it mattered, and the cases against">
+          {(sit.tendencies || []).map((t, i) => (
+            <View key={i} style={{ marginTop: i ? 18 : 0 }}>
+              <Text style={ROOM_K}>{[(t.actors || []).map(actor).join(', '), 'CONFIDENCE ' + String(t.confidence || '?')].join(' · ').toUpperCase()}</Text>
+              <Text style={[ROOM_H, { marginTop: 3 }]}>{decode(t.name)}</Text>
+              <ForAgainst pro={(t.supporting || []).map(name)} con={(t.contradicting || []).map((c) => (String(c).startsWith('case:') || String(c).startsWith('event:') ? name(c) : c))} caveat={t.note} />
+            </View>
+          ))}
+        </Explainer>
+      ) : null}
+
+      {(sit.path_dependencies || []).length ? (
+        <Explainer label="HOW WE GOT HERE" sub="the path dependencies - each arrow is a hypothesis">
+          {(sit.path_dependencies || []).map((pd, i) => (
+            <View key={i} style={{ marginTop: i ? 18 : 0 }}>
+              <Text style={[ROOM_H]}>{decode(pd.name || '')}</Text>
+              {(pd.chain || []).map((st, j) => (
+                <Text key={j} style={[ROOM_P, { marginTop: j ? 8 : 6 }]}><Text style={[MONO, { color: C.accent, fontWeight: '800' }]}>{(j + 1) + '. '}</Text>{decode(st.step)}</Text>
+              ))}
+            </View>
+          ))}
+        </Explainer>
+      ) : null}
+
+      {(sit.narratives || []).length ? (
+        <Explainer label="THE STORIES EACH SIDE TELLS" sub="the history each capital cites, and what it makes of it today">
+          {(sit.narratives || []).map((n, i) => (
+            <View key={i} style={{ marginTop: i ? 18 : 0 }}>
+              <Text style={ROOM_K}>{(n.actors || []).map(actor).join(', ').toUpperCase()}</Text>
+              <Text style={[ROOM_H, { marginTop: 3 }]}>{decode(n.name)}</Text>
+              {n.historical_event ? <Text style={ROOM_P}><Text style={{ color: C.muted }}>{'The history it cites: '}</Text>{decode(n.historical_event)}</Text> : null}
+              {n.modern_interpretation ? <Text style={ROOM_P}><Text style={{ color: C.muted }}>{'How it reads today: '}</Text>{decode(n.modern_interpretation)}</Text> : null}
+            </View>
+          ))}
+        </Explainer>
+      ) : null}
+
+      {(sit.territories || []).length ? (
+        <Explainer label="THE GROUND" sub="who holds what, who claims what, and since when">
+          {(sit.territories || []).map((t, i) => (
+            <View key={i} style={{ marginTop: i ? 18 : 0 }}>
+              <Text style={ROOM_H}>{decode(t.name)}</Text>
+              {t.de_facto_control ? <Text style={ROOM_P}><Text style={{ color: C.muted }}>{'De facto control: '}</Text>{actor(t.de_facto_control)}</Text> : null}
+              {(t.current_claims || []).length ? <Text style={ROOM_P}><Text style={{ color: C.muted }}>{'Claims: '}</Text>{(t.current_claims || []).map((c) => actor(c.claimant) + (c.basis ? ' (' + decode(c.basis) + ')' : '')).join('; ')}</Text> : null}
+              {t.recognition ? <Text style={ROOM_P}><Text style={{ color: C.muted }}>{'Recognition: '}</Text>{decode(t.recognition)}</Text> : null}
+              {(t.historical_control || []).map((h, j) => (
+                <Text key={j} style={[ROOM_P, { marginTop: j ? 4 : 8, fontSize: 14 }]}>
+                  <Text style={[MONO, { color: C.accent, fontSize: 11 }]}>{String(h.from || '?') + '–' + String(h.to || 'now') + '  '}</Text>
+                  {actor(h.controller)}{h.note ? ' — ' + decode(h.note) : ''}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </Explainer>
+      ) : null}
+
+      {Object.keys(sit.base_rates || {}).length ? (
+        <Explainer label="BASE RATES" sub="what comparable cases did, with n">
+          {Object.entries(sit.base_rates).map(([k, b]) => <BaseRateCard key={k} id={k} b={b} />)}
+        </Explainer>
+      ) : null}
+
+      {(sit.timeline || []).length ? (
+        <Explainer label="THE FULL TIMELINE" sub={(sit.timeline || []).length + ' dated events, tap one for its source'}>
+          {(sit.timeline || []).map((e, i) => eventRow(e, i, true))}
+        </Explainer>
+      ) : null}
     </View>
+  );
+}
+
+// The rooms lead DATA: pick a war, read its history, see what is live in it.
+function SituationRooms({ hist, cards, goArticle, initial }) {
+  const sits = (hist && hist.situations) || {};
+  const keys = Object.keys(sits);
+  const [room, setRoom] = useState(initial || null);
+  useEffect(() => { if (initial) setRoom(initial); }, [initial]);
+  if (!keys.length) return null;
+  const cur = room && sits[room] ? { ...sits[room], key: room } : null;
+  return (
+    <Section title="Situation rooms" extra={keys.length + ' tracked'}>
+      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
+        One room per war: the history that explains today, the doctrines and patterns of each side,
+        and the stories on the wire that belong to it. Sourced event by event.
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
+        {keys.map((k) => (
+          <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
+            <Text style={[s.rchipTxt, MONO, room === k && { color: C.text, fontWeight: '700' }]}>{sits[k].title}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} /> : (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
+          {keys.map((k) => {
+            const n = roomCards(k, cards || []).length;
+            return (
+              <Pressable key={k} onPress={() => setRoom(k)} style={{ paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
+                <Text style={ROOM_H}>{sits[k].title}</Text>
+                <Text style={{ color: C.muted, fontSize: 12.5, marginTop: 3 }}>{(sits[k].timeline || []).length + ' events · ' + (sits[k].actors || []).length + ' actors' + (n ? ' · ' + n + ' live ' + (n === 1 ? 'story' : 'stories') : '')}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </Section>
   );
 }
 
@@ -3453,29 +3613,14 @@ function ForAgainst({ pro, con, caveat }) {
 // ── THE DESK'S CALL — the analyst's own prediction on a story, with the history that set the prior. ──
 // ── WORLD SECTIONS — reference data under STRATEGY: situation rooms, country numbers, physical events. ──
 function WorldSections({ world, hist }) {
-  const [room, setRoom] = useState(null);
   const [iso, setIso] = useState(null);
   if (!world && !hist) return null;
-  const sits = (hist && hist.situations) || {};
-  const sitKeys = Object.keys(sits);
   const isos = Object.keys((world && world.countries) || {});
   const names = (world && world.names) || {};
   const quakes = ((world && world.events) || {}).seismic || [];
   const gaps = (world && world.intelligence_gaps) || [];
   return (
     <>
-      {sitKeys.length ? (
-        <Section title="Situation rooms" extra={sitKeys.length + ' tracked'} fold>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
-            {sitKeys.map((k) => (
-              <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
-                <Text style={[s.rchipTxt, MONO, room === k && { color: C.text, fontWeight: '700' }]}>{sits[k].title}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-          {room ? <SituationRoom sit={sits[room]} sources={hist.sources || {}} /> : null}
-        </Section>
-      ) : null}
       {isos.length ? (
         <Section title="Country intelligence" extra="primary sources" fold>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
@@ -3767,11 +3912,11 @@ export default function App() {
                 goArticle={(i) => { Keyboard.dismiss(); setSearching(false); goArticle(i); }} goTab={(k) => { Keyboard.dismiss(); setSearching(false); setTab(k); scrollTop(); }} />
             ) : (
               <>
-                {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} />}
+                {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} />}
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
                 {tab === 'calls' && <CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
-                {tab === 'data' && <DataTab data={data} easy={easy} world={world} hist={hist} />}
+                {tab === 'data' && <DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} />}
               </>
             )}
             <LegalFooter />
