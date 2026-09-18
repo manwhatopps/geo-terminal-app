@@ -1277,7 +1277,7 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
   );
 }
 
-function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
+function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
                        tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording }) {
   const { head, stand, longHead } = articleParts(item);
@@ -1905,34 +1905,6 @@ function Watchtower({ items }) {
 }
 
 
-
-// ── NEWS — a front page, not a stack of slabs. ──────────────────────────────
-// Two states share the tab: the INDEX (scan) and an ARTICLE (read). Order stays
-// strictly newest-first inside day sections, so the chronology is never violated;
-// hierarchy comes from position, not from re-ranking.
-// ── THE FRONT PAGE — where the app opens. ────────────────────────────────────
-// 2026-09-16 (user: "we should have a home page instead of just opening straight to articles").
-// A front page is not a fourth list: it is the answer to "what do I need to know right now", and
-// every block on it is a door into the tab that owns the detail. Order is the newsroom's own —
-// the state of the board, the story of the day, the desk's sharpest call, what it is watching,
-// what the boards are claiming, and the lesson underneath it all.
-// 2026-09-17 (editor: "way too long on the home page"): a watch item is the observable, one line or
-// two; the desk's number and the kill line behind it open on a tap.
-function WatchItem({ text }) {
-  const [open, setOpen] = useState(false);
-  const t = decode(text);
-  const cut = t.search(/\s*\((?:desk|the desk)[:\s]/i);
-  const head = cut > 0 ? t.slice(0, cut) : t;
-  const tail = cut > 0 ? t.slice(cut).trim().replace(/^\(|\)\.?$/g, '') : '';
-  return (
-    <Pressable onPress={() => tail && setOpen((v) => !v)} style={{ marginTop: 6 }}>
-      <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 20 }} numberOfLines={open ? undefined : 2}>
-        <Text style={{ color: C.accent }}>› </Text>{head}{tail && !open ? <Text style={[MONO, { color: C.accent, fontSize: 10 }]}>{'  THE DESK ›'}</Text> : null}
-      </Text>
-      {open && tail ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 4, paddingLeft: 12 }}>{tail}</Text> : null}
-    </Pressable>
-  );
-}
 function FrontPage({ data, goTab, goArticle, read, hist }) {
   const [lessonOpen, setLessonOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
@@ -2147,7 +2119,7 @@ function chipsOf(items, valueOf) {
   return [...c.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
+function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
                    older, loadOlder, picks, setPickFor, res, wording }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
@@ -2189,12 +2161,10 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
   const at = article == null ? -1 : rows.findIndex(({ i }) => i === article);
   if (at >= 0) {
     const { s: item, i } = rows[at];
-    const evIdx = (data.events || []).findIndex((ev) => evRegion(ev) === item.region);
     const id = storyId(item);
     return (
       <ArticlePage
         item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open}
-        onBoard={evIdx >= 0 && goBoard ? () => goBoard(evIdx) : null}
         calls={regionForecasts(data, item.region)}
         specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
@@ -2962,60 +2932,6 @@ function CallRow({ x, goArticle, lede, pick, hasScenarios }) {
   );
 }
 
-
-
-// The page opens the way a front page does: one thing, said properly.
-function CallsLede({ x, goArticle }) {
-  if (!x) return null;
-  return (
-    <View>
-      <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-        <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 2.2, fontWeight: '800' }]}>WHAT THE DESK EXPECTS NEXT</Text>
-        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>
-          Every call here is falsifiable, dated, and scored when it resolves. The case for it and the
-          case against it are printed with it: the number on its own would only be a betting line.
-        </Text>
-      </View>
-      <View style={{ borderTopWidth: 2, borderTopColor: C.accent, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel, paddingVertical: 18 }}>
-        <CallRow x={x} goArticle={goArticle} lede />
-      </View>
-    </View>
-  );
-}
-
-// Unconfirmed sightings, held true for one paragraph. The editor's own framing of what CALLS is for:
-// "predicting what could happen next based off speculation and current events" (L17).
-function IfTrue({ items }) {
-  const rows = (items || []).filter((x) => x && (x.if_true || x.read) && (x.head || x.obs)).slice(0, 3);
-  if (!rows.length) return null;
-  return (
-    <Section title="If this is true" extra={rows.length + ' unconfirmed'}>
-      <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 12 }]}>
-        Sightings the desk has not confirmed. It holds each one true for a paragraph and follows the
-        consequences — the grammar stays conditional, and nothing here moves a call until it is proved.
-      </Text>
-      {rows.map((x, i) => (
-        <View key={i} style={{ borderTopWidth: 1, borderTopColor: C.line, paddingHorizontal: 16, paddingVertical: 15 }}>
-          <Text style={[MONO, { color: C.elev, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>
-            {[String(x.grade || 'unverified').toUpperCase(), x.ts ? String(x.ts).slice(5, 10) : null].filter(Boolean).join('  \u00b7  ')}
-          </Text>
-          <Text style={[SERIF, { color: C.text, fontSize: 17, lineHeight: 23, marginTop: 7, fontWeight: '600' }]}>
-            {decode(x.head || String(x.obs || '').slice(0, 150))}
-          </Text>
-          <Text style={{ color: C.text, fontSize: 14, lineHeight: 21, marginTop: 9 }}>{decode(x.if_true || x.read)}</Text>
-          {x.falsifier ? (
-            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18.5, marginTop: 9 }}>
-              <Text style={[MONO, { color: C.crit, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'KILLS IT  '}</Text>{decode(x.falsifier)}
-            </Text>
-          ) : null}
-        </View>
-      ))}
-    </Section>
-  );
-}
-
-// The reasoning behind the numbers, still on the page - six principals with their position VISIBLE
-// rather than ninety-nine rows to open. The full set stays one tap inside each story.
 function Rooms({ chairs, goArticle }) {
   const [open, setOpen] = useState(0);
   const rows = (chairs || []).slice(0, 6);
@@ -3318,161 +3234,6 @@ function Explainer({ label, sub, children, color, boxRef }) {
   );
 }
 const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10 };
-
-// ── THE BOARD — 2026-09-18 (editor: "all of these wars and events are actually all related, not separate
-// instances ... knowing this will allow us to connect the dots when multiple events are going on to predict
-// the next decade"). The standing cross-theatre model: who is fighting for advantage and who for survival,
-// where two survivals cannot both be satisfied, who can still come to whose aid, and what each pinning
-// opened. It leads HISTORY because it is the frame every war file sits inside. Built by the daily run from
-// the_board.txt; the design reading is graded, never asserted.
-const WAR_META = {
-  survival: { label: 'WAR OF SURVIVAL', c: 'crit', note: 'cannot take a deal' },
-  interest: { label: 'WAR OF INTEREST', c: 'calm', note: 'can take a deal' },
-};
-const BACKFILL = { yes: ['CAN STILL HELP', 'calm'], degraded: ['DEGRADED', 'high'], no: ['CANNOT HELP', 'crit'] };
-function TheBoard({ board }) {
-  const [who, setWho] = useState(null);
-  if (!board || !(board.actors || []).length) return null;
-  const lbl = (t, color) => <Text style={[MONO, { color, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 18 }]}>{t}</Text>;
-  const cur = who != null ? board.actors[who] : null;
-  return (
-    <Section title="The board" extra={(board.actors || []).length + ' principals'}>
-      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
-          These wars are not separate stories. A state fighting for advantage can take a deal; a state
-          fighting for its existence cannot. Below: who is in which kind of war, whose survivals cannot both
-          be satisfied, who can still come to whose aid, and what each of those answers opens next.
-        </Text>
-        {board.read ? <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 12, marginBottom: 0 }]}>{decode(board.read)}</Text> : null}
-
-        {lbl('WHO IS FIGHTING FOR WHAT', C.accent)}
-        {(board.actors || []).map((a, i) => {
-          const m = WAR_META[a.war] || WAR_META.interest;
-          const on = who === i;
-          return (
-            <Pressable key={i} onPress={() => setWho(on ? null : i)} style={{ paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-                <Text style={{ color: C.text, fontSize: 15.5, fontWeight: '700', flex: 1 }}>{decode(a.name)}</Text>
-                <Text style={[MONO, { color: C[m.c] || C.text, fontSize: 9, letterSpacing: 1.1, fontWeight: '800' }]}>{m.label}</Text>
-              </View>
-              {(a.levels || []).length ? (
-                <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.9, marginTop: 4 }]}>{(a.levels || []).join('  \u00b7  ').toUpperCase()}</Text>
-              ) : null}
-              {on ? (
-                <>
-                  <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>{decode(a.stakes || '')}</Text>
-                  {a.falsifier ? (
-                    <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 8 }}>
-                      <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'WHAT WOULD DISPROVE IT  '}</Text>{decode(a.falsifier)}
-                    </Text>
-                  ) : null}
-                </>
-              ) : null}
-            </Pressable>
-          );
-        })}
-
-        {(board.collisions || []).length ? (
-          <>
-            {lbl('WHERE TWO SURVIVALS CANNOT BOTH BE SATISFIED', C.crit)}
-            {board.collisions.map((c, i) => (
-              <View key={i} style={{ marginTop: 10, borderLeftWidth: 2, borderLeftColor: C.crit, paddingLeft: 11 }}>
-                <Text style={[MONO, { color: C.crit, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>
-                  {decode(String(c.a || '')).toUpperCase() + (c.b && c.b !== c.a ? '  \u00d7  ' + decode(String(c.b)).toUpperCase() : '  \u00b7  WITH ITSELF')}
-                </Text>
-                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 5, marginBottom: 0 }]}>{decode(c.why || '')}</Text>
-              </View>
-            ))}
-          </>
-        ) : null}
-
-        {(board.capacity || []).length ? (
-          <>
-            {lbl('WHO CAN STILL COME TO WHOSE AID', C.accent)}
-            {board.capacity.map((p2, i) => {
-              const [txt, col] = BACKFILL[p2.can_backfill] || BACKFILL.degraded;
-              return (
-                <View key={i} style={{ paddingVertical: 9, borderTopWidth: 1, borderTopColor: C.line }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-                    <Text style={{ color: C.text, fontSize: 14.5, fontWeight: '600', flex: 1 }}>{decode(p2.power)}</Text>
-                    <Text style={[MONO, { color: C[col] || C.text, fontSize: 9, letterSpacing: 1.1, fontWeight: '800' }]}>{txt}</Text>
-                  </View>
-                  {p2.measure ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 4 }}>{decode(p2.measure)}</Text> : null}
-                </View>
-              );
-            })}
-          </>
-        ) : null}
-
-        {(board.sequence || []).length ? (
-          <>
-            {lbl('WHAT EACH ONE OPENED', C.accent)}
-            {board.sequence.map((q, i) => (
-              <View key={i} style={{ marginTop: 11 }}>
-                <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{String(q.when || '').toUpperCase() + (q.theatre ? '  \u00b7  ' + String(q.theatre).toUpperCase() : '')}</Text>
-                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 4, marginBottom: 0 }]}>{decode(q.pinned || '')}</Text>
-                {q.opens ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 4 }}>{'\u2192 ' + decode(q.opens)}</Text> : null}
-              </View>
-            ))}
-          </>
-        ) : null}
-
-        {board.designed ? (
-          <Explainer label="WAS IT DESIGNED?" sub="the sequencing-as-strategy reading, and what would settle it" color={C.high}>
-            <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 0, marginBottom: 0 }]}>{decode(board.designed.claim || '')}</Text>
-            {board.designed.evidence_would_be ? (
-              <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 9 }}>
-                <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'WHAT WOULD SETTLE IT  '}</Text>{decode(board.designed.evidence_would_be)}
-              </Text>
-            ) : null}
-            {board.designed.evidence_found ? (
-              <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
-                <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'WHAT THE SEARCH FOUND  '}</Text>{decode(board.designed.evidence_found)}
-              </Text>
-            ) : null}
-            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 10, fontStyle: 'italic' }}>
-              The desk holds this as a reading, not a finding. The capacity numbers above stand either way,
-              which is why they are the ones it forecasts from.
-            </Text>
-          </Explainer>
-        ) : null}
-
-        {board.window ? (
-          <View style={[s.storycard, { borderColor: C.accent, marginTop: 18 }]}>
-            <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>WHERE THE NEXT MOVE IS CHEAPEST</Text>
-            <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 7, marginBottom: 0 }]}>{decode(board.window)}</Text>
-          </View>
-        ) : null}
-        {board.asof ? <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 14 }]}>{'THE DESK \u00b7 ' + String(board.asof).toUpperCase()}</Text> : null}
-      </View>
-    </Section>
-  );
-}
-
-// ── THE WORDING — 2026-09-17 (editor: "compare articles about events and tell the difference in
-// linguistics ... a headline might say Israeli kids and children killed but when they report on
-// Palestinian children being killed they refer to them as young adults ... focus on how articles are
-// worded, the hidden agenda behind these mainstream articles"). The desk does not call anyone a
-// propagandist. It prints the same event's headline from every outlet that carried it and names the
-// choices each one made, by the same rules for all of them: who did it (or whether the doer vanished
-// into "were killed"), what the dead are called, which word the act gets, who is hedged, whether a
-// number leads. The reader draws the conclusion. Built by press_wording.py; no model wrote a word of it. ──
-const WORDING_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/wording.json';
-// 2026-09-18: THE STRIP IS GONE, and the reason is worth keeping. A ticker promises live. This feed
-// updates when a content run fires - a handful of times a day - so a row of prices under the masthead
-// was making a promise the pipeline cannot keep, which is the same failure as the stale print it was
-// built to fix. markets.py still writes feed/markets.json (front-month futures, each carrying its own
-// exchange timestamp) because the numbers are cheap and the desk cites them - they belong beside their
-// explanation on DATA, dated, not scrolling across the masthead pretending to tick.
-const WORDING_CACHE_KEY = 'geo-wording-cache-v1';
-const ACT_NOTE = {
-  'active, actor named': 'names who did it',
-  'passive, actor named': 'passive, but the doer is named',
-  'passive, actor gone': 'passive, and the doer is gone',
-  'intransitive (died)': 'they died, nobody killed them',
-  'intransitive (lost their lives)': 'they lost their lives, nobody killed them',
-  'nominal (deaths, toll)': 'a toll, not an act',
-};
 function useWording() {
   const [w, setW] = useState(null);
   useEffect(() => {
@@ -4471,7 +4232,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
   const back = () => { setArticle(null); if (scrollTop) scrollTop(); };
   return (
     <ArticlePage
-      item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open} onBoard={null}
+      item={item} simpleText={simple[i]} easy={easy} deep={deep} onBack={back} onOpen={open}
       calls={regionForecasts(data, item.region)}
       specMatches={storySpec(data.speculation, item)}
       chatter={data.chatter}
@@ -4840,10 +4601,10 @@ export default function App() {
             ) : (
               <>
                 {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
-                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />}
+                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
-                {tab === 'rooms' && <TocHost><TheBoard board={data.board} /><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} data={data} world={world} /></TocHost>}
+                {tab === 'rooms' && <TocHost><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} data={data} world={world} /></TocHost>}
                 {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
               </>
             )}
