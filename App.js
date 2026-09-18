@@ -913,6 +913,99 @@ function YourCall({ item, pick, onPick, resolved }) {
     </View>
   );
 }
+// ── WHAT WOULD YOU DO — 2026-09-17 (editor: "for the situation room we should make like a real life what
+// would you do"). Every card's `hist.moves` puts the reader in a chair: the constraint the desk wrote for
+// that principal, three or four real moves on the table, the desk's read of what follows each. Pick, lock a
+// confidence, then read `then` and the desk's odds. Scored twice: at once by the desk's read, and honestly
+// when the real actor moves (resolutions.json, id "<story>|<chair index>"). Same per-device store as calls. ──
+function movesOf(item) {
+  const mv = (item.hist || {}).moves;
+  return Array.isArray(mv) ? mv.filter((m) => m && m.chair && Array.isArray(m.options) && m.options.length >= 2) : [];
+}
+function ChairGame({ item, id, picks, setPickFor, res, compact }) {
+  const chairs = movesOf(item);
+  const [sel, setSel] = useState({});
+  const [conf, setConf] = useState({});
+  if (!chairs.length) return null;
+  const lbl = [MONO, { color: C.high, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }];
+  return (
+    <View>
+      {chairs.map((m, ci) => {
+        const key = id + '|' + ci;
+        const pick = (picks || {})[key];
+        const r = resolutionFor(res, key);
+        const opts = m.options.map((o) => ({ k: o.k, text: o.move, then: o.then, p: o.p }));
+        const byTxt = m.by ? fmtDue(String(m.by).slice(0, 10)).replace('BY ', '') : '';
+        const row = (o, on, showP) => (
+          <View key={o.k} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9, borderTopWidth: 1, borderTopColor: C.line }}>
+            <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: on ? C.high : C.line, backgroundColor: on ? C.high : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+              <Text style={[MONO, { color: on ? C.ink : C.muted, fontSize: 12, fontWeight: '800' }]}>{o.k}</Text>
+            </View>
+            <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, flex: 1, fontWeight: on ? '700' : '400' }}>{decode(o.text)}</Text>
+            {showP ? <Text style={[MONO, { color: C.high, fontSize: 14, fontWeight: '800', marginLeft: 10, width: 44, textAlign: 'right' }]}>{Math.round(Number(o.p) || 0) + '%'}</Text> : null}
+          </View>
+        );
+        if (pick) {
+          const done = r && r.k && r.k !== 'VOID';
+          const yours = done ? scoreOf(brierOf(readerDist(pick, opts), r.k, opts)) : null;
+          const desk = done ? scoreOf(brierOf(deskDist(opts), r.k, opts)) : null;
+          const mine = opts.find((o) => o.k === pick.k) || {};
+          const fav = opts.slice().sort((a, b) => (Number(b.p) || 0) - (Number(a.p) || 0))[0] || {};
+          return (
+            <View key={ci} style={[s.storycard, { borderColor: C.high, marginTop: 8 }]}>
+              <Text style={lbl}>{'YOU SAT IN ' + String(m.chair).toUpperCase() + "'S CHAIR" + (done ? ' \u00b7 RESOLVED ' + r.k : byTxt ? ' \u00b7 SCORED AFTER ' + byTxt : '')}</Text>
+              <Text style={[MONO, { color: C.high, fontSize: 24, fontWeight: '800', marginTop: 8 }]}>{pick.k + ' \u00b7 ' + pick.conf + '%'}</Text>
+              <Text style={{ color: C.text, fontSize: 15, lineHeight: 22, marginTop: 4, fontWeight: '600' }}>{decode(mine.text || '')}</Text>
+              {mine.then ? <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}><Text style={[MONO, { color: C.high, fontSize: 10, letterSpacing: 1 }]}>{'THEN  '}</Text>{decode(mine.then)}</Text> : null}
+              <Text style={[lbl, { marginTop: 14, color: C.muted }]}>THE DESK'S ODDS ON EACH MOVE</Text>
+              {opts.map((o) => row(o, done ? o.k === r.k : o.k === pick.k, true))}
+              {!done && fav.k && fav.k !== pick.k && fav.then ? (
+                <Text style={[s.p, { color: C.muted, fontSize: 14.5, lineHeight: 22, marginTop: 10, marginBottom: 0 }]}><Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1 }]}>{'THE DESK EXPECTS ' + fav.k + '  '}</Text>{decode(fav.then)}</Text>
+              ) : null}
+              {done ? (
+                <View style={{ marginTop: 12, flexDirection: 'row', gap: 22 }}>
+                  <View><Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>YOUR SCORE</Text><Text style={[MONO, { color: yours >= desk ? C.calm : C.high, fontSize: 24, fontWeight: '800' }]}>{yours}</Text></View>
+                  <View><Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>THE DESK</Text><Text style={[MONO, { color: C.text, fontSize: 24, fontWeight: '800' }]}>{desk}</Text></View>
+                  {r.note ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, flex: 1 }}>{decode(r.note)}</Text> : null}
+                </View>
+              ) : (
+                <Pressable onPress={() => setPickFor && setPickFor(key, null)} hitSlop={6} style={{ marginTop: 10 }}><Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>CHANGE YOUR MOVE</Text></Pressable>
+              )}
+            </View>
+          );
+        }
+        const sk = sel[ci], ck = conf[ci];
+        return (
+          <View key={ci} style={[s.storycard, { borderColor: C.high, marginTop: 8 }]}>
+            <Text style={lbl}>{'WHAT WOULD YOU DO \u00b7 ' + String(m.chair).toUpperCase() + "'S CHAIR"}</Text>
+            {m.constraint ? <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 8, marginBottom: 0 }]}>{decode(m.constraint)}</Text> : null}
+            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 8 }}>{'Pick your move' + (byTxt ? ', and see what the desk thinks follows. The real ' + decode(m.chair) + ' shows its hand by ' + byTxt + '; you are scored on that.' : '.')}</Text>
+            <View style={{ marginTop: 8 }}>{opts.map((o) => <Pressable key={o.k} onPress={() => setSel({ ...sel, [ci]: o.k })}>{row(o, sk === o.k, false)}</Pressable>)}</View>
+            {sk ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>HOW SURE THIS IS THE MOVE THEY MAKE</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  {CONFS.map((c) => (
+                    <Pressable key={c} onPress={() => setConf({ ...conf, [ci]: c })} style={[s.rchip, ck === c && s.rchipOn, { marginRight: 0 }]}>
+                      <Text style={[s.rchipTxt, MONO, ck === c && { color: C.text, fontWeight: '700' }]}>{c + '%'}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            {sk && ck ? (
+              <Pressable onPress={() => setPickFor && setPickFor(key, { k: sk, conf: ck, chair: m.chair, ts: new Date().toISOString().slice(0, 10), by: m.by || null,
+                  head: articleParts(item).head, options: opts })}
+                style={[s.artbtn, { marginTop: 14, borderColor: C.high, alignItems: 'center' }]}>
+                <Text style={[s.artbtnT, MONO, { color: C.high }]}>{'MAKE THE MOVE \u00b7 ' + sk + ' AT ' + ck + '%'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 function resolutionFor(res, id) {
   return ((res && res.items) || []).find((r) => r.id === id) || null;
 }
@@ -936,14 +1029,15 @@ function Scorecard({ picks, cards, res, goArticle, quizzes, hist }) {
     return (
       <Section title="Your scorecard" extra="no calls yet">
         <Text style={[s.foot, { paddingHorizontal: 16, paddingBottom: 14, fontSize: 13.5, lineHeight: 19.5 }]}>
-          Open any story, find YOUR CALL under ANALYST, pick a scenario and lock a confidence: the desk scores
-          you against itself when it resolves. Or open a situation room on DATA and take its test. No account,
-          no money: the score lives on this phone.
+          Open any story, find YOUR CALL under ANALYST, pick a scenario and lock a confidence, or sit in a
+          principal's chair and make their move: the desk scores you against itself when the world resolves it.
+          Or open a situation room on DATA and take its test. No account, no money: the score lives on this phone.
         </Text>
       </Section>
     );
   }
   const idx = {}; (cards || []).forEach((c, i) => { idx[storyId(c)] = i; });
+  const chairsN = ids.filter((id) => id.includes('|')).length;
   const rows = ids.map((id) => {
     const pk = picks[id]; const r = resolutionFor(res, id);
     const opts = pk.options || [];
@@ -963,12 +1057,13 @@ function Scorecard({ picks, cards, res, goArticle, quizzes, hist }) {
   return (
     <Section title="Your scorecard" extra={ids.length + (ids.length === 1 ? ' call' : ' calls') + (qk.length ? ' \u00b7 ' + qk.length + (qk.length === 1 ? ' room' : ' rooms') : '')}>
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12 }}>
-        {stat('CALLS', ids.length)}{stat('SCORED', scored.length)}{stat('JUDGEMENT', y, y != null && d != null ? (y >= d ? C.calm : C.high) : C.text)}{stat('THE DESK', d)}{stat('KNOWLEDGE', know == null ? null : know + '%')}
+        {stat('CALLS', ids.length - chairsN)}{stat('CHAIRS', chairsN)}{stat('SCORED', scored.length)}{stat('JUDGEMENT', y, y != null && d != null ? (y >= d ? C.calm : C.high) : C.text)}{stat('THE DESK', d)}{stat('KNOWLEDGE', know == null ? null : know + '%')}
       </View>
       {knowledge}
       {rows.sort((a, b) => (a.done === b.done ? (a.days == null ? 1 : b.days == null ? -1 : a.days - b.days) : a.done ? -1 : 1)).map((x) => (
-        <Pressable key={x.id} onPress={() => idx[x.id] != null && goArticle && goArticle(idx[x.id])} style={{ paddingHorizontal: 16, paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
+        <Pressable key={x.id} onPress={() => idx[x.id.split('|')[0]] != null && goArticle && goArticle(idx[x.id.split('|')[0]])} style={{ paddingHorizontal: 16, paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
           <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>
+            {x.pk.chair ? <Text style={{ color: C.high }}>{String(x.pk.chair).toUpperCase() + "'S CHAIR \u00b7 "}</Text> : null}
             <Text style={{ color: x.done ? (x.pk.k === x.r.k ? C.calm : C.high) : C.accent }}>{x.done ? (x.pk.k === x.r.k ? 'RIGHT' : 'WRONG') + ' \u00b7 ' + x.yours + ' vs desk ' + x.desk : 'OPEN \u00b7 YOU ' + x.pk.k + ' ' + x.pk.conf + '%'}</Text>
             <Text style={{ color: C.muted }}>{x.pk.by ? '  \u00b7  ' + (x.done ? 'RESOLVED ' + String(x.r.resolved || x.r.by || '').slice(5, 10) : fmtDue(x.pk.by) + ' \u00b7 ' + inDays(x.days).toUpperCase()) : ''}</Text>
           </Text>
@@ -984,7 +1079,7 @@ function Scorecard({ picks, cards, res, goArticle, quizzes, hist }) {
   );
 }
 
-function AnalystPanel({ item, specMatches, pick, onPick, resolved }) {
+function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPickFor, res }) {
   const hist = item.hist || {};
   const dec = item.dec || {};
   const call = hist.call || {};
@@ -1055,6 +1150,7 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved }) {
 
   const future = [
     scenariosOf(item) ? <YourCall key="sc" item={item} pick={pick} onPick={onPick} resolved={resolved} /> : null,
+    movesOf(item).length ? <ChairGame key="ch" item={item} id={storyId(item)} picks={picks} setPickFor={setPickFor} res={res} /> : null,
     call.event ? (
       <View key="c" style={{ marginTop: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -1110,7 +1206,7 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved }) {
 
 function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
-                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res }) {
   const { head, stand, longHead } = articleParts(item);
   const secRefs = useRef([]);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
@@ -1145,7 +1241,8 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
           <Text style={[s.kick, MONO, { flex: 0, marginRight: 10 }]}>{kickerOf(item)}</Text>
           <Text style={[s.readtime, MONO]}>{readTime(body, item.context)}</Text>
         </View>
-        <Text style={[stand ? s.artH : s.artHLong, SERIF, T(stand ? 30 : 25, stand ? 37 : 32)]}>{stand ? head : longHead}</Text>
+        {/* 2026-09-17 (editor): tapping the headline folds the article back up - no hunt for the back arrow */}
+        <Pressable onPress={onBack}><Text style={[stand ? s.artH : s.artHLong, SERIF, T(stand ? 30 : 25, stand ? 37 : 32)]}>{stand ? head : longHead}</Text></Pressable>
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 14 }]}>{fullStamp(item.ts)}</Text>
@@ -1162,7 +1259,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>◉ ANALYST</Text>
-            <Text style={s.artbtnS}>{scenariosOf(item) ? 'the desk\'s call \u2014 and yours' : 'the desk\'s read and its call'}</Text>
+            <Text style={s.artbtnS}>{movesOf(item).length ? 'the call, your call, your move' : scenariosOf(item) ? 'the desk\'s call \u2014 and yours' : 'the desk\'s read and its call'}</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>☍ CONSPIRACY</Text>
@@ -1236,7 +1333,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         ) : null}
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}>
-            <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} />
+            <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} picks={picks} setPickFor={setPickFor} res={res} />
             {item.hist && item.hist.call && item.hist.call.event ? (
               <>
                 <Pressable onPress={() => shareCall(item, cardRef)} style={s.sharebtn}>
@@ -1994,7 +2091,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         calls={regionForecasts(data, item.region)}
         specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
-        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} onSave={() => toggleSave(id)}
+        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} onSave={() => toggleSave(id)}
         tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -2264,7 +2361,7 @@ function BoardArticle({ c, onBack, onStory }) {
           <Text style={[s.ktag, { color: c.story ? C.accent : C.high, flex: 0, marginRight: 10 }]}>{(c.story ? 'ON A STORY · ' : 'CIRCULATING · ') + String(c.region || '').toUpperCase()}</Text>
           <Text style={[s.readtime, MONO]}>{readTime(reads.map((x) => x.p).join(' '), c.claim)}</Text>
         </View>
-        <Text style={[s.artH, SERIF, T(30, 37)]}>{boardHead(c)}</Text>
+        <Pressable onPress={onBack}><Text style={[s.artH, SERIF, T(30, 37)]}>{boardHead(c)}</Text></Pressable>
         <Text style={[s.artStand, T(17.5, 26)]}>{decode(c.claim)}</Text>
         <View style={s.artrule} />
         <Text style={[s.conspWarn]}>UNVERIFIED · WHAT IS CIRCULATING, NOT WHAT IS CONFIRMED</Text>
@@ -3382,7 +3479,7 @@ function Watchlist({ tripwires }) {
 
 // ── DATA — the reference layer: who the players are, what the countries measure, what is physically
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
-function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz }) {
+function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, picks, setPickFor, res }) {
   const [region, setRegion] = useState('ALL');
   const [fullRead, setFullRead] = useState(false);
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
@@ -3392,7 +3489,7 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz }) 
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
-      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} initial={room} quizzes={quizzes} onQuiz={onQuiz} />
+      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} initial={room} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} />
       <Receipts inf={data.inflation} />
       <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
@@ -3617,7 +3714,7 @@ function roomCards(key, cards) {
 const ROOM_H = { color: C.text, fontSize: 15.5, lineHeight: 22, fontWeight: '700' };
 const ROOM_P = { color: C.text, fontSize: 15, lineHeight: 23, marginTop: 6 };
 const ROOM_K = [MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1, marginTop: 8 }];
-function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz }) {
+function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, picks, setPickFor, res }) {
   const [srcOpen, setSrcOpen] = useState(null);
   const srcLine = (ids) => (ids || []).map((id) => (sources[id] || {}).publisher || id).filter((x, i, a) => a.indexOf(x) === i).join(' · ');
   const byId = {}; (sit.timeline || []).forEach((e) => { byId[e.id] = e; });
@@ -3628,7 +3725,8 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz }) {
   const door = (k) => (el) => { doors.current[k] = el; };
   const layers = [['THE ACTORS', (sit.actors || []).length], ['THE DOCTRINES', (sit.lessons || []).length], ['THE PATTERNS', (sit.tendencies || []).length],
     ['HOW WE GOT HERE', (sit.path_dependencies || []).length], ['THE STORIES EACH SIDE TELLS', (sit.narratives || []).length], ['THE GROUND', (sit.territories || []).length],
-    ['BASE RATES', Object.keys(sit.base_rates || {}).length], ['TEST YOURSELF', (sit.quiz || []).length], ['THE FULL TIMELINE', (sit.timeline || []).length]].filter((x) => x[1]);
+    ['BASE RATES', Object.keys(sit.base_rates || {}).length], ['WHAT WOULD YOU DO', live.filter(({ s: c }) => movesOf(c).length).length],
+    ['TEST YOURSELF', (sit.quiz || []).length], ['THE FULL TIMELINE', (sit.timeline || []).length]].filter((x) => x[1]);
   const eventRow = (e, i, full) => (
     <Pressable key={e.id || i} onPress={() => setSrcOpen(srcOpen === e.id ? null : e.id)} style={{ flexDirection: 'row', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line }}>
       <Text style={[MONO, { color: C.accent, fontSize: 11.5, width: 78, paddingTop: 3 }]}>{String(e.date || '').slice(0, 10)}</Text>
@@ -3759,6 +3857,17 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz }) {
         </Explainer>
       ) : null}
 
+      {live.some(({ s: c }) => movesOf(c).length) ? (
+        <Explainer boxRef={door('WHAT WOULD YOU DO')} label="WHAT WOULD YOU DO" color={C.high}
+          sub={live.filter(({ s: c }) => movesOf(c).length).length + ' live decisions in this room \u00b7 take a chair'}>
+          {live.filter(({ s: c }) => movesOf(c).length).map(({ s: c, i }, j) => (
+            <View key={j} style={{ marginTop: j ? 18 : 0 }}>
+              <Pressable onPress={() => goArticle && goArticle(i)}><Text style={ROOM_H}>{articleParts(c).head}</Text></Pressable>
+              <ChairGame item={c} id={storyId(c)} picks={picks} setPickFor={setPickFor} res={res} compact />
+            </View>
+          ))}
+        </Explainer>
+      ) : null}
       {(sit.quiz || []).length ? (
         <Explainer boxRef={door('TEST YOURSELF')} label="TEST YOURSELF" color={C.high}
           sub={(quizResult ? 'your last score ' + quizResult.score + ' / ' + quizResult.total + ' \u00b7 ' : '') + sit.quiz.length + ' questions from this room\'s record'}>
@@ -3779,7 +3888,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz }) {
 }
 
 // The rooms lead DATA: pick a war, read its history, see what is live in it.
-function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz }) {
+function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, picks, setPickFor, res }) {
   const sits = (hist && hist.situations) || {};
   const keys = Object.keys(sits);
   const [room, setRoom] = useState(initial || null);
@@ -3799,7 +3908,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz }) {
           </Pressable>
         ))}
       </ScrollView>
-      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} /> : (
+      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /> : (
         <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
           {keys.map((k) => {
             const n = roomCards(k, cards || []).length;
@@ -3836,7 +3945,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
       specMatches={storySpec(data.speculation, item)}
       chatter={data.chatter}
       isSaved={!!saved[id]} onSave={() => toggleSave(id)}
-      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)}
+      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res}
       tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
       prev={at > 0 ? rows[at - 1] : null}
       next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -4211,13 +4320,19 @@ export default function App() {
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
-                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} /></TocHost>}
+                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /></TocHost>}
               </>
             )}
             <LegalFooter />
           </ScrollView>
           </View></ScrollCtx.Provider>
         )}
+        {article != null ? (
+          <Pressable onPress={() => { setArticle(null); scrollTop(); }} hitSlop={8}
+            style={{ position: 'absolute', right: 14, bottom: 84, backgroundColor: C.panel, borderWidth: 1, borderColor: C.accent, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 14, zIndex: 20, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.4, fontWeight: '800' }]}>{'‹ BACK'}</Text>
+          </Pressable>
+        ) : null}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
             <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
