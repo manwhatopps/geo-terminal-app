@@ -1327,31 +1327,24 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
             every card already carries `t` (the desk's 2-4 sentence lede) and `context` (one plain
             paragraph, no labels). Reading time is measured from the full read, not the summary. */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-          <Pressable onPress={() => setPane(pane === 'sum' ? null : 'sum')} style={[s.artbtn, { borderColor: C.calm }, pane === 'sum' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.calm }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>≡ SUMMARY</Text>
-            <Text style={s.artbtnS}>the story in 30 seconds</Text>
-          </Pressable>
-          <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>◉ ANALYST</Text>
-            <Text style={s.artbtnS}>{movesOf(item).length ? 'the call, your call, your move' : scenariosOf(item) ? 'the desk\'s call \u2014 and yours' : 'the desk\'s read and its call'}</Text>
-          </Pressable>
-          {decodeOf(item) ? (
-            <Pressable onPress={() => setPane(pane === 'decode' ? null : 'decode')} style={[s.artbtn, { borderColor: (VERDICT_META[decodeOf(item).verdict] || VERDICT_META.partly).c }, pane === 'decode' && s.artbtnOn]}>
-              <Text style={[s.artbtnT, MONO, { color: (VERDICT_META[decodeOf(item).verdict] || VERDICT_META.partly).c }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{'\u2696 DECODE'}</Text>
-              <Text style={s.artbtnS}>{'the claim: ' + String((VERDICT_META[decodeOf(item).verdict] || VERDICT_META.partly).label).toLowerCase()}</Text>
+        {/* 2026-09-18: four buttons with titles and subtitles made a wall between the standfirst and
+            the first sentence. The reference the editor sent simply starts reading, so these are one
+            slim line now - the same four ways in, a fraction of the height. */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
+          {[
+            { k: 'sum', label: 'SUMMARY', c: C.calm, on: true },
+            { k: 'analyst', label: 'ANALYST', c: C.accent, on: true },
+            { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) },
+            { k: 'word', label: 'WORDING', c: C.elev, on: !!wordEv },
+            { k: 'consp', label: 'CIRCULATING', c: C.high, on: true },
+          ].filter((d) => d.on).map((d, i) => (
+            <Pressable key={d.k} onPress={() => setPane(pane === d.k ? null : d.k)} hitSlop={8}
+              style={{ marginRight: 16, marginTop: 6, borderBottomWidth: pane === d.k ? 2 : 0, borderBottomColor: d.c, paddingBottom: 2 }}>
+              <Text style={[MONO, { color: d.c, fontSize: 11, letterSpacing: 1.3, fontWeight: pane === d.k ? '800' : '700' }]}>
+                {d.label}
+              </Text>
             </Pressable>
-          ) : null}
-          {wordEv ? (
-            <Pressable onPress={() => setPane(pane === 'word' ? null : 'word')} style={[s.artbtn, { borderColor: C.elev }, pane === 'word' && s.artbtnOn]}>
-              <Text style={[s.artbtnT, MONO, { color: C.elev }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{'\u2338 WORDING'}</Text>
-              <Text style={s.artbtnS}>{wordEv.n + ' outlets, side by side'}</Text>
-            </Pressable>
-          ) : null}
-          <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
-            <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>☍ CONSPIRACY</Text>
-            <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
-          </Pressable>
+          ))}
         </View>
         {pane === 'sum' ? (
           <View style={[s.storycard, { borderColor: C.calm, marginBottom: 18 }]}>
@@ -2007,12 +2000,8 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
       ) : null}
 
       {/* what to watch — the desk's own tripwires for the days ahead */}
-      {(data.watch || []).length ? (
-        <View>
-          <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 2, marginBottom: 7 }]}>WHAT THE DESK IS WATCHING</Text>
-          {(data.watch || []).slice(0, 4).map((w, i) => <WatchItem key={i} text={w} />)}
-        </View>
-      ) : null}
+      {/* 2026-09-18: the watch list printed here AND on NEWS, and the tripwires on CALLS are a
+          third, richer version of it. One thing, one place: it lives on NEWS. */}
 
       {/* the desk's sharpest call, straight off the front page */}
       {called ? (
@@ -4014,8 +4003,6 @@ function Watchlist({ tripwires }) {
 function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, picks, setPickFor, res, wording }) {
   const [region, setRegion] = useState('ALL');
   const [fullRead, setFullRead] = useState(false);
-  const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
-  const actors = (data.actors || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   return (
     <View style={s.stack}>
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
@@ -4047,25 +4034,6 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, pi
       <Chokepoints cp={data.chokepoints} />
       <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
       <Calendar clocks={data.clocks} />
-      <Section title="Countries" extra={(data.dossiers || []).length + ' dossiers'}>
-        <Dossiers items={data.dossiers} bare />
-        {data.actors && data.actors.length ? (
-          <Section title="The players" bare>
-            <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
-            {actors.map((a, i) => (
-              <View key={i} style={s.actor}>
-                <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
-                <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
-                {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really \u2014 </Text>{decode(a.w)}</Text> : null}
-                {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants \u2014 </Text>{decode(a.g)}</Text> : null}
-                {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now \u2014 </Text>{decode(a.m)}</Text> : null}
-                {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens \u2014 </Text>{decode(a.l)}</Text> : null}
-              </View>
-            ))}
-          </Section>
-        ) : null}
-      </Section>
-      <WorldSections world={world} hist={hist} />
       <Text style={s.foot}>Every figure carries its source and vintage. Where the desk could not get a number, it says so.</Text>
     </View>
   );
@@ -4424,7 +4392,13 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
 }
 
 // The rooms lead DATA: pick a war, read its history, see what is live in it.
-function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, picks, setPickFor, res }) {
+function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, picks, setPickFor, res, data, world }) {
+  // 2026-09-18: the country reference moved here from DATA. Both tabs carried background about a
+  // place, and the editor already ruled the rooms are not a section of DATA - so the reference came
+  // this way instead. DATA is now the live numbers; this is the background.
+  const [region, setRegion] = useState('ALL');
+  const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
+  const actors = ((data && data.actors) || []).filter((a) => region === 'ALL' || inferRegion(actorText(a)) === region);
   const sits = (hist && hist.situations) || {};
   const keys = Object.keys(sits);
   const [room, setRoom] = useState(initial || null);
@@ -4432,6 +4406,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
   if (!keys.length) return null;
   const cur = room && sits[room] ? { ...sits[room], key: room } : null;
   return (
+    <>
     <Section title="The wars, explained" extra={keys.length + ' files'}>
       <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
         One file per war: the history that explains today, what each side has committed to and done
@@ -4458,6 +4433,26 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
         </View>
       )}
     </Section>
+      <Section title="Countries" extra={((data && data.dossiers) || []).length + ' dossiers'}>
+        <Dossiers items={(data && data.dossiers) || []} bare />
+        {data && data.actors && data.actors.length ? (
+          <Section title="The players" bare>
+            <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
+            {actors.map((a, i) => (
+              <View key={i} style={s.actor}>
+                <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
+                <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
+                {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really \u2014 </Text>{decode(a.w)}</Text> : null}
+                {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants \u2014 </Text>{decode(a.g)}</Text> : null}
+                {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now \u2014 </Text>{decode(a.m)}</Text> : null}
+                {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens \u2014 </Text>{decode(a.l)}</Text> : null}
+              </View>
+            ))}
+          </Section>
+        ) : null}
+      </Section>
+      <WorldSections world={world} hist={hist} />
+    </>
   );
 }
 
@@ -4848,7 +4843,7 @@ export default function App() {
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
-                {tab === 'rooms' && <TocHost><TheBoard board={data.board} /><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
+                {tab === 'rooms' && <TocHost><TheBoard board={data.board} /><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} data={data} world={world} /></TocHost>}
                 {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
               </>
             )}
