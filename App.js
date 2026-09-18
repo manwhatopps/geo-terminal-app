@@ -4236,6 +4236,125 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
 }
 
 // The rooms lead DATA: pick a war, read its history, see what is live in it.
+function TheBoard({ board }) {
+  const [who, setWho] = useState(null);
+  if (!board || !(board.actors || []).length) return null;
+  const lbl = (t, color) => <Text style={[MONO, { color, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 18 }]}>{t}</Text>;
+  const cur = who != null ? board.actors[who] : null;
+  return (
+    <Section title="The board" extra={(board.actors || []).length + ' principals'}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
+          These wars are not separate stories. A state fighting for advantage can take a deal; a state
+          fighting for its existence cannot. Below: who is in which kind of war, whose survivals cannot both
+          be satisfied, who can still come to whose aid, and what each of those answers opens next.
+        </Text>
+        {board.read ? <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 12, marginBottom: 0 }]}>{decode(board.read)}</Text> : null}
+
+        {lbl('WHO IS FIGHTING FOR WHAT', C.accent)}
+        {(board.actors || []).map((a, i) => {
+          const m = WAR_META[a.war] || WAR_META.interest;
+          const on = who === i;
+          return (
+            <Pressable key={i} onPress={() => setWho(on ? null : i)} style={{ paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                <Text style={{ color: C.text, fontSize: 15.5, fontWeight: '700', flex: 1 }}>{decode(a.name)}</Text>
+                <Text style={[MONO, { color: C[m.c] || C.text, fontSize: 9, letterSpacing: 1.1, fontWeight: '800' }]}>{m.label}</Text>
+              </View>
+              {(a.levels || []).length ? (
+                <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.9, marginTop: 4 }]}>{(a.levels || []).join('  \u00b7  ').toUpperCase()}</Text>
+              ) : null}
+              {on ? (
+                <>
+                  <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>{decode(a.stakes || '')}</Text>
+                  {a.falsifier ? (
+                    <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 8 }}>
+                      <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'WHAT WOULD DISPROVE IT  '}</Text>{decode(a.falsifier)}
+                    </Text>
+                  ) : null}
+                </>
+              ) : null}
+            </Pressable>
+          );
+        })}
+
+        {(board.collisions || []).length ? (
+          <>
+            {lbl('WHERE TWO SURVIVALS CANNOT BOTH BE SATISFIED', C.crit)}
+            {board.collisions.map((c, i) => (
+              <View key={i} style={{ marginTop: 10, borderLeftWidth: 2, borderLeftColor: C.crit, paddingLeft: 11 }}>
+                <Text style={[MONO, { color: C.crit, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>
+                  {decode(String(c.a || '')).toUpperCase() + (c.b && c.b !== c.a ? '  \u00d7  ' + decode(String(c.b)).toUpperCase() : '  \u00b7  WITH ITSELF')}
+                </Text>
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 5, marginBottom: 0 }]}>{decode(c.why || '')}</Text>
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        {(board.capacity || []).length ? (
+          <>
+            {lbl('WHO CAN STILL COME TO WHOSE AID', C.accent)}
+            {board.capacity.map((p2, i) => {
+              const [txt, col] = BACKFILL[p2.can_backfill] || BACKFILL.degraded;
+              return (
+                <View key={i} style={{ paddingVertical: 9, borderTopWidth: 1, borderTopColor: C.line }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                    <Text style={{ color: C.text, fontSize: 14.5, fontWeight: '600', flex: 1 }}>{decode(p2.power)}</Text>
+                    <Text style={[MONO, { color: C[col] || C.text, fontSize: 9, letterSpacing: 1.1, fontWeight: '800' }]}>{txt}</Text>
+                  </View>
+                  {p2.measure ? <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 4 }}>{decode(p2.measure)}</Text> : null}
+                </View>
+              );
+            })}
+          </>
+        ) : null}
+
+        {(board.sequence || []).length ? (
+          <>
+            {lbl('WHAT EACH ONE OPENED', C.accent)}
+            {board.sequence.map((q, i) => (
+              <View key={i} style={{ marginTop: 11 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{String(q.when || '').toUpperCase() + (q.theatre ? '  \u00b7  ' + String(q.theatre).toUpperCase() : '')}</Text>
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 4, marginBottom: 0 }]}>{decode(q.pinned || '')}</Text>
+                {q.opens ? <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 4 }}>{'\u2192 ' + decode(q.opens)}</Text> : null}
+              </View>
+            ))}
+          </>
+        ) : null}
+
+        {board.designed ? (
+          <Explainer label="WAS IT DESIGNED?" sub="the sequencing-as-strategy reading, and what would settle it" color={C.high}>
+            <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 0, marginBottom: 0 }]}>{decode(board.designed.claim || '')}</Text>
+            {board.designed.evidence_would_be ? (
+              <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 9 }}>
+                <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'WHAT WOULD SETTLE IT  '}</Text>{decode(board.designed.evidence_would_be)}
+              </Text>
+            ) : null}
+            {board.designed.evidence_found ? (
+              <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>
+                <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'WHAT THE SEARCH FOUND  '}</Text>{decode(board.designed.evidence_found)}
+              </Text>
+            ) : null}
+            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 10, fontStyle: 'italic' }}>
+              The desk holds this as a reading, not a finding. The capacity numbers above stand either way,
+              which is why they are the ones it forecasts from.
+            </Text>
+          </Explainer>
+        ) : null}
+
+        {board.window ? (
+          <View style={[s.storycard, { borderColor: C.accent, marginTop: 18 }]}>
+            <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>WHERE THE NEXT MOVE IS CHEAPEST</Text>
+            <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 7, marginBottom: 0 }]}>{decode(board.window)}</Text>
+          </View>
+        ) : null}
+        {board.asof ? <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 14 }]}>{'THE DESK \u00b7 ' + String(board.asof).toUpperCase()}</Text> : null}
+      </View>
+    </Section>
+  );
+}
+
 function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, picks, setPickFor, res, data, world }) {
   // 2026-09-18: the country reference moved here from DATA. Both tabs carried background about a
   // place, and the editor already ruled the rooms are not a section of DATA - so the reference came
@@ -4265,6 +4384,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
       </View>
     ) : (
       <>
+      <TheBoard board={(data && data.board) || null} />
       <Section title="The wars, explained" extra={keys.length + ' files'}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
           One file per war: the history that explains today, what each side has committed to and done
