@@ -1081,6 +1081,50 @@ function Scorecard({ picks, cards, res, goArticle, quizzes, hist }) {
   );
 }
 
+// ── DECODE — the claim, interrogated. The news pass writes `dec` on any card whose story rests on
+// something somebody is asking the public to believe: a verdict (true / partly / framing / false), the
+// ledger of who gains and who pays by what mechanism, and the observation that would kill the reading.
+// "Framing" is the interesting verdict: accurate, and built to be repeated. The door only appears when
+// the card carries one, the way CONSPIRACY only appears when a claim is circulating.
+function decodeOf(item) {
+  const d = (item && item.dec) || null;
+  return d && (d.verdict || (d.angles || []).length) ? d : null;
+}
+function DecodePanel({ dec }) {
+  const meta = VERDICT_META[dec.verdict] || VERDICT_META.partly;
+  return (
+    <View style={[s.storycard, { borderColor: meta.c }]}>
+      <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.6 }]}>THE CLAIM IS</Text>
+      <Text style={[MONO, { color: meta.c, fontSize: 22, fontWeight: '800', letterSpacing: 2, marginTop: 4 }]}>
+        {String(meta.label).toUpperCase()}
+      </Text>
+      <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>
+        {dec.verdict === 'framing'
+          ? 'Accurate as stated, and built to be repeated. The verdict is about what the wording is doing, not whether the words are false.'
+          : dec.verdict === 'partly'
+            ? 'True in part. The line below is the distinction the whole claim turns on.'
+            : dec.verdict === 'false' ? 'The record contradicts it.' : 'The record supports it.'}
+      </Text>
+      {(dec.angles || []).length ? (
+        <>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>WHO GAINS, WHO PAYS</Text>
+          {dec.angles.map((a, i) => (
+            <Text key={i} style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: i ? 9 : 7, marginBottom: 0 }]}>
+              <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>{'  ' + decode(a.effect)}
+            </Text>
+          ))}
+        </>
+      ) : null}
+      {dec.kill ? (
+        <>
+          <Text style={[MONO, { color: C.high, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>WHAT WOULD KILL THIS READING</Text>
+          <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6, marginBottom: 0 }]}>{decode(dec.kill)}</Text>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPickFor, res }) {
   const hist = item.hist || {};
   const dec = item.dec || {};
@@ -1118,25 +1162,14 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
     brLine ? <Text key="br" style={[MONO, { color: C.muted, fontSize: 11, marginTop: 8 }]}>{brLine}</Text> : null,
   ].filter(Boolean);
 
+  // 2026-09-18 (editor: "clean up the repetitiveness, and make the decoding its own menu, or add that
+  // button onto each news article like the conspiracy button"). The verdict and the who-gains-who-pays
+  // ledger sat in the middle of the analyst pane, read past on the way to the call. They are their own
+  // act of work - the claim interrogated - so they have their own door, and this pane stops repeating them.
   const present = [
-    dec.verdict ? (
-      <View key="v" style={[s.verdict, { borderColor: (VERDICT_META[dec.verdict] || VERDICT_META.partly).c, marginTop: 8 }]}>
-        <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.6 }]}>THE CLAIM IS</Text>
-        <Text style={[MONO, { color: (VERDICT_META[dec.verdict] || VERDICT_META.partly).c, fontSize: 18, fontWeight: '800', letterSpacing: 2, marginTop: 2 }]}>
-          {(VERDICT_META[dec.verdict] || VERDICT_META.partly).label.toUpperCase()}
-        </Text>
-      </View>
-    ) : null,
     call.update ? (
       <View key="u"><Text style={lbl}>HOW THE HISTORY MOVED THIS</Text>
         <Text style={body}>{decode(call.update)}</Text></View>
-    ) : null,
-    (dec.angles || []).length ? (
-      <View key="a"><Text style={lbl}>WHO GAINS, WHO PAYS</Text>
-        {dec.angles.map((a, i) => (
-          <Text key={i} style={body}><Text style={{ color: C.accent }}>› </Text>
-            <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>{' — ' + decode(a.effect)}</Text>
-        ))}</View>
     ) : null,
     (specMatches || []).length ? (
       <View key="w">{specMatches.map((sp, i) => (
@@ -1255,7 +1288,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
             every card already carries `t` (the desk's 2-4 sentence lede) and `context` (one plain
             paragraph, no labels). Reading time is measured from the full read, not the summary. */}
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
           <Pressable onPress={() => setPane(pane === 'sum' ? null : 'sum')} style={[s.artbtn, { borderColor: C.calm }, pane === 'sum' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO, { color: C.calm }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>≡ SUMMARY</Text>
             <Text style={s.artbtnS}>the story in 30 seconds</Text>
@@ -1264,6 +1297,12 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>◉ ANALYST</Text>
             <Text style={s.artbtnS}>{movesOf(item).length ? 'the call, your call, your move' : scenariosOf(item) ? 'the desk\'s call \u2014 and yours' : 'the desk\'s read and its call'}</Text>
           </Pressable>
+          {decodeOf(item) ? (
+            <Pressable onPress={() => setPane(pane === 'decode' ? null : 'decode')} style={[s.artbtn, { borderColor: (VERDICT_META[decodeOf(item).verdict] || VERDICT_META.partly).c }, pane === 'decode' && s.artbtnOn]}>
+              <Text style={[s.artbtnT, MONO, { color: (VERDICT_META[decodeOf(item).verdict] || VERDICT_META.partly).c }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{'\u2696 DECODE'}</Text>
+              <Text style={s.artbtnS}>{'the claim: ' + String((VERDICT_META[decodeOf(item).verdict] || VERDICT_META.partly).label).toLowerCase()}</Text>
+            </Pressable>
+          ) : null}
           {wordEv ? (
             <Pressable onPress={() => setPane(pane === 'word' ? null : 'word')} style={[s.artbtn, { borderColor: C.elev }, pane === 'word' && s.artbtnOn]}>
               <Text style={[s.artbtnT, MONO, { color: C.elev }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{'\u2338 WORDING'}</Text>
@@ -1356,6 +1395,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             ) : null}
           </View>
         ) : null}
+        {pane === 'decode' && decodeOf(item) ? <View style={{ marginBottom: 18 }}><DecodePanel dec={decodeOf(item)} /></View> : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
         {pane === 'word' && wordEv ? (
           <View style={[s.storycard, { borderColor: C.elev, marginBottom: 18 }]}>
@@ -4667,7 +4707,9 @@ function buildStyles() {
   backtxt: { color: C.accent, fontSize: 14, fontWeight: '600' },
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
-  artbtn: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: C.panel },
+  // 2026-09-18: up to five doors now (summary, analyst, decode, wording, conspiracy). A minimum width
+  // makes them wrap onto a second row instead of shrinking to unreadable slivers on a phone.
+  artbtn: { flex: 1, minWidth: 104, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
   sumdoor: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14 },
   sharebtn: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center' },
