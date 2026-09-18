@@ -3762,7 +3762,6 @@ function Watchlist({ tripwires }) {
 // ── DATA — the reference layer: who the players are, what the countries measure, what is physically
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
 function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, picks, setPickFor, res, wording }) {
-  const [region, setRegion] = useState('ALL');
   const [fullRead, setFullRead] = useState(false);
   return (
     <View style={s.stack}>
