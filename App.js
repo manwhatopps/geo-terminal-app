@@ -4361,82 +4361,70 @@ const SIZES = [['S', 'S', 0.92], ['M', 'M', 1], ['L', 'L', 1.15]];
 const TEXT_KEY = 'geo-textsize';
 let TSCALE = 1;
 const T = (fs, lh) => ({ fontSize: Math.round(fs * TSCALE * 10) / 10, lineHeight: lh ? Math.round(lh * TSCALE) : undefined });
-function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent }) {
+// ── THE MENU — 2026-09-18 (editor, on Index Briefing's mobile nav: "look at the drop down menu and how
+// clean the GUI looks"). What is clean about theirs is not decoration: generous vertical rhythm, big tap
+// targets, one accent used sparingly, and very few type sizes. Ours was a bar of 8-point labels and 24px
+// swatches crammed onto one line. Same controls, laid out like a settings sheet: a labelled row per
+// decision, everything at reading size. The legal links live here now instead of at the foot of every
+// tab, which is one less thing repeated on every screen.
+function MenuRow({ label, hint, children }) {
   return (
-    <View>
-    {onAccent ? (
-      <View style={[s.levelbar, { borderBottomWidth: 0, paddingBottom: 0 }]}>
-        <Text style={[s.levelLbl, MONO]}>COLOUR</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginLeft: 10 }}>
-          {Object.keys(ACCENTS).map((k) => {
-            const hex = ACCENTS[k][theme === 'light' ? 'light' : 'dark'][0];
-            const on = accent === k;
-            return (
-              <Pressable key={k} onPress={() => onAccent(k)} hitSlop={6}
-                style={{ alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: hex,
-                  borderWidth: on ? 2 : 1, borderColor: on ? C.text : C.line }} />
-                <Text style={[MONO, { color: on ? C.text : C.muted, fontSize: 8, letterSpacing: 0.6 }]}>{ACCENTS[k].label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-    ) : null}
-    <View style={s.levelbar}>
-      <Text style={[s.levelLbl, MONO]}>TEXT</Text>
+    <View style={{ paddingHorizontal: 18, paddingVertical: 14, borderTopWidth: 1, borderTopColor: C.line }}>
+      <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.6, fontWeight: '700' }]}>{label}</Text>
+      {hint ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 3 }}>{hint}</Text> : null}
+      <View style={{ marginTop: 10 }}>{children}</View>
+    </View>
+  );
+}
+function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent }) {
+  const pill = (on, label, onPress, key) => (
+    <Pressable key={key} onPress={onPress}
+      style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1,
+        borderColor: on ? C.accent : C.line, backgroundColor: on ? C.panel2 : 'transparent' }}>
+      <Text style={[MONO, { color: on ? C.accent : C.muted, fontSize: 12, letterSpacing: 0.8, fontWeight: on ? '800' : '600' }]}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View style={{ backgroundColor: C.panel, borderBottomWidth: 1, borderBottomColor: C.line }}>
+      {onAccent ? (
+        <MenuRow label="COLOUR" hint="Every accent clears the contrast standard on both grounds.">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+            {Object.keys(ACCENTS).map((k) => {
+              const hex = ACCENTS[k][theme === 'light' ? 'light' : 'dark'][0];
+              const on = accent === k;
+              return (
+                <Pressable key={k} onPress={() => onAccent(k)} hitSlop={8} style={{ alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: hex,
+                    borderWidth: on ? 3 : 1, borderColor: on ? C.text : C.line }} />
+                  <Text style={[MONO, { color: on ? C.text : C.muted, fontSize: 10, letterSpacing: 0.6 }]}>{ACCENTS[k].label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </MenuRow>
+      ) : null}
       {onTheme ? (
-        <Pressable onPress={() => onTheme(theme === 'light' ? 'dark' : 'light')} hitSlop={8}
-          style={{ borderWidth: 1, borderColor: C.line, borderRadius: 5, paddingVertical: 5, paddingHorizontal: 9, marginLeft: 6 }}>
-          <Text style={{ color: C.muted, fontSize: 13 }}>{theme === 'light' ? '☾' : '☀'}</Text>
-        </Pressable>
+        <MenuRow label="APPEARANCE">
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {pill(theme !== 'light', '\u263e  NIGHT', () => onTheme('dark'), 'd')}
+            {pill(theme === 'light', '\u2600  DAY', () => onTheme('light'), 'l')}
+          </View>
+        </MenuRow>
       ) : null}
       {onSize ? (
-        <View style={[s.modetog, { marginLeft: 8 }]}>
-          {SIZES.map(([v, lab], i) => {
-            const active = v === tsize;
-            return (
-              <Pressable key={v} onPress={() => onSize(v)} style={[s.modeBtn, i > 0 && s.modeBtnDiv, active && s.modeBtnActive]}>
-                <Text style={[s.modeTxt, MONO, active && { color: C.text, fontWeight: '700' }, { fontSize: 10 + i * 1.5 }]}>{'A'}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <MenuRow label="TEXT SIZE">
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {SIZES.map(([v, lab]) => pill(v === tsize, lab, () => onSize(v), v))}
+          </View>
+        </MenuRow>
       ) : null}
-    </View>
-    </View>
-  );
-}
-
-function DisclaimerGate({ onAccept }) {
-  return (
-    <SafeAreaView style={s.root}>
-      <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
-      <ScrollView contentContainerStyle={s.gateScroll}>
-        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
-        <Text style={[s.gateH, SERIF]}>Before you begin</Text>
-        <Text style={s.gateP}>Parallax publishes geopolitical analysis and probabilistic forecasts as <Text style={{ color: C.text, fontWeight: '700' }}>opinion</Text> — not fact, and not advice.</Text>
-        <Text style={s.gateP}>Forecasts are subjective estimates that will often be wrong. Statements about governments, organizations, and public figures are commentary based on public reporting, not assertions of fact.</Text>
-        <Text style={s.gateP}>This app is <Text style={{ color: C.text, fontWeight: '700' }}>not</Text> financial, investment, legal, security, safety, or travel advice. Do not rely on it for any decision. Consult a qualified professional.</Text>
-        <View style={s.gateLinks}>
-          <Pressable onPress={() => Linking.openURL(LEGAL.disclaimer)}><Text style={s.link}>Full Disclaimer</Text></Pressable>
-          <Pressable onPress={() => Linking.openURL(LEGAL.terms)}><Text style={s.link}>Terms</Text></Pressable>
-          <Pressable onPress={() => Linking.openURL(LEGAL.privacy)}><Text style={s.link}>Privacy</Text></Pressable>
+      <MenuRow label="THE DESK" hint="Not investment advice. The desk publishes its own calls and scores them when they resolve.">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {pill(false, 'DISCLAIMER', () => Linking.openURL(LEGAL.disclaimer), 'x1')}
+          {pill(false, 'TERMS', () => Linking.openURL(LEGAL.terms), 'x2')}
+          {pill(false, 'PRIVACY', () => Linking.openURL(LEGAL.privacy), 'x3')}
         </View>
-        <Pressable onPress={onAccept} style={s.gateBtn}><Text style={[s.gateBtnTxt, MONO]}>I UNDERSTAND</Text></Pressable>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-function LegalFooter() {
-  return (
-    <View style={s.legalRow}>
-      <Pressable onPress={() => Linking.openURL(LEGAL.disclaimer)}><Text style={s.legalLink}>Disclaimer</Text></Pressable>
-      <Text style={s.legalDot}>·</Text>
-      <Pressable onPress={() => Linking.openURL(LEGAL.terms)}><Text style={s.legalLink}>Terms</Text></Pressable>
-      <Text style={s.legalDot}>·</Text>
-      <Pressable onPress={() => Linking.openURL(LEGAL.privacy)}><Text style={s.legalLink}>Privacy</Text></Pressable>
+      </MenuRow>
     </View>
   );
 }
@@ -4626,7 +4614,8 @@ export default function App() {
           <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
           <Pressable onPress={() => setPrefs((v) => !v)} hitSlop={10} style={s.prefsBtn}>
-            <Text style={[MONO, { color: prefs ? C.accent : C.muted, fontSize: 13 }]}>{'A' + (theme === 'light' ? '\u263e' : '\u2600')}</Text>
+            {/* 2026-09-18: it holds the legal links as well as the reading controls now, so it reads as a menu */}
+            <Text style={[MONO, { color: prefs ? C.accent : C.muted, fontSize: 16, fontWeight: '800' }]}>{prefs ? '\u00d7' : '\u2261'}</Text>
           </Pressable>
         </View>
         {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} /> : null}
@@ -4664,7 +4653,6 @@ export default function App() {
                 {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
               </>
             )}
-            <LegalFooter />
           </ScrollView>
           </View></ScrollCtx.Provider>
         )}
