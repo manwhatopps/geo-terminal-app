@@ -3045,12 +3045,27 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   // are making overall general calls for long term - not something like will Hegseth be impeached, that's
   // short term and so minuscule compared to the global politics." One person's job, one court, one
   // sub-national contest, one filing, one price target is a real event and not the shape of the world.
-  const PAROCHIAL = /\b(impeach\w*|resigns?|is sworn in|sworn in as|steps down|is fired|is sacked|is dismissed|is confirmed|confirmation vote|cabinet reshuffle|public appearance|is indicted|is arraigned|testifies|subpoena\w*|press conference|preliminary examination|opens an? (investigation|examination)|a .{0,20}court (orders|rules)|files? an? (lawsuit|motion|appeal)|cycle top|price target)\b/i;
+  const PAROCHIAL = /\b(impeach\w*|resigns?|is sworn in|sworn in as|steps down|is fired|is sacked|is dismissed|is confirmed|confirmation vote|cabinet reshuffle|public appearance|is indicted|is arraigned|testifies|subpoena\w*|press conference|preliminary examination|opens an? (investigation|examination)|a .{0,20}court (orders|rules)|files? an? (lawsuit|motion|appeal)|votes? to (create|establish|adopt)|general assembly votes|passes a resolution|has citizenship revoked|publicly acknowledges|issues an apology|names an? ambassador|is appointed|is nominated|wins a seat|by-election|cycle top|price target)\b/i;
   const allRows = callsFrom(data.brief, data.clocks);
   const calls = allRows
     .filter((x) => x.long || x.days == null || x.days >= 90)
     .filter((x) => !PAROCHIAL.test(String(x.event || '')))
-    .sort((a, b) => Math.abs((b.p || 50) - 50) - Math.abs((a.p || 50) - 50))
+    // 2026-09-18: ordered by what a call TESTS, not by how far it sits from a coin. The book exists to
+    // be the thesis's evidence, so the calls that share ground with the sequence come first; distance
+    // from 50 only breaks ties among calls that test the same amount.
+    .map((x) => {
+      const words = (t) => new Set(String(t || '').toLowerCase().match(/[a-z]{4,}/g) || []);
+      const w = words(x.event);
+      let touch = 0;
+      ((data.board || {}).sequence || []).forEach((q) => {
+        const qw = words(String(q.what || '') + ' ' + String(q.so_that || '') + ' ' + String(q.test || ''));
+        let n = 0;
+        w.forEach((t) => { if (qw.has(t)) n += 1; });
+        touch = Math.max(touch, n);
+      });
+      return { ...x, touch };
+    })
+    .sort((a, b) => (b.touch - a.touch) || (Math.abs((b.p || 50) - 50) - Math.abs((a.p || 50) - 50)))
     .slice(0, BOOK_CAP);
   const counts = new Map();
   calls.forEach((x) => counts.set(x.domain, (counts.get(x.domain) || 0) + 1));
@@ -4254,38 +4269,80 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
 // The rooms lead DATA: pick a war, read its history, see what is live in it.
 function TheBoard({ board }) {
   const [who, setWho] = useState(null);
-  if (!board || !(board.actors || []).length) return null;
+  // 2026-09-18: this required `actors`, so a board carrying only the SEQUENCE - the thesis, which is
+  // the headline feature - rendered nothing at all. Any one section is enough to show the board.
+  if (!board || !((board.actors || []).length || (board.sequence || []).length
+                  || (board.collisions || []).length || board.line || board.read)) return null;
   const lbl = (t, color) => <Text style={[MONO, { color, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 18 }]}>{t}</Text>;
   const cur = who != null ? board.actors[who] : null;
   return (
-    <Section title="The board" extra={(board.actors || []).length + ' principals'}>
+    <Section title="The board" extra={((board.sequence || []).length
+      ? (board.sequence.filter((q) => String(q.status).toLowerCase() === 'done').length + ' of '
+         + board.sequence.length + ' done')
+      : ((board.actors || []).length + ' principals'))}>
       {/* 2026-09-18: THE SEQUENCE IS THE THESIS and the component never rendered it. The editor's
           standard is a claim a decade long across four theatres whose parts do not look related:
           get Ukraine into a war with Russia, use the cover to deal with Iran and hand it to Israel,
           then pivot to China. What happened, and what each step freed up. */}
-      {(board.sequence || []).length ? (
-        <View style={{ marginBottom: 18 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800' }]}>THE SEQUENCE</Text>
-          {(board.sequence || []).map((q, i) => (
-            <View key={i} style={{ marginTop: 11, flexDirection: 'row' }}>
-              <Text style={[MONO, { color: C.accent, fontSize: 11, fontWeight: '800', width: 30 }]}>
-                {String(i + 1).padStart(2, '0')}
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 23, fontWeight: '600' }}>
-                  {(q.when ? decode(String(q.when)) + '  ' : '') + decode(String(q.what || ''))}
-                </Text>
-                {q.so_that ? (
-                  <Text style={{ color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 3 }}>
-                    <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.2 }]}>{'SO THAT  '}</Text>
-                    {decode(String(q.so_that))}
-                  </Text>
-                ) : null}
+      {(board.sequence || []).length ? (() => {
+        const seq = board.sequence || [];
+        const st = (q) => String(q.status || '').toLowerCase();
+        const nDone = seq.filter((q) => st(q) === 'done').length;
+        const nOn = seq.filter((q) => st(q) === 'underway').length;
+        const pct = Math.round(((nDone + nOn * 0.5) / seq.length) * 100);
+        return (
+          <View style={{ marginBottom: 18 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800' }]}>
+              {'THE SEQUENCE' + (board.thesis ? '  \u00b7  ' + String(board.thesis).toUpperCase() : '')}
+            </Text>
+            {/* Progress is the news. A decade-scale thesis rarely produces fresh prose, but a step
+                flipping from underway to done is a real event and the only kind this page can honestly
+                generate. */}
+            <View style={{ marginTop: 9, marginBottom: 4 }}>
+              <View style={{ height: 6, borderRadius: 3, backgroundColor: C.line, overflow: 'hidden' }}>
+                <View style={{ width: pct + '%', height: 6, backgroundColor: C.accent }} />
               </View>
+              <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.1, marginTop: 6 }]}>
+                {nDone + ' OF ' + seq.length + ' DONE' + (nOn ? '  \u00b7  ' + nOn + ' UNDERWAY' : '') + '  \u00b7  ' + pct + '%'}
+              </Text>
             </View>
-          ))}
-        </View>
-      ) : null}
+            {seq.map((q, i) => {
+              const k2 = st(q);
+              const col = k2 === 'done' ? C.calm : k2 === 'underway' ? C.accent : C.muted;
+              const mark = k2 === 'done' ? '\u2713' : k2 === 'underway' ? '\u25d0' : '\u25cb';
+              return (
+                <View key={i} style={{ marginTop: 13, flexDirection: 'row' }}>
+                  <Text style={[MONO, { color: col, fontSize: 15, fontWeight: '800', width: 26 }]}>{mark}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: k2 === 'pending' ? C.muted : C.text, fontSize: 15.5, lineHeight: 23, fontWeight: '600' }}>
+                      {(q.when ? decode(String(q.when)) + '  ' : '') + decode(String(q.what || ''))}
+                    </Text>
+                    {q.so_that ? (
+                      <Text style={{ color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 3 }}>
+                        <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.2 }]}>{'SO THAT  '}</Text>{decode(String(q.so_that))}
+                      </Text>
+                    ) : null}
+                    {q.evidence ? (
+                      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 3 }}>
+                        <Text style={[MONO, { color: C.calm, fontSize: 9.5, letterSpacing: 1.2 }]}>{'EVIDENCE  '}</Text>{decode(String(q.evidence))}
+                      </Text>
+                    ) : null}
+                    {!q.evidence && q.test ? (
+                      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 3 }}>
+                        <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.2 }]}>{'COUNTS AS DONE WHEN  '}</Text>{decode(String(q.test))}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })}
+            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 14 }}>
+              Each step says what would count as done before it happens, and is only ticked with a dated
+              source. A thesis ticked off in hindsight proves nothing.
+            </Text>
+          </View>
+        );
+      })() : null}
 
       <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
