@@ -2313,9 +2313,17 @@ function dueOf(card, call) {
     if (mi < 0) continue;
     return isoDate(m[3], mi + 1, kind === 'dmy' ? +m[1] : +m[2]);
   }
-  const days = parseInt(String((call && call.horizon) || ''), 10);
+  const days = horizonDays(call && call.horizon);
   const base = Date.parse(String((card && card.ts) || '').slice(0, 10) + 'T12:00:00Z');
   return days && !Number.isNaN(base) ? new Date(base + days * 86400000).toISOString().slice(0, 10) : null;
+}
+// "3d", "6w", "6m", "2y", "90 days", "18 months" -> days. 2026-09-17: "6m" was read as six DAYS, which put
+// every long-range call in the fortnight bucket.
+function horizonDays(h) {
+  const m = String(h || '').trim().match(/^(\d+)\s*(d|w|m|y|day|week|month|year)/i);
+  if (!m) return null;
+  const n = +m[1], u = m[2][0].toLowerCase();
+  return n * (u === 'y' ? 365 : u === 'm' ? 30 : u === 'w' ? 7 : 1);
 }
 const DUE_TAIL = /[,;]?\s*\b(?:by|before|on or before|no later than|not later than)\s+(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})\s*\.?\s*$/i;
 const fmtDue = (d) => (d ? 'BY ' + String(+d.slice(8, 10)) + ' ' + (MON3[+d.slice(5, 7) - 1] || '') : 'UNDATED');
@@ -2363,14 +2371,19 @@ function callsFrom(cards, clocks) {
     const h = c.hist || {}, call = h.call;
     if (!call || !call.event || call.p == null) return;
     const due = dueOf(c, call);
-    out.push({ idx, head: c.head, region: c.region || 'Global',
+    const row = (k, d) => ({ idx, head: c.head, region: c.region || 'Global',
       theatre: THEATRE_OF[c.region] || c.region || 'Global',
-      domain: domainOf(String(call.event), String(c.head || '') + ' ' + String(c.tag || '')),
-      p: Math.max(0, Math.min(100, Math.round(Number(call.p) || 0))),
-      event: String(call.event).replace(DUE_TAIL, '').trim(), due,
-      days: due ? Math.round((Date.parse(due + 'T12:00:00Z') - Date.now()) / 86400000) : null,
+      domain: domainOf(String(k.event), String(c.head || '') + ' ' + String(c.tag || '')),
+      p: Math.max(0, Math.min(100, Math.round(Number(k.p) || 0))),
+      event: String(k.event).replace(DUE_TAIL, '').trim(), due: d,
+      days: d ? Math.round((Date.parse(d + 'T12:00:00Z') - Date.now()) / 86400000) : null,
       pro: (h.for || [])[0], con: (h.against || [])[0],
-      conf: call.conf, update: call.update, clock: null });
+      conf: k.conf, update: k.update, clock: null });
+    out.push(row(call, due));
+    // 2026-09-17 (editor: "make long term predictions"): the card's FURTHER OUT call is a call of its
+    // own and belongs in the book, in its own month, not only inside the article
+    const lg = h.long;
+    if (lg && lg.event && lg.p != null && String(lg.event) !== String(call.event)) out.push({ ...row(lg, dueOf(c, lg)), long: true });
   });
   // one dated decision per call, matched on the call's own words - what the calendar was for
   const ks = (clocks || []).map((k) => ({ k, t: tokens(decode(k.label || '') + ' ' + decode(k.why || '')) }));
@@ -2393,7 +2406,8 @@ function callsFrom(cards, clocks) {
 const BUCKETS = [{ lab: 'THE NEXT TWO WEEKS', sub: 'resolve inside a fortnight', max: 14 },
   { lab: 'WITHIN THE MONTH', sub: 'resolve in the next four weeks', max: 35 },
   { lab: 'WITHIN THE QUARTER', sub: 'in the ninety-day book', max: 100 },
-  { lab: 'FURTHER OUT', sub: 'beyond the quarter', max: 1e9 }];
+  { lab: 'WITHIN THE YEAR', sub: 'beyond the quarter, inside twelve months', max: 370 },
+  { lab: 'THE LONG BOOK', sub: 'a year out and further', max: 1e9 }];
 
 // One call, written out. The number never appears without the position that produced it (L14), which
 // is why FOR and BUT are printed here rather than hidden behind the row.
@@ -2540,10 +2554,10 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
     { key: 'theatre', label: 'WHERE', valueOf: (x) => x.theatre, chips: chipsOf(calls, (x) => x.theatre) },
   ];
   const hit = calls.filter((x) => selMatch(sel, CGROUPS, x));
-  // the lede is the soonest call the desk is actually confident about, not merely the soonest
-  const lede = hit.find((x) => x.days != null && x.days <= 45 && Math.abs(x.p - 50) >= 20) || hit[0];
-  const rest = hit.filter((x) => x !== lede);
-  const shown = allCalls || selCount(sel) ? rest : rest.slice(0, 14);
+  // 2026-09-17 (editor): the forward book is the first thing on CALLS - no lede above it - and the
+  // long-range rows are always shown; only the crowded near-term buckets fold past fourteen rows
+  const near = hit.filter((x) => x.days != null && x.days <= 100), far = hit.filter((x) => !(x.days != null && x.days <= 100));
+  const shown = (allCalls || selCount(sel) ? near : near.slice(0, 14)).concat(far);
   const chairs = chairsFrom(data.brief);
   const groups = [];
   BUCKETS.forEach((b, bi) => {
@@ -2553,8 +2567,11 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
   });
   return (
     <View style={s.stack}>
-      <CallsLede x={lede} goArticle={goArticle} />
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 12 }}>
+          Every call is falsifiable, dated, and scored when it resolves: soonest first, the long book
+          last. The case for it and against it is printed with it, because the number alone would be a betting line.
+        </Text>
         <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => { setSel(nx); setAllCalls(false); }}
           total={calls.length} shown={hit.length} />
         {selCount(sel) === 1 && (sel.topic || []).length === 1 ? (
@@ -2572,9 +2589,9 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
             {g.rows.map((x, j) => <CallRow key={j} x={x} goArticle={goArticle} />)}
           </View>
         ))}
-        {!allCalls && !selCount(sel) && rest.length > shown.length ? (
+        {!allCalls && !selCount(sel) && near.length > 14 ? (
           <Pressable onPress={() => setAllCalls(true)} style={{ paddingVertical: 15, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
-            <Text style={[s.readmore, MONO]}>{'THE REMAINING ' + (rest.length - shown.length) + ' CALLS \u203a'}</Text>
+            <Text style={[s.readmore, MONO]}>{'THE REMAINING ' + (near.length - 14) + ' NEAR-TERM CALLS \u203a'}</Text>
           </Pressable>
         ) : null}
       </Section>
@@ -2774,7 +2791,7 @@ function PricedIn({ p }) {
         </Text>
       </Pressable>
       {how ? (
-        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19.5, marginTop: 7 }}>
+        <Text style={EXPLAIN_P}>
           {decode(p.method) + ' The signal fires BEFORE the announcement and goes quiet after it: once the '
             + 'committee moves, the range catches up with the bill and the gap closes, which is the reading '
             + 'meaning "nothing more is priced yet", not "nothing is happening".'}
@@ -2800,6 +2817,23 @@ function PricedIn({ p }) {
 // day this shipped the independent measures were running BELOW the headline - and the panel says so,
 // because a desk that only ever reports "the real number is higher" is running a narrative, and the
 // first month that breaks is the month nobody believes anything else on the page.
+// 2026-09-17 (editor, on THE RECEIPTS: "too small of font ... avoid these long paragraphs by default,
+// make it a click to read like the other buttons"): the standing explanation of a print sits behind a
+// door styled like the article doors, and opens at reading size, not footnote size.
+function Explainer({ label, sub, children, color }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ marginTop: 14 }}>
+      <Pressable onPress={() => setOpen((o) => !o)} style={[s.artbtn, { borderColor: color || C.accentDim }, open && s.artbtnOn]}>
+        <Text style={[s.artbtnT, MONO, { color: color || C.accent }]} numberOfLines={1}>{(open ? '− ' : '≡ ') + label}</Text>
+        {sub ? <Text style={s.artbtnS}>{sub}</Text> : null}
+      </Pressable>
+      {open ? <View style={{ marginTop: 12 }}>{children}</View> : null}
+    </View>
+  );
+}
+const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10 };
+
 function Receipts({ inf }) {
   const [openWhat, setOpenWhat] = useState(null);
   if (!inf || !inf.official || !inf.official.length) return null;
@@ -2886,25 +2920,28 @@ function Receipts({ inf }) {
                 </Text>
               </View>
             ))}
-            <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 7 }}>
+          </>
+        ) : null}
+
+        <Explainer label="HOW THESE ARE MEASURED" sub="the sources, the rent gap, the Big Mac, the caveats">
+          {inf.shelter ? (
+            <Text style={EXPLAIN_P}>
               The CPI measures what every tenant pays, most of whom did not move this year; the market
               figure is what a landlord asks on a new lease. They should differ — the question is only
               whether the CPI's version turns late, and by how much.
             </Text>
-          </>
-        ) : null}
-
-        {inf.bigmac ? (
-          <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 16 }}>
-            {'One more basket nobody official controls: a Big Mac went from $' + inf.bigmac.then + ' to $'
-              + inf.bigmac.now + ', ' + (inf.bigmac.pct > 0 ? '+' : '') + inf.bigmac.pct + '% since ' + inf.base
-              + ' (' + inf.bigmac.src + ').'}
-          </Text>
-        ) : null}
-
-        {(inf.notes || []).map((n, i) => (
-          <Text key={i} style={{ color: C.muted, fontSize: 12, lineHeight: 18, marginTop: 12, fontStyle: 'italic' }}>{decode(n)}</Text>
-        ))}
+          ) : null}
+          {inf.bigmac ? (
+            <Text style={EXPLAIN_P}>
+              {'One more basket nobody official controls: a Big Mac went from $' + inf.bigmac.then + ' to $'
+                + inf.bigmac.now + ', ' + (inf.bigmac.pct > 0 ? '+' : '') + inf.bigmac.pct + '% since ' + inf.base
+                + ' (' + inf.bigmac.src + ').'}
+            </Text>
+          ) : null}
+          {(inf.notes || []).map((n, i) => (
+            <Text key={i} style={EXPLAIN_P}>{decode(n)}</Text>
+          ))}
+        </Explainer>
       </View>
     </Section>
   );
