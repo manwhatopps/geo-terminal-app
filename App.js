@@ -398,6 +398,15 @@ function SectionFull({ title, extra, children, fold, open: openInit }) {
   );
 }
 
+// 2026-09-18: for/against entries arrive either as a plain string or as {p: "..."}. String() on the
+// object printed "[object Object]" on screen, eight times per article. Read either.
+function argText(x) {
+  if (x == null) return '';
+  if (typeof x === 'string') return x;
+  if (typeof x === 'object') return String(x.p || x.text || x.arg || x.line || '');
+  return String(x);
+}
+
 function ProbBar({ p, prev }) {
   return (
     <View style={s.bar}>
@@ -1273,19 +1282,14 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
   return (
     <View style={[s.storycard, { borderColor: C.accent, marginTop: 10, paddingTop: 16 }]}>
       <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>THE GEOPOLITICAL ANALYST</Text>
-      <Text style={sub}>The desk's own reading of this story, in the order it happened: the record behind it, where it stands now, and what it thinks comes next.</Text>
       {chain.length ? (
         <View style={{ marginBottom: 20 }}>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 2, fontWeight: '800' }]}>HOW THIS ACTUALLY WORKS</Text>
-          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 4 }}>
-            The constraint first, then what was tried, then whether the thing they say they cannot do is one they will not do.
-          </Text>
           <View style={{ marginTop: 10 }}><Sections items={chain} size={16} /></View>
         </View>
       ) : null}
-      <Movement n="I" title="WHAT CAME BEFORE" sub="the precedents the desk is reading from, oldest first">{past}</Movement>
-      <Movement n="II" title="WHERE IT STANDS NOW" sub="what the history does to today's picture">{present}</Movement>
-      <Movement n="III" title="WHAT HAPPENS NEXT" sub="the desk's call, and the case against it">{future}</Movement>
+            <Movement n="I" title="WHERE IT STANDS NOW">{present}</Movement>
+      <Movement n="II" title="WHAT HAPPENS NEXT">{future}</Movement>
     </View>
   );
 }
@@ -1388,13 +1392,13 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
                 {(item.hist.for || [])[0] ? (
                   <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 10, marginBottom: 0 }]}>
                     <Text style={[MONO, { color: C.calm, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>{'FOR  '}</Text>
-                    {decode(String(item.hist.for[0]))}
+                    {decode(argText(item.hist.for[0]))}
                   </Text>
                 ) : null}
                 {(item.hist.against || [])[0] ? (
                   <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6, marginBottom: 0 }]}>
                     <Text style={[MONO, { color: C.crit, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>{'BUT  '}</Text>
-                    {decode(String(item.hist.against[0]))}
+                    {decode(argText(item.hist.against[0]))}
                   </Text>
                 ) : null}
                 <Pressable onPress={() => setPane('analyst')} style={s.sumdoor}>
@@ -2302,7 +2306,7 @@ const inText = (term, txt) => (term.phrase ? txt.toLowerCase().includes(term.t) 
 const callHay = (b) => {
   const h = b.hist || {}, c = h.call || {};
   return [c.event, c.update, b.head, b.region, ...(h.for || []), ...(h.against || [])]
-    .filter(Boolean).map((x) => decode(String(x))).join('  ·  ');
+    .filter(Boolean).map((x) => decode(argText(x))).join('  ·  ');
 };
 function scoreHit(terms, title, hay) {
   const T = String(title || ''), H = String(hay || '');
@@ -3633,7 +3637,7 @@ function Receipts({ inf }) {
           </>
         ) : null}
 
-        <Explainer label="HOW THESE ARE MEASURED" sub="the sources, the rent gap, the Big Mac, the caveats">
+        <Explainer label="HOW THESE ARE MEASURED">
           {inf.shelter ? (
             <Text style={EXPLAIN_P}>
               The CPI measures what every tenant pays, most of whom did not move this year; the market
@@ -4106,7 +4110,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
       ) : null}
 
       {(sit.lessons || []).length ? (
-        <Explainer boxRef={door('THE DOCTRINES')} label="THE DOCTRINES" sub="what each capital has committed itself to, on the record">
+        <Explainer boxRef={door('THE DOCTRINES')} label="THE DOCTRINES">
           {(sit.lessons || []).map((l, i) => (
             <View key={i} style={{ marginTop: i ? 16 : 0 }}>
               <Text style={ROOM_K}>{[(l.actors || []).map(actor).join(', '), String(l.tier || '').replace(/_/g, ' ')].filter(Boolean).join(' · ').toUpperCase()}</Text>
@@ -4119,7 +4123,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
       ) : null}
 
       {(sit.tendencies || []).length ? (
-        <Explainer boxRef={door('THE PATTERNS')} label="THE PATTERNS" sub="how each side has behaved when it mattered, and the cases against">
+        <Explainer boxRef={door('THE PATTERNS')} label="THE PATTERNS">
           {(sit.tendencies || []).map((t, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={ROOM_K}>{[(t.actors || []).map(actor).join(', '), 'CONFIDENCE ' + String(t.confidence || '?')].join(' · ').toUpperCase()}</Text>
@@ -4131,7 +4135,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
       ) : null}
 
       {(sit.path_dependencies || []).length ? (
-        <Explainer boxRef={door('HOW WE GOT HERE')} label="HOW WE GOT HERE" sub="the path dependencies - each arrow is a hypothesis">
+        <Explainer boxRef={door('HOW WE GOT HERE')} label="HOW WE GOT HERE">
           {(sit.path_dependencies || []).map((pd, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={[ROOM_H]}>{decode(pd.name || '')}</Text>
@@ -4144,7 +4148,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
       ) : null}
 
       {(sit.narratives || []).length ? (
-        <Explainer boxRef={door('THE STORIES EACH SIDE TELLS')} label="THE STORIES EACH SIDE TELLS" sub="the history each capital cites, and what it makes of it today">
+        <Explainer boxRef={door('THE STORIES EACH SIDE TELLS')} label="THE STORIES EACH SIDE TELLS">
           {(sit.narratives || []).map((n, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={ROOM_K}>{(n.actors || []).map(actor).join(', ').toUpperCase()}</Text>
@@ -4157,7 +4161,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
       ) : null}
 
       {(sit.territories || []).length ? (
-        <Explainer boxRef={door('THE GROUND')} label="THE GROUND" sub="who holds what, who claims what, and since when">
+        <Explainer boxRef={door('THE GROUND')} label="THE GROUND">
           {(sit.territories || []).map((t, i) => (
             <View key={i} style={{ marginTop: i ? 18 : 0 }}>
               <Text style={ROOM_H}>{decode(t.name)}</Text>
@@ -4176,7 +4180,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
       ) : null}
 
       {Object.keys(sit.base_rates || {}).length ? (
-        <Explainer boxRef={door('BASE RATES')} label="BASE RATES" sub="what comparable cases did, with n">
+        <Explainer boxRef={door('BASE RATES')} label="BASE RATES">
           {Object.entries(sit.base_rates).map(([k, b]) => <BaseRateCard key={k} id={k} b={b} />)}
         </Explainer>
       ) : null}
@@ -4249,10 +4253,21 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
         <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
           {keys.map((k) => {
             const n = roomCards(k, cards || []).length;
+            // the most recent dated event is the honest one-line answer to "what is this file"
+            const tl = (sits[k].timeline || []).filter((e) => e && e.date && (e.line || e.name));
+            const last = tl.length ? tl.reduce((a, b) => (String(a.date) > String(b.date) ? a : b)) : null;
+            const yr = last ? String(last.date).slice(0, 4) : '';
             return (
-              <Pressable key={k} onPress={() => setRoom(k)} style={{ paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
-                <Text style={ROOM_H}>{sits[k].title}</Text>
-                <Text style={{ color: C.muted, fontSize: 12.5, marginTop: 3 }}>{(sits[k].timeline || []).length + ' events · ' + (sits[k].actors || []).length + ' actors' + (n ? ' · ' + n + ' live ' + (n === 1 ? 'story' : 'stories') : '')}</Text>
+              <Pressable key={k} onPress={() => setRoom(k)} style={{ paddingVertical: 14, borderTopWidth: 1, borderTopColor: C.line }}>
+                <Text style={[MONO, { color: n ? C.accent : C.muted, fontSize: 9.5, letterSpacing: 1.5, fontWeight: '800' }]}>
+                  {n ? (n + ' LIVE ' + (n === 1 ? 'STORY' : 'STORIES') + ' ON THE WIRE') : 'BACKGROUND'}
+                </Text>
+                <Text style={[ROOM_H, { marginTop: 5 }]}>{sits[k].title}</Text>
+                {last ? (
+                  <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 19.5, marginTop: 4 }}>
+                    <Text style={[MONO, { fontSize: 11.5 }]}>{yr + '  '}</Text>{decode(String(last.line || last.name))}
+                  </Text>
+                ) : null}
               </Pressable>
             );
           })}
@@ -4323,7 +4338,7 @@ function ForAgainst({ pro, con, caveat }) {
     <View style={{ marginTop: 14, borderLeftWidth: 3, borderLeftColor: color, paddingLeft: 12 }}>
       <Text style={[MONO, { color, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>{label}</Text>
       {(items || []).length ? items.map((t, i) => (
-        <Text key={i} style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: i ? 10 : 7, marginBottom: 0 }]}>{decode(String(t))}</Text>
+        <Text key={i} style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: i ? 10 : 7, marginBottom: 0 }]}>{decode(argText(t))}</Text>
       )) : <Text style={{ color: C.muted, fontSize: 13.5, marginTop: 7, fontStyle: 'italic' }}>nothing recorded</Text>}
     </View>
   );
@@ -4632,6 +4647,14 @@ export default function App() {
             he did not want a settings bar sitting in the middle of the home screen. The dot is the
             board's risk colour, which is where the old HIGH banner's information went. */}
         <View style={s.header}>
+          {/* 2026-09-18: the back control lives here, not floating over the writing. It shows whenever
+              the reader is inside something they can leave - an article, or any tab that is not HOME. */}
+          {article != null || tab !== 'home' ? (
+            <Pressable onPress={() => { if (article != null) { setArticle(null); } else { setTab('home'); } scrollTop(); }}
+              hitSlop={12} style={{ paddingRight: 4 }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 15, fontWeight: '800' }]}>{'\u2039'}</Text>
+            </Pressable>
+          ) : null}
           <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc, shadowColor: rc, shadowOpacity: 0.9, shadowRadius: 6 }} />
           <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
@@ -4677,12 +4700,6 @@ export default function App() {
           </ScrollView>
           </View></ScrollCtx.Provider>
         )}
-        {article != null ? (
-          <Pressable onPress={() => { setArticle(null); scrollTop(); }} hitSlop={8}
-            style={{ position: 'absolute', right: 14, bottom: 84, backgroundColor: C.panel, borderWidth: 1, borderColor: C.accent, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 14, zIndex: 20, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.4, fontWeight: '800' }]}>{'‹ BACK'}</Text>
-          </Pressable>
-        ) : null}
         <SafeAreaView edges={['bottom']} style={s.navWrap}>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 }}>
             <View style={[s.modetog, { flex: 1, borderRadius: 14 }]}>
