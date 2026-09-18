@@ -59,8 +59,24 @@ for (const label of ['I UNDERSTAND', 'CONTINUE', 'AGREE', 'ACCEPT', 'ENTER']) {
 }
 await page.waitForTimeout(3000);
 
+// TABS TO VISIT — a refactor that moves components between tabs compiles fine and still crashes the
+// tab it broke. Landing on HOME proves nothing about the other four.
+const tabs = ['NEWS', 'BOARDS', 'CALLS', 'HISTORY'];
+const perTab = [];
+for (const t of tabs) {
+  const b = page.getByText(t, { exact: true }).last();
+  if (!(await b.count().catch(() => 0))) { perTab.push(`${t}: NOT FOUND`); continue; }
+  await b.click().catch(() => {});
+  await page.waitForTimeout(3500);
+  const tt = (await page.evaluate(() => document.body.innerText || '')).trim();
+  const tn = await page.evaluate(() => document.querySelectorAll('*').length);
+  perTab.push(`${t}: ${tn} nodes, ${tt.length} chars` + (tn < 40 || tt.length < 120 ? '  <-- EMPTY' : ''));
+  if (tn < 40 || tt.length < 120) errors.push(`tab ${t} rendered empty`);
+}
+
 const text = (await page.evaluate(() => document.body.innerText || '')).trim();
 const nodes = await page.evaluate(() => document.querySelectorAll('*').length);
+console.log('tabs:'); perTab.forEach((l) => console.log('  ' + l));
 
 console.log(`status ${resp ? resp.status() : '-'} · ${nodes} DOM nodes · ${text.length} chars of text`);
 if (text) console.log('first line: ' + text.split('\n').find((l) => l.trim()) );

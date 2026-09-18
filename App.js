@@ -301,7 +301,6 @@ const TABS = [
   { key: 'calls', label: 'CALLS', g: '◉' },
   // 2026-09-17 (editor): the rooms are their own thing, not a section of DATA - DATA opens on the receipts
   { key: 'rooms', label: 'HISTORY', g: '◫' },
-  { key: 'data', label: 'DATA', g: '▦' },
 ];
 // 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
 // record that logic for the bot's brain." The history/base-rate reasoning now lives in each article as THE DESK'S
@@ -1957,7 +1956,6 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
         {tile('rooms', '\u25eb', 'HISTORY', Object.keys((hist && hist.situations) || {}).length || '\u00b7', 'why each war looks like this')}
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
         {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
-        {tile('data', '▦', 'DATA', ((data.chokepoints || {}).n || 0) + Object.keys((data.inflation || {}).official || {}).length + Object.keys((data.inflation || {}).independent || {}).length, 'the receipts, the straits, the money')}
       </View>
 
 
@@ -2530,7 +2528,7 @@ function Attention({ att }) {
   );
 }
 
-function BoardsTab({ data, goArticle }) {
+function BoardsTab({ data, goArticle, wording }) {
   const [sel, setSel] = useState({});
   const [spec, setSpec] = useState(null);
   const [open, setOpen] = useState(null);
@@ -2647,6 +2645,16 @@ function BoardsTab({ data, goArticle }) {
       {!items.length ? <Text style={s.foot}>Nothing circulating in this filter right now.</Text> : null}
       <Attention att={data.attention} />
       <Watchtower items={specs} />
+      {/* 2026-09-18: from the retired DATA tab. BOARDS asks whether a claim is true, and these are the
+          measurements that answer it - the official number beside the independent ones, the transit
+          counts that decide whether a strait is actually shut, and how each outlet worded the same
+          event. They were sitting on a tab of their own where nobody had a reason to go. */}
+      <Section title="The measurements" extra="what the numbers say" fold>
+        <Receipts inf={data.inflation} />
+        <TimeMachine />
+        <Chokepoints cp={data.chokepoints} />
+        <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
+      </Section>
     </View>
   );
 }
@@ -2987,6 +2995,7 @@ function Rooms({ chairs, goArticle }) {
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
 function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizzes, hist }) {
   const [region, setRegion] = useState('ALL');
+  const [fullRead, setFullRead] = useState(false);   // the money read, moved here from DATA
   const [sel, setSel] = useState({});
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   // 2026-09-18: THE BOOK IS THE LONG VIEW, AND IT IS SHORT. Every card used to contribute its near
@@ -3068,6 +3077,26 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
         </Section>
       ) : null}
       <Watchlist tripwires={data.tripwires} />
+      {/* 2026-09-18: from the retired DATA tab. CALLS asks what happens next and when, so the dated
+          decisions the book turns on and the money the calls depend on belong here, beside them. */}
+      <Calendar clocks={data.clocks} />
+      {data.plumbing ? (
+        <Section title="The money" extra={data.plumbing.stage ? 'live' : ''}>
+          <View style={{ paddingHorizontal: 16 }}>
+            <Text style={s.p} numberOfLines={fullRead ? undefined : 4}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+            <Pressable onPress={() => setFullRead((v) => !v)} hitSlop={6} style={{ marginTop: 8 }}>
+              <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS \u2039' : 'READ THE FULL READ \u203a'}</Text>
+            </Pressable>
+            {data.cost && data.cost.pct != null ? (
+              <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
+                {'WHAT A 2019 DOLLAR BUYS NOW \u00b7 +' + data.cost.pct + '% SINCE THEN \u00b7 AS OF ' + (data.cost.asof || '')}
+              </Text>
+            ) : null}
+          </View>
+          <RedBoard board={data.plumbing.board} bare />
+          <LiveWatchlist items={data.plumbing.series} bare />
+        </Section>
+      ) : null}
       <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
   );
@@ -3825,44 +3854,6 @@ function Watchlist({ tripwires }) {
 
 // ── DATA — the reference layer: who the players are, what the countries measure, what is physically
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
-function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, picks, setPickFor, res, wording }) {
-  const [fullRead, setFullRead] = useState(false);
-  return (
-    <View style={s.stack}>
-      {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
-          to scroll. I like the money reports"). The money leads; the players are a reference list and
-          sit at the bottom where a reader goes looking for them. */}
-      {/* 2026-09-18: ONE SUBJECT, ONE SECTION. The money used to be told three times in a row - the
-          red board, the economic read, the live prints - all from the same plumbing object, each with
-          its own heading and rule. The reader scrolled past three headings to learn it was one story.
-          Cost-of-living sits with the receipts because that is what it is. */}
-      <Receipts inf={data.inflation} />
-      <TimeMachine />
-      {data.plumbing ? (
-        <Section title="The money" extra={data.plumbing.stage ? 'live' : ''}>
-          <View style={{ paddingHorizontal: 16 }}>
-            <Text style={s.p} numberOfLines={fullRead ? undefined : 4}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
-            <Pressable onPress={() => setFullRead((v) => !v)} hitSlop={6} style={{ marginTop: 8 }}>
-              <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS \u2039' : 'READ THE FULL READ \u203a'}</Text>
-            </Pressable>
-            {data.cost && data.cost.pct != null ? (
-              <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
-                {'WHAT A 2019 DOLLAR BUYS NOW \u00b7 +' + data.cost.pct + '% SINCE THEN \u00b7 AS OF ' + (data.cost.asof || '')}
-              </Text>
-            ) : null}
-          </View>
-          <RedBoard board={data.plumbing.board} bare />
-          <LiveWatchlist items={data.plumbing.series} bare />
-        </Section>
-      ) : null}
-      <Chokepoints cp={data.chokepoints} />
-      <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
-      <Calendar clocks={data.clocks} />
-      <Text style={s.foot}>Every figure carries its source and vintage. Where the desk could not get a number, it says so.</Text>
-    </View>
-  );
-}
-
 
 // ── WORLD — primary-source numbers and the situation-room history graph ──────────────────────────
 // Every number on this tab is a provenanced cell {v, unit, year, src, code} from a primary statistical
@@ -4631,7 +4622,7 @@ export default function App() {
       setOlder('done');
     } catch (e) { setOlder('error'); }
   }, []);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'data') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'rooms') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
 
   if (acked === null) {
     return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
@@ -4691,11 +4682,10 @@ export default function App() {
               <>
                 {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />}
-                {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
+                {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} wording={wording} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
                 {tab === 'rooms' && <TocHost><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} data={data} world={world} /></TocHost>}
-                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
-              </>
+                              </>
             )}
           </ScrollView>
           </View></ScrollCtx.Provider>
