@@ -267,6 +267,13 @@ function briefSorted(brief) {
 
 // Full stamp for article cards: always date + time, plus freshness when recent.
 // "AUG 30 · 04:01 · 2H AGO" — a reader should never have to guess when a read was written.
+// The index row wants a date a reader recognises, not a timestamp: "18 Sep 2026", the way the
+// reference layout prints it. fullStamp stays for the article page, where the hour matters.
+function shortStamp(ts) {
+  if (!ts) return '';
+  const t = Date.parse(ts); if (isNaN(t)) return '';
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
 function fullStamp(ts) {
   if (!ts) return '';
   const t = Date.parse(ts); if (isNaN(t)) return '';
@@ -351,7 +358,22 @@ function TocHost({ children, color }) {
   );
 }
 
-function Section({ title, extra, children, fold, open: openInit }) {
+function Section({ title, extra, children, fold, open: openInit, bare }) {
+  // 2026-09-18: `bare` lets one subject be told once. A block nested inside a merged section keeps its
+  // own small label so a reader can still find it, but drops the heading rule, the fold and the second
+  // table-of-contents entry - which is what made DATA read as eleven subjects when it is about five.
+  if (bare) {
+    return (
+      <View style={{ marginTop: 16 }}>
+        {title ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.3, marginBottom: 7, paddingHorizontal: 16 }]}>{String(title).toUpperCase()}</Text> : null}
+        {children}
+      </View>
+    );
+  }
+  return <SectionFull title={title} extra={extra} fold={fold} open={openInit}>{children}</SectionFull>;
+}
+
+function SectionFull({ title, extra, children, fold, open: openInit }) {
   const [open, setOpen] = useState(!fold || !!openInit);
   const reg = useContext(TocCtx);
   const box = useRef(null);
@@ -1585,7 +1607,7 @@ function QuizSection({ quiz, bare, onDone }) {
 // ── MONEY PRINTER RED BOARD — Tier-0 prints vs stated thresholds (mirrors dashboard plumbing tab).
 // `board` is script-owned (data_feeds.py redboard apply): colour, lines, crisis channels A-D. ──
 const boardColor = () => ({ RED: C.crit, YELLOW: C.elev, GREEN: C.calm });   // read at render so the theme can change
-function RedBoard({ board, compact, onPress }) {
+function RedBoard({ board, compact, onPress, bare }) {
   const [chan, setChan] = useState(null);
   const [lineOpen, setLineOpen] = useState(null);
   if (!board || !board.color) return null;
@@ -1611,7 +1633,7 @@ function RedBoard({ board, compact, onPress }) {
     );
   }
   return (
-    <Section title="Money printer red board" extra={board.color}>
+    <Section title="Money printer red board" extra={board.color} bare={bare}>
       <View style={{ backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderLeftWidth: 4, borderLeftColor: col, borderRadius: 8, padding: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
           <View style={{ borderWidth: 1, borderColor: col, borderRadius: 5, paddingVertical: 4, paddingHorizontal: 10, marginRight: 10 }}>
@@ -1804,11 +1826,11 @@ function whyOf(k) {
   return null;
 }
 
-function LiveWatchlist({ items }) {
+function LiveWatchlist({ items, bare }) {
   const [open, setOpen] = useState(null);
   if (!items || !items.length) return null;
   return (
-    <Section title="The money" extra={items.length + ' live prints'} fold open>
+    <Section title={bare ? 'Live prints' : 'The money'} extra={items.length + ' live prints'} fold={!bare} open bare={bare}>
       {items.map((x, i) => {
         const why = whyOf(x.k);
         const isOpen = open === i;
@@ -2237,10 +2259,15 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
 // ── HEADLINE ROW — the whole front page is made of these. ──
 function HeadlineRow({ item, onOpen, isRead, isSaved }) {
   const { head, longHead } = articleParts(item);
+  // 2026-09-18: the reference layout the editor sent - kicker above in the accent, headline, then the
+  // byline and date below in grey. The date matters most on a wire that re-covers the same story.
   return (
     <Pressable onPress={onOpen} style={s.hrow}>
+      <Text style={s.hrowKick}>{String(item.region || kickerOf(item) || '').toUpperCase()}</Text>
       <Text style={[s.hrowH, T(24, 29), isRead && s.readH]}>{head || longHead}</Text>
-      <Text style={s.hrowMeta}>{String(item.region || kickerOf(item) || '').toUpperCase() + (isSaved ? '  ·  SAVED' : '')}</Text>
+      <Text style={s.hrowMeta}>
+        {'The desk  ·  ' + shortStamp(item.ts) + (isSaved ? '  ·  SAVED' : '')}
+      </Text>
     </Pressable>
   );
 }
@@ -3037,11 +3064,8 @@ function Rooms({ chairs, goArticle }) {
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
 function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizzes, hist }) {
   const [region, setRegion] = useState('ALL');
-  const [book, setBook] = useState(null);   // the tracked book opens one row at a time
   const [sel, setSel] = useState({});
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
-  const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
-  const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
   // 2026-09-18: THE BOOK IS THE LONG VIEW, AND IT IS SHORT. Every card used to contribute its near
   // call and its long call, so this ran to a couple of hundred rows and buried the questions that
   // actually matter. A row earns a place by being a FURTHER OUT call or resolving 90+ days out, and the
@@ -3109,57 +3133,18 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
       <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} quizzes={quizzes} hist={hist} />
       <Rooms chairs={chairs} goArticle={goArticle} />
       {/* everything the desk keeps for itself - the book, the record, the lab - behind ONE door */}
-      <Section title="More from the desk" extra="every call, the book, the record" fold>
-        <Section title="The tracked book" extra={String(fcs.length)} fold>
-          <FilterDrop pairs={textRegionPairs(data.forecasts || [], (f) => f.q || '')} active={region} onPick={setRegion} />
-          {fcs.map((f, i) => {
-            const d = f.prev != null ? f.p - f.prev : null;
-            return (
-              <Pressable key={i} onPress={() => setBook(book === i ? null : i)} style={s.pred}>
-                <View style={s.predtop}>
-                  <Text style={s.predq}>{decode(f.q)}</Text>
-                  <Text style={[s.predp, MONO]}>{f.p}<Text style={s.predpS}>%</Text></Text>
-                </View>
-                <ProbBar p={f.p} prev={f.prev} />
-                <View style={s.predmeta}>
-                  {d ? <Text style={[s.chip, MONO, { color: d > 0 ? C.high : C.calm }]}>{(d > 0 ? '+' : '') + d}</Text> : null}
-                  <Text style={s.predmetaTxt}>by {f.by}</Text>
-                </View>
-                {f.note && book === i ? <Text style={s.prednote}>{decode(f.note)}</Text> : null}
-                {f.note && book !== i ? <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1, marginTop: 6 }]}>+ WHY</Text> : null}
-              </Pressable>
-            );
-          })}
+      {/* 2026-09-18: the drawer is gone. It held folds inside folds and a second, hidden book of the
+          same calls. What earns a place stands on its own; what duplicated something else was cut. */}
+      <CalibrationTrack track={data.track} forecasts={data.forecasts} />
+      {data.lecture && (data.lecture.sections || []).length ? (
+        <Section title="This week's deep dive" extra={data.lecture.date || ''} fold>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <Text style={[s.idxH, SERIF, { fontSize: 21, lineHeight: 27 }]}>{decode(data.lecture.title)}</Text>
+            <View style={{ marginTop: 12 }}><Sections items={data.lecture.sections} /></View>
+          </View>
         </Section>
-        {/* the weekly deep dive lost its only surface when the HOME banner came off (the editor's
-            words: don't start the page with this boring article). Ten written sections belong behind a
-            door, not on the front page - so it lives here. */}
-        {data.lecture && (data.lecture.sections || []).length ? (
-          <Section title="This week's deep dive" extra={data.lecture.date || ''} fold>
-            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-              <Text style={[s.idxH, SERIF, { fontSize: 21, lineHeight: 27 }]}>{decode(data.lecture.title)}</Text>
-              <View style={{ marginTop: 12 }}><Sections items={data.lecture.sections} /></View>
-            </View>
-          </Section>
-        ) : null}
-        <CalibrationTrack track={data.track} forecasts={data.forecasts} />
-        {hyps.length ? (
-          <Section title="Hidden-strategy lab" extra={hyps.length + ' live'} fold>
-            {hyps.map((h, i) => (
-              <View key={i} style={s.hyp}>
-                <Text style={[s.hypP, MONO]}>{h.p}%</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.hypName}>{decode(h.name)}.</Text>
-                  <Text style={s.hypD}>{decode(h.d)}</Text>
-                </View>
-              </View>
-            ))}
-          </Section>
-        ) : null}
-        <Scenarios items={data.scenarios} />
-        <Watchlist tripwires={data.tripwires} />
-        <QuizSection quiz={data.quiz} />
-      </Section>
+      ) : null}
+      <Watchlist tripwires={data.tripwires} />
       <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
     </View>
   );
@@ -3933,14 +3918,14 @@ function Chokepoints({ cp }) {
 }
 
 // ── COUNTRY DOSSIERS — flag chips, tap to open the dossier (mockup's country page, inline) ──
-function Dossiers({ items }) {
+function Dossiers({ items, bare }) {
   const [sel, setSel] = useState(null);
   if (!items || !items.length) return null;
   const d = sel != null ? items[sel] : null;
   const tc = d ? (riskColor[(d.threat || {}).level] || C.elev) : null;
   const G = [['government', 'GOVERNMENT'], ['leader', 'LEADER'], ['population', 'POPULATION'], ['gdp', 'GDP'], ['military', 'MILITARY'], ['influence', 'INFLUENCE']];
   return (
-    <Section title="Country dossiers" extra={items.length + ' tracked'}>
+    <Section title="Country dossiers" extra={items.length + ' tracked'} bare={bare}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
         {items.map((it, i) => (
           <Pressable key={i} onPress={() => setSel(sel === i ? null : i)} style={[s.rchip, sel === i && s.rchipOn]}>
@@ -3978,63 +3963,48 @@ function Dossiers({ items }) {
 }
 
 // ── SCENARIO EXPLORER — what-if branches on the staged-forecast discipline ──
-function Scenarios({ items }) {
-  const [sel, setSel] = useState(null);
-  if (!items || !items.length) return null;
-  return (
-    <Section title="Scenario explorer" extra={items.length + ' branches'} fold>
-      {items.map((sc, i) => (
-        <View key={i} style={s.storycard}>
-          <Pressable onPress={() => setSel(sel === i ? null : i)}>
-            <Text style={[s.storyH3, SERIF, { fontSize: 16, color: C.accent }]}>{decode(sc.q)}</Text>
-          </Pressable>
-          {sel === i ? (
-            <>
-              <Text style={s.storyP}>{decode(sc.read || '')}</Text>
-              {(sc.stages || []).map((st, j) => (
-                <View key={j} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4 }}>
-                  <Text style={[MONO, { color: C.accent, fontSize: 12, width: 44 }]}>{(st.p != null ? st.p + '%' : '—')}</Text>
-                  <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }}>{decode(st.s)}</Text>
-                </View>
-              ))}
-              {sc.falsifier ? (
-                <Text style={[s.li, { marginTop: 4 }]}>
-                  <Text style={{ color: C.crit }}>› </Text>
-                  <Text style={[MONO, { fontSize: 10, color: C.muted }]}>{'KILLS THE BRANCH: '}</Text>
-                  {decode(sc.falsifier)}
-                </Text>
-              ) : null}
-            </>
-          ) : (
-            <Text style={[MONO, { color: C.muted, fontSize: 10 }]}>TAP TO EXPLORE ›</Text>
-          )}
-        </View>
-      ))}
-      <Text style={s.foot}>Branches, not prophecies — every stage carries a probability and a falsifier; most branches fizzle early.</Text>
-    </Section>
-  );
-}
-
-// ── WATCHLIST — the tripwires: what is armed, what fired (mockup's alerts page) ──
 function Watchlist({ tripwires }) {
-  const tw = tripwires || {};
-  const armed = tw.armed || [], fired = tw.fired || [];
-  if (!armed.length && !fired.length) return null;
+  const [open, setOpen] = useState(null);
+  // 2026-09-18: the pipeline writes a LIST of {k, s, n} - name, status, threshold. This read tw.armed
+  // and tw.fired, which are undefined on an array, so ten tripwires a run rendered as nothing. Both
+  // shapes are accepted now.
+  const rows = Array.isArray(tripwires)
+    ? (tripwires || []).map((t) => ({ k: t.k || '', s: String(t.s || 'armed').toLowerCase(), n: t.n || '' }))
+    : [].concat(((tripwires || {}).fired || []).map((f) => ({ k: String(f), s: 'fired', n: '' })),
+                ((tripwires || {}).armed || []).map((a) => ({ k: String(a), s: 'armed', n: '' })));
+  if (!rows.length) return null;
+  const order = { fired: 0, armed: 1 };
+  rows.sort((a, b) => (order[a.s] == null ? 2 : order[a.s]) - (order[b.s] == null ? 2 : order[b.s]));
+  const firedN = rows.filter((r) => r.s === 'fired').length;
   return (
-    <Section title="Watchlist" extra={armed.length + ' armed'} fold>
-      {fired.map((f, i) => (
-        <View key={'f' + i} style={{ flexDirection: 'row', paddingVertical: 5 }}>
-          <Text style={[MONO, { color: C.crit, fontSize: 9, width: 52, letterSpacing: 1 }]}>FIRED</Text>
-          <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }}>{decode(f)}</Text>
-        </View>
-      ))}
-      {armed.map((a, i) => (
-        <View key={'a' + i} style={{ flexDirection: 'row', paddingVertical: 5 }}>
-          <Text style={[MONO, { color: C.elev, fontSize: 9, width: 52, letterSpacing: 1 }]}>ARMED</Text>
-          <Text style={{ color: C.text, fontSize: 12.5, flex: 1 }}>{decode(a)}</Text>
-        </View>
-      ))}
-      <Text style={s.foot}>Named thresholds checked every sweep — non-fires are logged deliberately so silence is scoreable.</Text>
+    <Section title="The tripwires" extra={rows.length + (firedN ? ' \u00b7 ' + firedN + ' FIRED' : ' armed')}>
+      <View style={{ paddingHorizontal: 16 }}>
+        <Text style={[s.p, { marginBottom: 4 }]}>
+          Named thresholds, written before the event and checked every sweep. A tripwire that does not
+          fire is logged as not having fired, so silence counts as evidence rather than disappearing.
+        </Text>
+        {rows.map((r, i) => {
+          const isOpen = open === i;
+          const col = r.s === 'fired' ? C.crit : C.accent;
+          return (
+            <Pressable key={i} onPress={() => setOpen(isOpen ? null : i)}
+              style={{ paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.line, flexDirection: 'row' }}>
+              <Text style={[MONO, { color: col, fontSize: 13, fontWeight: '800', width: 30 }]}>
+                {String(i + 1).padStart(2, '0')}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, fontWeight: '700' }}>{decode(r.k)}</Text>
+                <Text style={[MONO, { color: col, fontSize: 9, letterSpacing: 1.2, marginTop: 3 }]}>
+                  {r.s.toUpperCase() + (r.n && !isOpen ? '  \u00b7  WHAT SETTLES IT \u203a' : '')}
+                </Text>
+                {isOpen && r.n ? (
+                  <Text style={{ color: C.muted, fontSize: 13.5, lineHeight: 20, marginTop: 6 }}>{decode(r.n)}</Text>
+                ) : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
     </Section>
   );
 }
@@ -4051,21 +4021,18 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, pi
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
+      {/* 2026-09-18: ONE SUBJECT, ONE SECTION. The money used to be told three times in a row - the
+          red board, the economic read, the live prints - all from the same plumbing object, each with
+          its own heading and rule. The reader scrolled past three headings to learn it was one story.
+          Cost-of-living sits with the receipts because that is what it is. */}
       <Receipts inf={data.inflation} />
-      <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
       <TimeMachine />
-      <Chokepoints cp={data.chokepoints} />
-      {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
-      {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
       {data.plumbing ? (
-        <Section title="The economic read" extra={data.plumbing.stage ? 'live' : ''}>
-          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-            {/* 2026-09-16: the read is a dense desk paragraph. Four lines of it, then the rest on
-                request - the reader who wants the whole thing asks for it, and everyone else gets
-                the top of it and the chart below. */}
+        <Section title="The money" extra={data.plumbing.stage ? 'live' : ''}>
+          <View style={{ paddingHorizontal: 16 }}>
             <Text style={s.p} numberOfLines={fullRead ? undefined : 4}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
             <Pressable onPress={() => setFullRead((v) => !v)} hitSlop={6} style={{ marginTop: 8 }}>
-              <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS ‹' : 'READ THE FULL READ ›'}</Text>
+              <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS \u2039' : 'READ THE FULL READ \u203a'}</Text>
             </Pressable>
             {data.cost && data.cost.pct != null ? (
               <Text style={[MONO, { color: C.muted, fontSize: 11.5, marginTop: 12 }]}>
@@ -4073,26 +4040,32 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, pi
               </Text>
             ) : null}
           </View>
+          <RedBoard board={data.plumbing.board} bare />
+          <LiveWatchlist items={data.plumbing.series} bare />
         </Section>
       ) : null}
+      <Chokepoints cp={data.chokepoints} />
+      <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
       <Calendar clocks={data.clocks} />
-      <Dossiers items={data.dossiers} />
+      <Section title="Countries" extra={(data.dossiers || []).length + ' dossiers'}>
+        <Dossiers items={data.dossiers} bare />
+        {data.actors && data.actors.length ? (
+          <Section title="The players" bare>
+            <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
+            {actors.map((a, i) => (
+              <View key={i} style={s.actor}>
+                <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
+                <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
+                {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really \u2014 </Text>{decode(a.w)}</Text> : null}
+                {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants \u2014 </Text>{decode(a.g)}</Text> : null}
+                {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now \u2014 </Text>{decode(a.m)}</Text> : null}
+                {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens \u2014 </Text>{decode(a.l)}</Text> : null}
+              </View>
+            ))}
+          </Section>
+        ) : null}
+      </Section>
       <WorldSections world={world} hist={hist} />
-            {data.actors && data.actors.length ? (
-        <Section title="The players" extra={actors.length + ' tracked'} fold>
-          <FilterDrop pairs={textRegionPairs(data.actors, actorText)} active={region} onPick={setRegion} />
-          {actors.map((a, i) => (
-            <View key={i} style={s.actor}>
-              <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
-              <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
-              {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{decode(a.w)}</Text> : null}
-              {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{decode(a.g)}</Text> : null}
-              {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{decode(a.m)}</Text> : null}
-              {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{decode(a.l)}</Text> : null}
-            </View>
-          ))}
-        </Section>
-      ) : null}
       <Text style={s.foot}>Every figure carries its source and vintage. Where the desk could not get a number, it says so.</Text>
     </View>
   );
@@ -4978,7 +4951,8 @@ function buildStyles() {
   artbtnS: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 13.5 },
   hrow: { paddingVertical: 18, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: C.line },
   hrowH: { fontFamily: 'Charter', fontSize: 24, lineHeight: 29, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
-  hrowMeta: { color: C.accent, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 8 },
+  hrowKick: { color: C.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.6, marginBottom: 7 },
+  hrowMeta: { color: C.muted, fontSize: 12.5, letterSpacing: 0.2, marginTop: 8 },
   searchbox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.panel, borderWidth: 1.5, borderColor: C.text, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 },
   searchin: { flex: 1, fontSize: 17, paddingVertical: 10 },
   searchH: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
