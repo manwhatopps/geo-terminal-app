@@ -3234,6 +3234,52 @@ function Explainer({ label, sub, children, color, boxRef }) {
   );
 }
 const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10 };
+// ── THE WORDING — 2026-09-17 (editor: "compare articles about events and tell the difference in
+// linguistics ... a headline might say Israeli kids and children killed but when they report on
+// Palestinian children being killed they refer to them as young adults ... focus on how articles are
+// worded, the hidden agenda behind these mainstream articles"). The desk does not call anyone a
+// propagandist. It prints the same event's headline from every outlet that carried it and names the
+// choices each one made, by the same rules for all of them: who did it (or whether the doer vanished
+// into "were killed"), what the dead are called, which word the act gets, who is hedged, whether a
+// number leads. The reader draws the conclusion. Built by press_wording.py; no model wrote a word of it. ──
+const WORDING_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/wording.json';
+// 2026-09-18: THE STRIP IS GONE, and the reason is worth keeping. A ticker promises live. This feed
+// updates when a content run fires - a handful of times a day - so a row of prices under the masthead
+// was making a promise the pipeline cannot keep, which is the same failure as the stale print it was
+// built to fix. markets.py still writes feed/markets.json (front-month futures, each carrying its own
+// exchange timestamp) because the numbers are cheap and the desk cites them - they belong beside their
+// explanation on DATA, dated, not scrolling across the masthead pretending to tick.
+const WORDING_CACHE_KEY = 'geo-wording-cache-v1';
+const ACT_NOTE = {
+  'active, actor named': 'names who did it',
+  'passive, actor named': 'passive, but the doer is named',
+  'passive, actor gone': 'passive, and the doer is gone',
+  'intransitive (died)': 'they died, nobody killed them',
+  'intransitive (lost their lives)': 'they lost their lives, nobody killed them',
+  'nominal (deaths, toll)': 'a toll, not an act',
+};
+
+function DisclaimerGate({ onAccept }) {
+  return (
+    <SafeAreaView style={s.root}>
+      <StatusBar style={THEME === 'light' ? 'dark' : 'light'} />
+      <ScrollView contentContainerStyle={s.gateScroll}>
+        <Text style={[s.wordmark, MONO, { fontSize: 17, marginBottom: 18 }]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
+        <Text style={[s.gateH, SERIF]}>Before you begin</Text>
+        <Text style={s.gateP}>Parallax publishes geopolitical analysis and probabilistic forecasts as <Text style={{ color: C.text, fontWeight: '700' }}>opinion</Text> — not fact, and not advice.</Text>
+        <Text style={s.gateP}>Forecasts are subjective estimates that will often be wrong. Statements about governments, organizations, and public figures are commentary based on public reporting, not assertions of fact.</Text>
+        <Text style={s.gateP}>This app is <Text style={{ color: C.text, fontWeight: '700' }}>not</Text> financial, investment, legal, security, safety, or travel advice. Do not rely on it for any decision. Consult a qualified professional.</Text>
+        <View style={s.gateLinks}>
+          <Pressable onPress={() => Linking.openURL(LEGAL.disclaimer)}><Text style={s.link}>Full Disclaimer</Text></Pressable>
+          <Pressable onPress={() => Linking.openURL(LEGAL.terms)}><Text style={s.link}>Terms</Text></Pressable>
+          <Pressable onPress={() => Linking.openURL(LEGAL.privacy)}><Text style={s.link}>Privacy</Text></Pressable>
+        </View>
+        <Pressable onPress={onAccept} style={s.gateBtn}><Text style={[s.gateBtnTxt, MONO]}>I UNDERSTAND</Text></Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
 function useWording() {
   const [w, setW] = useState(null);
   useEffect(() => {
