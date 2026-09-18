@@ -1190,7 +1190,7 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
 
   const future = [
     scenariosOf(item) ? <YourCall key="sc" item={item} pick={pick} onPick={onPick} resolved={resolved} /> : null,
-    movesOf(item).length ? <ChairGame key="ch" item={item} id={storyId(item)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /> : null,
+    movesOf(item).length ? <ChairGame key="ch" item={item} id={storyId(item)} picks={picks} setPickFor={setPickFor} res={res} /> : null,
     call.event ? (
       <View key="c" style={{ marginTop: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -1224,9 +1224,11 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
         {hist.contrarian.why ? <Text style={body}>{decode(hist.contrarian.why)}</Text> : null}
       </View>
     ) : null,
-    dec.kill ? (
-      <View key="k"><Text style={lbl}>WHAT WOULD CHANGE THIS READ</Text>
-        <Text style={body}>{decode(dec.kill)}</Text></View>
+    // 2026-09-18: dec.kill used to print here AND in DECODE under a different heading. The note at the
+    // top of this pane says the decode content moved out "so this pane stops repeating them" - the
+    // verdict and angles moved, the kill condition did not. It lives in DECODE now.
+    false ? (
+      <View key="k" />
     ) : null,
   ].filter(Boolean);
 
@@ -1259,6 +1261,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
   const { head, stand, longHead } = articleParts(item);
   const secRefs = useRef([]);
   const wordEv = wordingFor(wording, item);
+  const dc = decodeOf(item);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
   const [pane, setPane] = useState(null);
@@ -1385,6 +1388,35 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                 <Pressable onPress={() => setPane('consp')} style={[s.sumdoor, { borderColor: C.high }]}>
                   <Text style={[s.artbtnT, MONO, { color: C.high }]}>{'\u260d  THE FULL CONSPIRACY READ \u203a'}</Text>
                   <Text style={s.artbtnS}>each claim, the mechanism it needs, and what the desk makes of it</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {dc ? (
+              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
+                <Text style={[s.ctxlbl, MONO]}>AND HOW THE CLAIM CHECKS OUT</Text>
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
+                  <Text style={[MONO, { color: (VERDICT_META[dc.verdict] || VERDICT_META.partly).c, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>
+                    {String((VERDICT_META[dc.verdict] || VERDICT_META.partly).label) + '  '}
+                  </Text>
+                  {(dc.angles || [])[0]
+                    ? decode(String((dc.angles[0].party || '') + ' ' + (dc.angles[0].effect || '')).trim())
+                    : decode(String(dc.kill || ''))}
+                </Text>
+                <Pressable onPress={() => setPane('decode')} style={s.sumdoor}>
+                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u25a3  DECODE THE CLAIM \u203a'}</Text>
+                  <Text style={s.artbtnS}>who gains, who pays, and the one thing that would kill this reading</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {wordEv ? (
+              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
+                <Text style={[s.ctxlbl, MONO]}>AND HOW THE PRESS WORDED IT</Text>
+                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
+                  {decode(wordEv.verdict || (wordEv.n + ' outlets carried this story.'))}
+                </Text>
+                <Pressable onPress={() => setPane('word')} style={s.sumdoor}>
+                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u2337  EVERY HEADLINE, SIDE BY SIDE \u203a'}</Text>
+                  <Text style={s.artbtnS}>the same event in every outlet that ran it, and the choices each one made</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -3469,6 +3501,10 @@ function WordingEvent({ ev, compact }) {
   const [open, setOpen] = useState(!compact);
   const blocs = {};
   (ev.outlets || []).forEach((o) => { (blocs[o.bloc] = blocs[o.bloc] || []).push(o); });
+  const devices = ev.devices || [];
+  // the words an outlet chose belong on its own line; the DIFFERENCES between outlets belong in the
+  // census below, once. Printing both per row is how this pane used to repeat itself.
+  const WORDS = ['the dead', 'the doers', 'the act', 'the register', 'the captives', 'the war', 'the place', 'the humanising', 'the hedge'];
   return (
     <View style={{ marginTop: 14 }}>
       {compact ? (
@@ -3478,42 +3514,61 @@ function WordingEvent({ ev, compact }) {
           </Text>
         </Pressable>
       ) : null}
+      {ev.verdict ? (
+        <Text style={{ color: C.text, fontSize: 14, lineHeight: 20, marginTop: 8, fontWeight: ev.agreed ? '400' : '600' }}>
+          {decode(ev.verdict)}
+        </Text>
+      ) : null}
       {open ? (
         <>
-          {Object.keys(blocs).map((b) => (
-            <View key={b} style={{ marginTop: 10 }}>
-              <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.2 }]}>{b.toUpperCase()}</Text>
-              {blocs[b].map((o, i) => {
+          {devices.length ? (
+            <View style={{ marginTop: 12, borderLeftWidth: 2, borderLeftColor: C.accent, paddingLeft: 11 }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700' }]}>EVERY VARIANT, COUNTED</Text>
+              {devices.map((d, i) => (
+                <View key={i} style={{ marginTop: 9 }}>
+                  <Text style={{ color: C.text, fontSize: 13.5, lineHeight: 19, fontWeight: '700' }}>
+                    {decode(d.name)}
+                    <Text style={{ color: C.muted, fontWeight: '400' }}>{'  \u2014 ' + decode(d.what || '')}</Text>
+                  </Text>
+                  {(d.rows || []).map((r, j) => (
+                    <Text key={j} style={{ color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 2 }}>
+                      {decode(r.label)}
+                      <Text style={{ color: C.muted }}>{'  ' + (r.sources || []).join(', ')}</Text>
+                    </Text>
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : ev.agreed ? null : (
+            <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 10, fontStyle: 'italic' }}>
+              {'Only ' + ev.n + ' distinct ' + (ev.n === 1 ? 'voice' : 'voices') + ' carried this one, under the '
+                + 'threshold the desk set for counting variants. The headlines below are the evidence; no conclusion is drawn from them.'}
+            </Text>
+          )}
+          {Object.keys(blocs).map((bl) => (
+            <View key={bl} style={{ marginTop: 12 }}>
+              <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.2 }]}>{bl.toUpperCase()}</Text>
+              {blocs[bl].map((o, i) => {
                 const f = o.feats || {};
                 const tags = [f.act ? ACT_NOTE[f.act] || f.act : null]
-                  .concat(['the dead', 'the doers', 'the act', 'the register', 'the captives', 'the war', 'the place']
-                    .flatMap((k) => (f[k] || []).map((v) => '\u201c' + v + '\u201d')))
-                  .concat(f.hedged ? ['hedged: \u201c' + f.hedged + '\u201d'] : [])
-                  .concat(f['the number'] ? [f['the number']] : [])
+                  .concat(WORDS.flatMap((k) => (f[k] || []).map((v) => '\u201c' + decode(v) + '\u201d')))
+                  .concat(f.nominalised ? [f.nominalised] : [])
+                  .concat(f.hedged ? ['attributed to \u201c' + decode(f.hedged) + '\u201d'] : [])
+                  .concat(f['the number'] ? [f['the number']] : (f.number ? [f.number] : []))
                   .filter(Boolean);
+                const also = (o.shared_by || []).length ? 'same copy at ' + o.shared_by.join(', ') : null;
                 return (
                   <Pressable key={i} onPress={() => o.link && Linking.openURL(o.link)} style={{ marginTop: 7 }}>
                     <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20 }}>
                       <Text style={[MONO, { color: C.accent, fontSize: 11 }]}>{o.source + '  '}</Text>{decode(o.title)}
                     </Text>
                     {tags.length ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 2 }}>{tags.join(' \u00b7 ')}</Text> : null}
+                    {also ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: 2 }]}>{also.toUpperCase()}</Text> : null}
                   </Pressable>
                 );
               })}
             </View>
           ))}
-          {(ev.contrasts || []).length ? (
-            <View style={{ marginTop: 12, borderLeftWidth: 2, borderLeftColor: C.accent, paddingLeft: 11 }}>
-              <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700' }]}>EVERY VARIANT, COUNTED</Text>
-              {ev.contrasts.map((c, i) => (
-                <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 5 }}>{c}</Text>
-              ))}
-            </View>
-          ) : (
-            <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 10, fontStyle: 'italic' }}>
-              Too few distinct voices on this one to count the variants. The headlines above are the evidence; the desk is not drawing a conclusion from four of them.
-            </Text>
-          )}
         </>
       ) : null}
     </View>
@@ -3524,27 +3579,43 @@ function wordingFor(w, item) {
   const id = storyId(item);
   return (w.events || []).find((e) => e.card === id) || null;
 }
-function Wording({ w }) {
+function Wording({ w, goArticle, cards }) {
   // the headlines are evidence and always show; the census of differences is a claim, and it only
   // prints when enough distinct voices covered the event (the gate the feed carries)
-  const evs = ((w && w.events) || []).slice(0, 12);
+  const all = (w && w.events) || [];
+  const evs = all.slice(0, 12);
   if (!evs.length) return null;
+  const withFindings = all.filter((e) => (e.devices || []).length).length;
+  const agreed = all.filter((e) => e.agreed).length;
+  const cardOf = (ev) => (ev.card && (cards || []).find((it) => storyId(it) === ev.card)) || null;
   return (
-    <Section title="The wording" extra={evs.length + ' events'}>
+    <Section title="The wording" extra={evs.length + ' of ' + all.length}>
       <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
           One event, every outlet that carried it, and the choices each one made: who is named as having
-          done it, what the dead are called, which word the act gets, whose account is hedged. The same
-          test is applied to all of them, including the ones the desk agrees with. Agency copy running
-          under several mastheads counts once. No verdicts, no scores, and no conclusion drawn from a
-          handful of headlines.
+          done it, what the dead are called, which word the act gets, whether the claim is handed to a
+          source or stated as fact. The same test is applied to all of them, including the ones the desk
+          agrees with. Agency copy running under several mastheads counts once. No verdicts, no scores,
+          and no conclusion drawn from a handful of headlines. Where the wording matched across every
+          outlet, that is printed too: agreement is a finding, not an absence of one.
         </Text>
-        {evs.map((ev, i) => (
-          <View key={i} style={{ marginTop: 18, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, paddingTop: i ? 14 : 0 }}>
-            <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 22, fontWeight: '700' }}>{decode(ev.head)}</Text>
-            <WordingEvent ev={ev} compact />
-          </View>
-        ))}
+        <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1, marginTop: 9, fontWeight: '700' }]}>
+          {(withFindings + ' WITH MEASURABLE DIFFERENCES \u00b7 ' + agreed + ' WORDED ALIKE').toUpperCase()}
+        </Text>
+        {evs.map((ev, i) => {
+          const card = cardOf(ev);
+          return (
+            <View key={i} style={{ marginTop: 18, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, paddingTop: i ? 14 : 0 }}>
+              <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 22, fontWeight: '700' }}>{decode(ev.head)}</Text>
+              {card && goArticle ? (
+                <Pressable onPress={() => goArticle(card)} hitSlop={6} style={{ marginTop: 4 }}>
+                  <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1 }]}>{'\u2192 READ THE DESK ON THIS STORY'}</Text>
+                </Pressable>
+              ) : null}
+              <WordingEvent ev={ev} compact />
+            </View>
+          );
+        })}
         <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 16 }]}>
           {'HEADLINES AS PUBLISHED \u00b7 ' + String((w && w.updated) || '').toUpperCase()}
         </Text>
@@ -3552,6 +3623,7 @@ function Wording({ w }) {
     </Section>
   );
 }
+
 
 // ── THE TIME MACHINE — 2026-09-17 (editor: "I like the CPI inflation tracker ... make that interactive,
 // or search a house and see how much it cost in a certain year and what the hourly wage was"). Pick a year
@@ -3968,7 +4040,7 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, pi
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
       <Receipts inf={data.inflation} />
-      <Wording w={wording} />
+      <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
       <TimeMachine />
       <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
@@ -4342,7 +4414,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
           {live.filter(({ s: c }) => movesOf(c).length).map(({ s: c, i }, j) => (
             <View key={j} style={{ marginTop: j ? 18 : 0 }}>
               <Pressable onPress={() => goArticle && goArticle(i)}><Text style={ROOM_H}>{articleParts(c).head}</Text></Pressable>
-              <ChairGame item={c} id={storyId(c)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} compact />
+              <ChairGame item={c} id={storyId(c)} picks={picks} setPickFor={setPickFor} res={res} compact />
             </View>
           ))}
         </Explainer>
@@ -4387,7 +4459,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
           </Pressable>
         ))}
       </ScrollView>
-      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /> : (
+      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /> : (
         <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
           {keys.map((k) => {
             const n = roomCards(k, cards || []).length;
