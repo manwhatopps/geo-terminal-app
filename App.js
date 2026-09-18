@@ -917,14 +917,28 @@ function resolutionFor(res, id) {
   return ((res && res.items) || []).find((r) => r.id === id) || null;
 }
 // The scorecard on CALLS: every call the reader has made, scored against the desk where resolved.
-function Scorecard({ picks, cards, res, goArticle }) {
+function Scorecard({ picks, cards, res, goArticle, quizzes, hist }) {
   const ids = Object.keys(picks || {});
-  if (!ids.length) {
+  const qk = Object.keys(quizzes || {});
+  const know = qk.length ? Math.round(100 * qk.reduce((a, k) => a + quizzes[k].score, 0) / Math.max(1, qk.reduce((a, k) => a + quizzes[k].total, 0))) : null;
+  const roomTitle = (k) => (((hist || {}).situations || {})[k] || {}).title || k.replace(/_/g, ' ');
+  const knowledge = qk.length ? (
+    <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
+      <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.1 }]}>KNOWLEDGE \u00b7 THE ROOMS YOU HAVE TESTED</Text>
+      {qk.map((k) => (
+        <Text key={k} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 4 }}>
+          <Text style={[MONO, { color: quizzes[k].score >= quizzes[k].total * 0.7 ? C.calm : C.high, fontWeight: '800' }]}>{quizzes[k].score + '/' + quizzes[k].total + '  '}</Text>{roomTitle(k)}
+        </Text>
+      ))}
+    </View>
+  ) : null;
+  if (!ids.length && !qk.length) {
     return (
       <Section title="Your scorecard" extra="no calls yet">
         <Text style={[s.foot, { paddingHorizontal: 16, paddingBottom: 14, fontSize: 13.5, lineHeight: 19.5 }]}>
-          Open any story, find YOUR CALL under ANALYST, pick a scenario and lock a confidence. The desk scores
-          you against itself when it resolves. No account, no money: the score lives on this phone.
+          Open any story, find YOUR CALL under ANALYST, pick a scenario and lock a confidence: the desk scores
+          you against itself when it resolves. Or open a situation room on DATA and take its test. No account,
+          no money: the score lives on this phone.
         </Text>
       </Section>
     );
@@ -947,10 +961,11 @@ function Scorecard({ picks, cards, res, goArticle }) {
   );
   const y = mean('yours'), d = mean('desk');
   return (
-    <Section title="Your scorecard" extra={ids.length + (ids.length === 1 ? ' call' : ' calls')}>
+    <Section title="Your scorecard" extra={ids.length + (ids.length === 1 ? ' call' : ' calls') + (qk.length ? ' \u00b7 ' + qk.length + (qk.length === 1 ? ' room' : ' rooms') : '')}>
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12 }}>
-        {stat('CALLS', ids.length)}{stat('SCORED', scored.length)}{stat('YOUR SCORE', y, y != null && d != null ? (y >= d ? C.calm : C.high) : C.text)}{stat('THE DESK', d)}
+        {stat('CALLS', ids.length)}{stat('SCORED', scored.length)}{stat('JUDGEMENT', y, y != null && d != null ? (y >= d ? C.calm : C.high) : C.text)}{stat('THE DESK', d)}{stat('KNOWLEDGE', know == null ? null : know + '%')}
       </View>
+      {knowledge}
       {rows.sort((a, b) => (a.done === b.done ? (a.days == null ? 1 : b.days == null ? -1 : a.days - b.days) : a.done ? -1 : 1)).map((x) => (
         <Pressable key={x.id} onPress={() => idx[x.id] != null && goArticle && goArticle(idx[x.id])} style={{ paddingHorizontal: 16, paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
           <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>
@@ -1330,7 +1345,7 @@ function QuizQuestion({ q, index, onAnswered }) {
   );
 }
 
-function QuizSection({ quiz, bare }) {
+function QuizSection({ quiz, bare, onDone }) {
   // `bare` drops the card chrome and the extra tap: used under today's lesson on HOME, where the
   // reader has already said "take the quiz" and should not have to say it twice (2026-09-16).
   const [open, setOpen] = useState(!!bare);
@@ -1339,6 +1354,7 @@ function QuizSection({ quiz, bare }) {
   if (!quiz || !quiz.length) return null;
   const onAnswered = (right) => { setAnswered((a) => a + 1); if (right) setScore((v) => v + 1); };
   const doneAll = answered === quiz.length;
+  useEffect(() => { if (doneAll && onDone) onDone(score, quiz.length); }, [doneAll]);
   const body = (
     <>
       {!bare ? (
@@ -2776,7 +2792,7 @@ function Rooms({ chairs, goArticle }) {
 // ── CALLS — everything predictive, and nothing else: what the desk thinks happens next, whether it
 // has been right, the branches it is watching, the hypotheses it has not proved, the tripwires, and a
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
-function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res }) {
+function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizzes, hist }) {
   const [region, setRegion] = useState('ALL');
   const [book, setBook] = useState(null);   // the tracked book opens one row at a time
   const [sel, setSel] = useState({});
@@ -2834,7 +2850,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res }) {
           </Pressable>
         ) : null}
       </Section>
-      <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} />
+      <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} quizzes={quizzes} hist={hist} />
       <IfTrue items={data.speculation} />
       <Rooms chairs={chairs} goArticle={goArticle} />
       {/* everything the desk keeps for itself - the book, the record, the lab - behind ONE door */}
@@ -3366,7 +3382,7 @@ function Watchlist({ tripwires }) {
 
 // ── DATA — the reference layer: who the players are, what the countries measure, what is physically
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
-function DataTab({ data, easy, world, hist, goArticle, room }) {
+function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz }) {
   const [region, setRegion] = useState('ALL');
   const [fullRead, setFullRead] = useState(false);
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
@@ -3376,7 +3392,7 @@ function DataTab({ data, easy, world, hist, goArticle, room }) {
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
-      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} initial={room} />
+      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} initial={room} quizzes={quizzes} onQuiz={onQuiz} />
       <Receipts inf={data.inflation} />
       <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
@@ -3601,7 +3617,7 @@ function roomCards(key, cards) {
 const ROOM_H = { color: C.text, fontSize: 15.5, lineHeight: 22, fontWeight: '700' };
 const ROOM_P = { color: C.text, fontSize: 15, lineHeight: 23, marginTop: 6 };
 const ROOM_K = [MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1, marginTop: 8 }];
-function SituationRoom({ sit, sources, cards, goArticle }) {
+function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz }) {
   const [srcOpen, setSrcOpen] = useState(null);
   const srcLine = (ids) => (ids || []).map((id) => (sources[id] || {}).publisher || id).filter((x, i, a) => a.indexOf(x) === i).join(' · ');
   const byId = {}; (sit.timeline || []).forEach((e) => { byId[e.id] = e; });
@@ -3612,7 +3628,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
   const door = (k) => (el) => { doors.current[k] = el; };
   const layers = [['THE ACTORS', (sit.actors || []).length], ['THE DOCTRINES', (sit.lessons || []).length], ['THE PATTERNS', (sit.tendencies || []).length],
     ['HOW WE GOT HERE', (sit.path_dependencies || []).length], ['THE STORIES EACH SIDE TELLS', (sit.narratives || []).length], ['THE GROUND', (sit.territories || []).length],
-    ['BASE RATES', Object.keys(sit.base_rates || {}).length], ['THE FULL TIMELINE', (sit.timeline || []).length]].filter((x) => x[1]);
+    ['BASE RATES', Object.keys(sit.base_rates || {}).length], ['TEST YOURSELF', (sit.quiz || []).length], ['THE FULL TIMELINE', (sit.timeline || []).length]].filter((x) => x[1]);
   const eventRow = (e, i, full) => (
     <Pressable key={e.id || i} onPress={() => setSrcOpen(srcOpen === e.id ? null : e.id)} style={{ flexDirection: 'row', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line }}>
       <Text style={[MONO, { color: C.accent, fontSize: 11.5, width: 78, paddingTop: 3 }]}>{String(e.date || '').slice(0, 10)}</Text>
@@ -3743,6 +3759,16 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
         </Explainer>
       ) : null}
 
+      {(sit.quiz || []).length ? (
+        <Explainer boxRef={door('TEST YOURSELF')} label="TEST YOURSELF" color={C.high}
+          sub={(quizResult ? 'your last score ' + quizResult.score + ' / ' + quizResult.total + ' \u00b7 ' : '') + sit.quiz.length + ' questions from this room\'s record'}>
+          <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginBottom: 6 }}>
+            Built from the dates, doctrines, patterns and control records above. A score here goes on your
+            scorecard as knowledge, beside your calls as judgement.
+          </Text>
+          <QuizSection quiz={sit.quiz} bare onDone={(score, total) => onQuiz && onQuiz(sit.key, score, total)} />
+        </Explainer>
+      ) : null}
       {(sit.timeline || []).length ? (
         <Explainer boxRef={door('THE FULL TIMELINE')} label="THE FULL TIMELINE" sub={(sit.timeline || []).length + ' dated events, tap one for its source'}>
           {(sit.timeline || []).map((e, i) => eventRow(e, i, true))}
@@ -3753,7 +3779,7 @@ function SituationRoom({ sit, sources, cards, goArticle }) {
 }
 
 // The rooms lead DATA: pick a war, read its history, see what is live in it.
-function SituationRooms({ hist, cards, goArticle, initial }) {
+function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz }) {
   const sits = (hist && hist.situations) || {};
   const keys = Object.keys(sits);
   const [room, setRoom] = useState(initial || null);
@@ -3773,7 +3799,7 @@ function SituationRooms({ hist, cards, goArticle, initial }) {
           </Pressable>
         ))}
       </ScrollView>
-      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} /> : (
+      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} /> : (
         <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
           {keys.map((k) => {
             const n = roomCards(k, cards || []).length;
@@ -4024,6 +4050,14 @@ export default function App() {
       if (j) { setRes(j); AsyncStorage.setItem(RES_CACHE_KEY, JSON.stringify(j)).catch(() => {}); }
     }).catch(() => {});
   }, []);
+  const QUIZ_KEY = 'geo-quiz-v1';
+  const [quizzes, setQuizzes] = useState({});
+  useEffect(() => { AsyncStorage.getItem(QUIZ_KEY).then((v) => { try { if (v) setQuizzes(JSON.parse(v)); } catch (e) {} }).catch(() => {}); }, []);
+  const onQuiz = useCallback((room, score, total) => setQuizzes((cur) => {
+    const next = { ...cur, [room]: { score, total, ts: new Date().toISOString().slice(0, 10) } };
+    AsyncStorage.setItem(QUIZ_KEY, JSON.stringify(next)).catch(() => {});
+    return next;
+  }), []);
   const setPickFor = useCallback((id, v) => setPicks((cur) => {
     const next = { ...cur };
     if (v) next[id] = v; else delete next[id];
@@ -4176,8 +4210,8 @@ export default function App() {
                 {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
-                {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} /></TocHost>}
-                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} /></TocHost>}
+                {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
+                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} /></TocHost>}
               </>
             )}
             <LegalFooter />
