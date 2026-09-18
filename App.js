@@ -3052,11 +3052,19 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   const [region, setRegion] = useState('ALL');
   const [book, setBook] = useState(null);   // the tracked book opens one row at a time
   const [sel, setSel] = useState({});
-  const [allCalls, setAllCalls] = useState(false);
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
   const hyps = (data.hypotheses || []).filter((h) => cFilter(h.name + ' ' + h.d));
   const fcs = (data.forecasts || []).filter((f) => cFilter(f.q));
-  const calls = callsFrom(data.brief, data.clocks);
+  // 2026-09-18: THE BOOK IS THE LONG VIEW, AND IT IS SHORT. Every card used to contribute its near
+  // call and its long call, so this ran to a couple of hundred rows and buried the questions that
+  // actually matter. A row earns a place by being a FURTHER OUT call or resolving 90+ days out, and the
+  // book is capped. Near-term calls still live inside their own article, which is where they belong.
+  const BOOK_CAP = 20;
+  const allRows = callsFrom(data.brief, data.clocks);
+  const calls = allRows
+    .filter((x) => x.long || x.days == null || x.days >= 90)
+    .sort((a, b) => Math.abs((b.p || 50) - 50) - Math.abs((a.p || 50) - 50))
+    .slice(0, BOOK_CAP);
   const counts = new Map();
   calls.forEach((x) => counts.set(x.domain, (counts.get(x.domain) || 0) + 1));
   const subjects = DOMAINS.map(([n]) => [n, counts.get(n) || 0]).filter(([, n]) => n > 0);
@@ -3068,7 +3076,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   // 2026-09-17 (editor): the forward book is the first thing on CALLS - no lede above it - and the
   // long-range rows are always shown; only the crowded near-term buckets fold past fourteen rows
   const near = hit.filter((x) => x.days != null && x.days <= 100), far = hit.filter((x) => !(x.days != null && x.days <= 100));
-  const shown = (allCalls || selCount(sel) ? near : near.slice(0, 14)).concat(far);
+  const shown = near.concat(far);   // the book is already capped; nothing is folded away from it
   const chairs = chairsFrom(data.brief);
   const groups = [];
   BUCKETS.forEach((b, bi) => {
@@ -3084,7 +3092,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
           against, whether the thing an actor says it cannot do is one it will not do, and what closes it.
           Soonest first, the long book last, every one scored when it resolves.
         </Text>
-        <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => { setSel(nx); setAllCalls(false); }}
+        <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => setSel(nx)}
           total={calls.length} shown={hit.length} />
         {selCount(sel) === 1 && (sel.topic || []).length === 1 ? (
           <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 16, paddingBottom: 14 }}>
@@ -3101,10 +3109,14 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
             {g.rows.map((x, j) => <CallRow key={j} x={x} goArticle={goArticle} pick={(picks || {})[x.id]} hasScenarios={x.hasScenarios} />)}
           </View>
         ))}
-        {!allCalls && !selCount(sel) && near.length > 14 ? (
-          <Pressable onPress={() => setAllCalls(true)} style={{ paddingVertical: 15, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
-            <Text style={[s.readmore, MONO]}>{'THE REMAINING ' + (near.length - 14) + ' NEAR-TERM CALLS \u203a'}</Text>
-          </Pressable>
+        {allRows.length > calls.length ? (
+          <View style={{ paddingVertical: 13, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: C.line }}>
+            <Text style={[s.foot, { marginTop: 0 }]}>
+              {'The book is the long view: ' + calls.length + ' calls, not ' + allRows.length
+                + '. The near-term ones stay inside the story they belong to, which is where a call about'
+                + ' the next six weeks is worth reading.'}
+            </Text>
+          </View>
         ) : null}
       </Section>
       <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} quizzes={quizzes} hist={hist} />
