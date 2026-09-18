@@ -3259,6 +3259,52 @@ const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10
 // into "were killed"), what the dead are called, which word the act gets, who is hedged, whether a
 // number leads. The reader draws the conclusion. Built by press_wording.py; no model wrote a word of it. ──
 const WORDING_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/wording.json';
+// ── THE STRIP — 2026-09-18. Five numbers the reader should never have to go looking for, because on this
+// desk they ARE the story's consequence: the barrel, the gas, the long rate, the fear gauge, the dollar.
+// Its own tiny file (world.json is ~900 KB and only loads on DATA). Published series, dated, no estimates.
+const MARKETS_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/markets.json';
+const MARKETS_CACHE_KEY = 'geo-markets-cache-v1';
+const TICKER = [
+  ['brent', 'BRENT', (v) => '$' + Number(v).toFixed(2)],
+  ['nat_gas_henry_hub', 'GAS', (v) => '$' + Number(v).toFixed(2)],
+  ['us10y', 'US 10Y', (v) => Number(v).toFixed(2) + '%'],
+  ['vix', 'VIX', (v) => Number(v).toFixed(1)],
+  ['usd_broad', 'DOLLAR', (v) => Number(v).toFixed(1)],
+];
+function MarketStrip({ onPress }) {
+  const [m, setM] = useState(null);
+  useEffect(() => {
+    AsyncStorage.getItem(MARKETS_CACHE_KEY).then((v) => { try { if (v) setM((c) => c || JSON.parse(v)); } catch (e) {} }).catch(() => {});
+    fetch(MARKETS_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (j && j.markets) { setM(j); AsyncStorage.setItem(MARKETS_CACHE_KEY, JSON.stringify(j)).catch(() => {}); }
+    }).catch(() => {});
+  }, []);
+  const rows = TICKER.map(([k, label, fmt]) => [label, (m && m.markets && m.markets[k]) || null, fmt]).filter((r) => r[1] && r[1].v != null);
+  if (!rows.length) return null;
+  return (
+    <Pressable onPress={onPress}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+        style={{ backgroundColor: C.panel2, borderBottomWidth: 1, borderBottomColor: C.line }}
+        contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 7, alignItems: 'center', gap: 18 }}>
+        {rows.map(([label, d, fmt], i) => {
+          const up = Number(d.chg_pct) > 0, flat = !d.chg_pct || Math.abs(Number(d.chg_pct)) < 0.05;
+          return (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+              <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.1 }]}>{label}</Text>
+              <Text style={[MONO, { color: C.text, fontSize: 12, fontWeight: '800' }]}>{fmt(d.v)}</Text>
+              {!flat ? (
+                <Text style={[MONO, { color: up ? C.high : C.calm, fontSize: 10, fontWeight: '700' }]}>
+                  {(up ? '▲' : '▼') + Math.abs(Number(d.chg_pct)).toFixed(1) + '%'}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })}
+        <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8 }]}>{String((m && m.asof) || '').slice(0, 10) + '  ›'}</Text>
+      </ScrollView>
+    </Pressable>
+  );
+}
 const WORDING_CACHE_KEY = 'geo-wording-cache-v1';
 const ACT_NOTE = {
   'active, actor named': 'names who did it',
@@ -4596,6 +4642,7 @@ export default function App() {
             <Text style={[MONO, { color: C.elev, fontSize: 9, letterSpacing: 1 }]}>{'OFFLINE · SHOWING LAST SAVED BRIEF · TAP TO RETRY'}</Text>
           </Pressable>
         ) : null}
+        <MarketStrip onPress={() => { setSearching(false); setArticle(null); setTab('data'); scrollTop(); }} />
         {data && (
           <ScrollCtx.Provider value={scrollCtx}><View ref={scrollBox} style={{ flex: 1 }}>
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
