@@ -79,6 +79,11 @@ const ACCENTS = {
   cobalt:   { label: 'COBALT',   dark: ['#6AA6E8', '#2B5D96'], light: ['#1E5FA8', '#86B4E4'] },
   iris:     { label: 'IRIS',     dark: ['#A88BE0', '#5B4A8C'], light: ['#5B3FA8', '#A899D8'] },
   graphite: { label: 'GRAPHITE', dark: ['#B9B2A3', '#6A655C'], light: ['#4A4740', '#9C978C'] },
+  // 2026-09-18 (editor: "do black and white as colour options"). Both clear 4.5:1 on their own
+  // ground by construction - near-white on black, near-black on white - and sit at zero saturation,
+  // so neither can be confused with the risk palette.
+  paper:    { label: 'WHITE',    dark: ['#F2F0EC', '#8B8880'], light: ['#2A2724', '#8B8880'] },
+  ink:      { label: 'BLACK',    dark: ['#9A9A9A', '#5A5A5A'], light: ['#111111', '#7A7A7A'] },
 };
 const ACCENT_KEY = 'geo-accent';
 let ACCENT = 'ocean';
@@ -300,7 +305,6 @@ const TABS = [
   // CALLS = what does the desk predict and is it any good. DATA = what are the underlying numbers.
   { key: 'calls', label: 'CALLS', g: '◉' },
   // 2026-09-17 (editor): the rooms are their own thing, not a section of DATA - DATA opens on the receipts
-  { key: 'rooms', label: 'HISTORY', g: '◫' },
 ];
 // 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
 // record that logic for the bot's brain." The history/base-rate reasoning now lives in each article as THE DESK'S
@@ -1928,8 +1932,12 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
   const lead = cards[0];
   const rc = riskColor[(data.risk || {}).color] || C.elev;
   // the sharpest call on the board: the one furthest from a coin flip, so the reader sees conviction
+  // 2026-09-18: the front page was leading with an ICC preliminary examination at 3%. The parochial
+  // filter reached CALLS but not here, so HOME advertised exactly the class of call the editor cut.
+  const PAROCHIAL_HOME = /\b(impeach\w*|resigns?|is sworn in|steps down|is fired|is confirmed|confirmation vote|public appearance|is indicted|testifies|subpoena\w*|preliminary examination|opens an? (investigation|examination)|a .{0,20}court (orders|rules)|files? an? (lawsuit|motion|appeal)|cycle top|price target)\b/i;
   const called = cards
     .map((c, i) => ({ c, i, call: (c.hist || {}).call }))
+    .filter((x) => x.call && !PAROCHIAL_HOME.test(String(x.call.event || '')))
     .filter((x) => x.call && x.call.event && x.call.p != null)
     .sort((a, b) => Math.abs(Number(b.call.p) - 50) - Math.abs(Number(a.call.p) - 50))[0];
   const boards = cards.filter((c) => c.consp && c.consp.head).slice(0, 3);
@@ -1953,9 +1961,9 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
           boards first, the wire last - because the wire has its own tab and this is the front page. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
-        {tile('rooms', '\u25eb', 'HISTORY', Object.keys((hist && hist.situations) || {}).length || '\u00b7', 'why each war looks like this')}
-        {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
-        {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
+        {tile('rooms', '\u25eb', 'HISTORY', Object.keys((hist && hist.situations) || {}).length || '\u00b7', 'how each war got here')}
+        {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'what the mainstream will not print')}
+        {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'where this is all going, and why')}
       </View>
 
 
@@ -2561,7 +2569,9 @@ function BoardsTab({ data, goArticle, wording }) {
       <MultiFilter groups={BGROUPS} sel={sel} onChange={setSel} total={all.length} shown={items.length} />
       <Text style={{ color: C.high, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 4, paddingBottom: 2 }}>
         <Text style={[MONO, { fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{'UNVERIFIED  '}</Text>
-        {items.length + ' claims circulating. What people believe, not what is confirmed.'}
+        {items.length + ' claims the mainstream will not print - conspiracy, rumour and the readings that '
+          + 'turn out right often enough to be worth checking. Each one gets the official account beside it, '
+          + 'a number that cuts against whoever is overstating, and a scored record.'}
       </Text>
       {/* 2026-09-16 (user: "count every rumour from these accounts - maybe put a speculation category
           for the boards"). `speculation` was computed here and never rendered outside an article: it is
@@ -2662,7 +2672,6 @@ function BoardsTab({ data, goArticle, wording }) {
                   that deflates a claim at the same moment as the claim, not one tap later */}
               {c.counter ? (
                 <Text style={{ color: C.text, fontSize: 14, lineHeight: 20, marginTop: 6 }} numberOfLines={2}>
-                  <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>{'BUT  '}</Text>
                   {decode(String(c.counter))}
                 </Text>
               ) : null}
@@ -3064,12 +3073,12 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   });
   return (
     <View style={s.stack}>
+      {/* 2026-09-18: the thesis leads, the book is its evidence. The editor: "I don't care if the US
+          renews something for Belarus... this is where we show off our brain and logic." */}
+      <TheBoard board={data.board || null} />
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 10 }}>
-          Each call is an argument that ends in a number, not a betting line: the case for it, the case
-          against, whether the thing an actor says it cannot do is one it will not do, and what closes it.
-          Soonest first, the long book last, every one scored when it resolves.
-        </Text>
+          Every call below is a checkable piece of the thesis above: the dated, falsifiable components that would have to happen if the sequence is right, and the ones that would break it if they do not. An argument that ends in a number, not a betting line. </Text>
         <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => setSel(nx)}
           total={calls.length} shown={hit.length} />
         {selCount(sel) === 1 && (sel.topic || []).length === 1 ? (
@@ -3827,7 +3836,8 @@ function Dossiers({ items, bare }) {
           {Array.isArray(d.read) && d.read.length ? <Sections items={d.read} size={16} /> : null}
           {d.threat ? (
             <>
-              <Text style={[s.ctxlbl, MONO, { marginTop: 8, color: tc }]}>{'THREAT ASSESSMENT · ' + String(d.threat.level || '').toUpperCase()}</Text>
+              <Text style={[s.ctxlbl, MONO, { marginTop: 8, color: tc }]}>{'THREAT ASSESSMENT · ' + ({ crit: 'CRITICAL', high: 'HIGH', elev: 'ELEVATED', calm: 'CALM' }[
+                String(d.threat.level || '').toLowerCase()] || String(d.threat.level || '').toUpperCase())}</Text>
               {(d.threat.concerns || []).map((cn, i) => (
                 <Text key={i} style={s.li}><Text style={{ color: tc }}>› </Text>{decode(cn)}</Text>
               ))}
@@ -4249,13 +4259,41 @@ function TheBoard({ board }) {
   const cur = who != null ? board.actors[who] : null;
   return (
     <Section title="The board" extra={(board.actors || []).length + ' principals'}>
+      {/* 2026-09-18: THE SEQUENCE IS THE THESIS and the component never rendered it. The editor's
+          standard is a claim a decade long across four theatres whose parts do not look related:
+          get Ukraine into a war with Russia, use the cover to deal with Iran and hand it to Israel,
+          then pivot to China. What happened, and what each step freed up. */}
+      {(board.sequence || []).length ? (
+        <View style={{ marginBottom: 18 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800' }]}>THE SEQUENCE</Text>
+          {(board.sequence || []).map((q, i) => (
+            <View key={i} style={{ marginTop: 11, flexDirection: 'row' }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 11, fontWeight: '800', width: 30 }]}>
+                {String(i + 1).padStart(2, '0')}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 23, fontWeight: '600' }}>
+                  {(q.when ? decode(String(q.when)) + '  ' : '') + decode(String(q.what || ''))}
+                </Text>
+                {q.so_that ? (
+                  <Text style={{ color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 3 }}>
+                    <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.2 }]}>{'SO THAT  '}</Text>
+                    {decode(String(q.so_that))}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
           These wars are not separate stories. A state fighting for advantage can take a deal; a state
           fighting for its existence cannot. Below: who is in which kind of war, whose survivals cannot both
           be satisfied, who can still come to whose aid, and what each of those answers opens next.
         </Text>
-        {board.read ? <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 12, marginBottom: 0 }]}>{decode(board.read)}</Text> : null}
+        {(board.line || board.read) ? <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 12, marginBottom: 0 }]}>{decode((board.line || board.read))}</Text> : null}
 
         {lbl('WHO IS FIGHTING FOR WHAT', C.accent)}
         {(board.actors || []).map((a, i) => {
@@ -4390,7 +4428,6 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
       </View>
     ) : (
       <>
-      <TheBoard board={(data && data.board) || null} />
       <Section title="The wars, explained" extra={keys.length + ' files'}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
           One file per war: the history that explains today, what each side has committed to and done
