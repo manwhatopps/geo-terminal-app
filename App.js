@@ -292,8 +292,8 @@ function fullStamp(ts) {
 const TABS = [
   // 2026-09-16 (user): HOME is where the app opens - a front page, not the wire index.
   { key: 'home', label: 'HOME', g: '⌂' },
-  { key: 'news', label: 'NEWS', g: '▤' },
   { key: 'boards', label: 'BOARDS', g: '☍' },
+  { key: 'news', label: 'NEWS', g: '▤' },
   // 2026-09-16 (user: "broaden the menu so everything doesn't feel so crammed and long ... instead of
   // everything included in everything"). STRATEGY held eleven sections in one endless scroll AND an
   // accordion that re-rendered STRATEGY inside itself. Split by the question each tab answers:
@@ -2546,6 +2546,13 @@ function BoardsTab({ data, goArticle, wording }) {
   const specs = (data.speculation || []).filter((sp) => selMatch(sel, BGROUPS,
     { ...sp, claim: sp.obs, head: sp.head, read: sp.read,
       region: sp.region || inferRegion(sp.obs + ' ' + (sp.read || '')) }));
+  // 2026-09-18: settled sightings are the RECORD and are never dropped; open ones are the feed. A
+  // reader cannot judge the boards without seeing what happened to the last hundred claims.
+  const isSettled = (x) => ['TRUE', 'FALSE', 'PARTLY', 'UNSETTLED'].indexOf(String((x && x.result) || '').toUpperCase()) >= 0;
+  const openSpecs = specs.filter((x) => !isSettled(x));
+  const settled = specs.filter(isSettled);
+  const rTally = (k) => settled.filter((x) => String(x.result).toUpperCase() === k).length;
+  const tally = { n: settled.length, t: rTally('TRUE'), f: rTally('FALSE'), p: rTally('PARTLY'), u: rTally('UNSETTLED') };
   const cur = open != null ? all.find((c) => c.k === open) : null;
   if (cur) return <BoardArticle c={cur} onBack={() => setOpen(null)} onStory={goArticle} />;
   let seen = null;
@@ -2561,12 +2568,27 @@ function BoardsTab({ data, goArticle, wording }) {
           the desk's record of what trackers and tracked accounts are claiming, each with a grade and the
           thing that would settle it. Rumours belong on a board that says it is a board. */}
       {specs.length ? (
-        <Section title="Speculation" extra={specs.length + ' sightings'} fold>
+        <Section title="Speculation" extra={openSpecs.length + ' open \u00b7 ' + settled.length + ' settled'} fold>
           <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 8 }]}>
             Claims from trackers and the accounts the desk follows - not confirmed, graded on how much
-            weight they can carry, each with the observation that would settle it.
+            weight they can carry, each with the observation that would settle it. Nothing here is
+            deleted: when a claim is settled it stays, with the outcome and the source that settled it,
+            so the record can be checked rather than taken on trust.
           </Text>
-          {specs.map((sp, i) => {
+          {settled.length ? (
+            <View style={{ marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 12 }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.4, fontWeight: '800' }]}>THE RECORD</Text>
+              <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 21, marginTop: 6 }}>
+                {tally.n + ' tracked \u00b7 ' + tally.t + ' came true \u00b7 ' + tally.f + ' were false \u00b7 '
+                  + tally.p + ' partly \u00b7 ' + tally.u + ' died unsettled'}
+              </Text>
+              <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 5 }}>
+                A claim that circulated loudly and quietly came to nothing counts here too. Judge the
+                boards on the whole column, not on the ones that landed.
+              </Text>
+            </View>
+          ) : null}
+          {openSpecs.concat(settled).map((sp, i) => {
             const g = GRADE_META[sp.grade] || GRADE_META.unverified;
             const isOn = spec === i;
             return (
@@ -2574,6 +2596,13 @@ function BoardsTab({ data, goArticle, wording }) {
                 <Pressable onPress={() => setSpec(isOn ? null : i)}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <Text style={[MONO, { color: g.c, fontSize: 9, letterSpacing: 1, fontWeight: '700' }]}>{g.label}</Text>
+                    {sp.result ? (
+                      <Text style={[MONO, { fontSize: 9, letterSpacing: 1, fontWeight: '800',
+                        color: String(sp.result).toUpperCase() === 'TRUE' ? C.calm
+                          : String(sp.result).toUpperCase() === 'FALSE' ? C.crit : C.muted }]}>
+                        {String(sp.result).toUpperCase() + (sp.settled ? '  ' + String(sp.settled) : '')}
+                      </Text>
+                    ) : null}
                     <Text style={[MONO, { color: C.muted, fontSize: 9, marginLeft: 'auto' }]}>{String(sp.ts || '').slice(5, 10)}</Text>
                     <Text style={{ color: C.accent, fontSize: 15 }}>{isOn ? '−' : '›'}</Text>
                   </View>
