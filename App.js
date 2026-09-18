@@ -3032,9 +3032,15 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   // actually matter. A row earns a place by being a FURTHER OUT call or resolving 90+ days out, and the
   // book is capped. Near-term calls still live inside their own article, which is where they belong.
   const BOOK_CAP = 20;
+  // 2026-09-18: the same test the standing book uses. The editor: "we only need like 10-20 because we
+  // are making overall general calls for long term - not something like will Hegseth be impeached, that's
+  // short term and so minuscule compared to the global politics." One person's job, one court, one
+  // sub-national contest, one filing, one price target is a real event and not the shape of the world.
+  const PAROCHIAL = /\b(impeach\w*|resigns?|is sworn in|sworn in as|steps down|is fired|is sacked|is dismissed|is confirmed|confirmation vote|cabinet reshuffle|public appearance|is indicted|is arraigned|testifies|subpoena\w*|press conference|preliminary examination|opens an? (investigation|examination)|a .{0,20}court (orders|rules)|files? an? (lawsuit|motion|appeal)|cycle top|price target)\b/i;
   const allRows = callsFrom(data.brief, data.clocks);
   const calls = allRows
     .filter((x) => x.long || x.days == null || x.days >= 90)
+    .filter((x) => !PAROCHIAL.test(String(x.event || '')))
     .sort((a, b) => Math.abs((b.p || 50) - 50) - Math.abs((a.p || 50) - 50))
     .slice(0, BOOK_CAP);
   const counts = new Map();

@@ -41,6 +41,23 @@ if (arg) {
 }
 
 const errors = [];
+
+// A control character in the source - almost always a backslash-b written through a shell heredoc,
+// which becomes chr(8) - produces a regex that matches NOTHING and fails silently. Nine times in
+// this project. The patch that first added this guard was itself broken by the same trap.
+{
+  const src = await readFile(new URL('./App.js', import.meta.url), 'utf8');
+  const CTRL = /[\x08\x00-\x07\x0b\x0c\x0e-\x1f]/g;
+  const hits = src.match(CTRL) || [];
+  if (hits.length) {
+    const lines = src.split(String.fromCharCode(10));
+    const at = lines.findIndex((l) => new RegExp(CTRL.source).test(l)) + 1;
+    console.log('CONTROL CHARACTERS IN App.js: ' + hits.length + ', first at line ' + at);
+    console.log('A backslash-b through a heredoc becomes a backspace byte; the pattern matches nothing.');
+    process.exit(1);
+  }
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 page.on('pageerror', (e) => errors.push(e.message.split('\n')[0]));
