@@ -4167,19 +4167,25 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
   const cur = room && sits[room] ? { ...sits[room], key: room } : null;
   return (
     <>
-    <Section title="The wars, explained" extra={keys.length + ' files'}>
-      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
-        One file per war: the history that explains today, what each side has committed to and done
-        before, and the stories on the wire that belong to it. Sourced event by event.
-      </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.rfilter}>
-        {keys.map((k) => (
-          <Pressable key={k} onPress={() => setRoom(room === k ? null : k)} style={[s.rchip, room === k && s.rchipOn]}>
-            <Text style={[s.rchipTxt, MONO, room === k && { color: C.text, fontWeight: '700' }]}>{sits[k].title}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /> : (
+    {cur ? (
+      // A FILE IS OPEN: the back link and the room, and nothing else. The country reference and the
+      // world sections belong to browsing, not to the war the reader just opened.
+      <View>
+        <Pressable onPress={() => setRoom(null)} hitSlop={8} style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10.5, letterSpacing: 1.4, fontWeight: '800' }]}>
+            {'\u2039  ALL ' + keys.length + ' FILES'}
+          </Text>
+        </Pressable>
+        <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle}
+          quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} />
+      </View>
+    ) : (
+      <>
+      <Section title="The wars, explained" extra={keys.length + ' files'}>
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 8 }}>
+          One file per war: the history that explains today, what each side has committed to and done
+          before, and the stories on the wire that belong to it. Sourced event by event.
+        </Text>
         <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
           {keys.map((k) => {
             const n = roomCards(k, cards || []).length;
@@ -4191,8 +4197,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
             );
           })}
         </View>
-      )}
-    </Section>
+      </Section>
       <Section title="Countries" extra={((data && data.dossiers) || []).length + ' dossiers'}>
         <Dossiers items={(data && data.dossiers) || []} bare />
         {data && data.actors && data.actors.length ? (
@@ -4202,16 +4207,18 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
               <View key={i} style={s.actor}>
                 <Text style={[s.actorName, SERIF]}>{decode(a.n)}</Text>
                 <Text style={[s.actorRole, MONO]}>{decode(a.r).toUpperCase()}</Text>
-                {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really \u2014 </Text>{decode(a.w)}</Text> : null}
-                {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants \u2014 </Text>{decode(a.g)}</Text> : null}
-                {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now \u2014 </Text>{decode(a.m)}</Text> : null}
-                {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens \u2014 </Text>{decode(a.l)}</Text> : null}
+                {a.w ? <Text style={s.actorRow}><Text style={s.actorK}>Really — </Text>{decode(a.w)}</Text> : null}
+                {a.g ? <Text style={s.actorRow}><Text style={s.actorK}>Wants — </Text>{decode(a.g)}</Text> : null}
+                {a.m ? <Text style={s.actorRow}><Text style={s.actorK}>Now — </Text>{decode(a.m)}</Text> : null}
+                {a.l ? <Text style={s.actorRow}><Text style={s.actorK}>Lens — </Text>{decode(a.l)}</Text> : null}
               </View>
             ))}
           </Section>
         ) : null}
       </Section>
       <WorldSections world={world} hist={hist} />
+      </>
+    )}
     </>
   );
 }
