@@ -292,6 +292,8 @@ const TABS = [
   // accordion that re-rendered STRATEGY inside itself. Split by the question each tab answers:
   // CALLS = what does the desk predict and is it any good. DATA = what are the underlying numbers.
   { key: 'calls', label: 'CALLS', g: '◉' },
+  // 2026-09-17 (editor): the rooms are their own thing, not a section of DATA - DATA opens on the receipts
+  { key: 'rooms', label: 'ROOMS', g: '◫' },
   { key: 'data', label: 'DATA', g: '▦' },
 ];
 // 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
@@ -1846,10 +1848,10 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
           boards first, the wire last - because the wire has its own tab and this is the front page. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
-        {tile('data', '◫', 'SITUATION ROOMS', Object.keys((hist && hist.situations) || {}).length, 'the history behind each war')}
+        {tile('rooms', '◫', 'ROOMS', Object.keys((hist && hist.situations) || {}).length, 'the history behind each war')}
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'claims examined')}
         {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'open, publicly scored')}
-        {tile('data', '▦', 'DATA', (data.actors || []).length, 'players tracked')}
+        {tile('data', '▦', 'DATA', ((data.chokepoints || {}).n || 0) + Object.keys((data.inflation || {}).official || {}).length + Object.keys((data.inflation || {}).independent || {}).length, 'the receipts, the straits, the money')}
       </View>
 
 
@@ -1878,22 +1880,6 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
           </View>
           {quizOpen ? <View style={{ marginTop: 14 }}><QuizSection quiz={data.quiz} bare /></View> : null}
         </View>
-      ) : null}
-
-      {/* what the boards are claiming, and that the desk grades them */}
-      {boards.length ? (
-        <Pressable onPress={() => goTab('boards')} style={s.fpBoards}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-            <Text style={[MONO, { color: C.high, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '800' }]}>FROM THE BOARDS</Text>
-            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1, marginLeft: 'auto' }]}>GRADED, NOT REPEATED</Text>
-          </View>
-          {boards.map((c, i) => (
-            <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 19, marginTop: 8 }} numberOfLines={2}>
-              <Text style={{ color: C.high }}>› </Text>{decode(c.consp.head)}
-            </Text>
-          ))}
-          <Text style={[s.readmore, MONO, { marginTop: 11 }]}>OPEN THE BOARDS ›</Text>
-        </Pressable>
       ) : null}
 
       {/* what to watch — the desk's own tripwires for the days ahead */}
@@ -2948,7 +2934,6 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
         ) : null}
       </Section>
       <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} quizzes={quizzes} hist={hist} />
-      <IfTrue items={data.speculation} />
       <Rooms chairs={chairs} goArticle={goArticle} />
       {/* everything the desk keeps for itself - the book, the record, the lab - behind ONE door */}
       <Section title="More from the desk" extra="every call, the book, the record" fold>
@@ -3186,6 +3171,118 @@ function Explainer({ label, sub, children, color, boxRef }) {
   );
 }
 const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10 };
+
+// ── THE TIME MACHINE — 2026-09-17 (editor: "I like the CPI inflation tracker ... make that interactive,
+// or search a house and see how much it cost in a certain year and what the hourly wage was"). Pick a year
+// and a state: the median house, the hourly wage, a gallon of gas and what $100 bought, then against now,
+// and the number that matters - how many years of pay a house cost. Everything is a published series
+// (feed/timemachine.json, FRED keyless), the arithmetic runs on the phone. ──
+const TM_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/timemachine.json';
+const TM_CACHE_KEY = 'geo-timemachine-cache-v1';
+const TM_STATES = 'AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY'.split(' ');
+const money = (v, d) => (v == null ? '\u2014' : '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: d == null ? 0 : d, minimumFractionDigits: d == null ? 0 : d }));
+function TimeMachine() {
+  const [tm, setTm] = useState(null);
+  const [year, setYear] = useState(1985);
+  const [decade, setDecade] = useState(1980);
+  const [st, setSt] = useState(null);
+  const [amount, setAmount] = useState('100');
+  useEffect(() => {
+    AsyncStorage.getItem(TM_CACHE_KEY).then((v) => { try { if (v) setTm((cur) => cur || JSON.parse(v)); } catch (e) {} }).catch(() => {});
+    fetch(TM_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (j && j.years) { setTm(j); AsyncStorage.setItem(TM_CACHE_KEY, JSON.stringify(j)).catch(() => {}); }
+    }).catch(() => {});
+  }, []);
+  if (!tm) return null;
+  const yi = tm.years.indexOf(year), ni = tm.years.length - 1;
+  const at = (k, i) => (tm[k] && tm[k][i] != null ? tm[k][i] : null);
+  const H0 = at('house', yi), H1 = at('house', ni), W0 = at('wage', yi), W1 = at('wage', ni);
+  const C0 = at('cpi', yi), C1 = at('cpi', ni), G0 = at('gas', yi), G1 = at('gas', ni);
+  const yrs = (h, w) => (h != null && w ? (h / (w * 2080)) : null);
+  const mins = (g, w) => (g != null && w ? Math.round(60 * g / w) : null);
+  const amt = Math.max(0, Number(String(amount).replace(/[^0-9.]/g, '')) || 0);
+  const stIdx = st && tm.states && tm.states[st] ? tm.states[st] : null;
+  const stThen = stIdx ? stIdx[yi] : null;
+  const decades = []; for (let d = Math.floor(tm.years[0] / 10) * 10; d <= tm.now; d += 10) decades.push(d);
+  const yearsIn = tm.years.filter((y) => y >= decade && y < decade + 10);
+  const chip = (on, label, onPress, key) => (
+    <Pressable key={key} onPress={onPress} style={[s.rchip, on && s.rchipOn, { marginRight: 0 }]}>
+      <Text style={[s.rchipTxt, MONO, on && { color: C.text, fontWeight: '700' }]}>{label}</Text>
+    </Pressable>
+  );
+  const row = (label, then, now, unit, fmt) => (
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 8, borderTopWidth: 1, borderTopColor: C.line }}>
+      <Text style={{ color: C.text, fontSize: 14, flex: 1.2 }}>{label}</Text>
+      <Text style={[MONO, { color: C.accent, fontSize: 15, fontWeight: '800', flex: 1, textAlign: 'right' }]}>{fmt(then)}</Text>
+      <Text style={[MONO, { color: C.text, fontSize: 15, fontWeight: '800', flex: 1, textAlign: 'right' }]}>{fmt(now)}</Text>
+      <Text style={[MONO, { color: C.muted, fontSize: 10.5, width: 56, textAlign: 'right' }]}>{then != null && now != null && then ? (now / then).toFixed(1) + '\u00d7' : unit || ''}</Text>
+    </View>
+  );
+  const y0 = yrs(H0, W0), y1 = yrs(H1, W1);
+  return (
+    <Section title="The time machine" extra={year + ' vs ' + tm.now}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
+          Pick a year. What the median house, an hour's pay and a gallon cost then, against now, in published
+          series, and the number the official rate hides: years of pay for a house.
+        </Text>
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1, marginTop: 12 }]}>DECADE</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+          {decades.map((d) => chip(decade === d, d + 's', () => { setDecade(d); if (year < d || year >= d + 10) setYear(Math.min(tm.now, d + 5)); }, d))}
+        </View>
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1, marginTop: 10 }]}>YEAR</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+          {yearsIn.map((y) => chip(year === y, String(y), () => setYear(y), y))}
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 16 }}>
+          <Text style={{ flex: 1.2 }} />
+          <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, flex: 1, textAlign: 'right' }]}>{String(year)}</Text>
+          <Text style={[MONO, { color: C.text, fontSize: 9.5, letterSpacing: 1.1, flex: 1, textAlign: 'right' }]}>{String(tm.now)}</Text>
+          <Text style={{ width: 56 }} />
+        </View>
+        {row('Median house', H0, H1, '', (v) => money(v))}
+        {row('An hour\'s pay', W0, W1, '', (v) => money(v, 2))}
+        {row('A gallon of regular', G0, G1, G0 == null ? 'n/a' : '', (v) => money(v, 2))}
+        {row('$' + amt.toLocaleString('en-US') + ' then, in today\'s money', C0 && C1 ? amt * C1 / C0 : null, amt, '', (v) => money(v))}
+
+        <View style={[s.storycard, { marginTop: 14, borderColor: C.accent }]}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>YEARS OF PAY FOR THE MEDIAN HOUSE</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 18, marginTop: 6 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 30, fontWeight: '800' }]}>{y0 == null ? '\u2014' : y0.toFixed(1)}</Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 12 }]}>{'in ' + year}</Text>
+            <Text style={[MONO, { color: C.text, fontSize: 30, fontWeight: '800' }]}>{y1 == null ? '\u2014' : y1.toFixed(1)}</Text>
+            <Text style={[MONO, { color: C.muted, fontSize: 12 }]}>now</Text>
+          </View>
+          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>
+            {'Every hour of a production worker\'s pay, 2,080 hours a year, against the median sale price. '
+              + (G0 != null && W0 && G1 != null && W1 ? 'A gallon of gas was ' + mins(G0, W0) + ' minutes of work then and is ' + mins(G1, W1) + ' now.' : '')}
+          </Text>
+        </View>
+
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1, marginTop: 16 }]}>YOUR STATE · HOUSE PRICES SINCE {String(year)}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 8 }}>
+          {TM_STATES.filter((k) => tm.states && tm.states[k]).map((k) => chip(st === k, k, () => setSt(st === k ? null : k), k))}
+        </ScrollView>
+        {st ? (
+          <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 21, marginTop: 4 }}>
+            {stThen != null && stThen > 0
+              ? 'A house in ' + st + ' that sells for ' + money(H1) + ' today sold for about ' + money(H1 * stThen / 100) + ' in ' + year + ' (' + (100 / stThen).toFixed(1) + '\u00d7 since, FHFA all-transactions index), against ' + (H1 && H0 ? (H1 / H0).toFixed(1) : '?') + '\u00d7 nationally.'
+              : 'No ' + st + ' index for ' + year + ' (the FHFA state series starts in 1975).'}
+          </Text>
+        ) : null}
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14 }}>
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>AMOUNT THEN  $</Text>
+          <TextInput value={amount} onChangeText={setAmount} keyboardType="numeric" style={[MONO, { color: C.text, fontSize: 14, borderBottomWidth: 1, borderBottomColor: C.line, minWidth: 80, paddingVertical: 4, marginLeft: 6 }]} />
+        </View>
+        <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 12 }]}>
+          {'FRED: MSPUS \u00b7 AHETPI \u00b7 CPIAUCSL \u00b7 APU000074714 \u00b7 FHFA STHPI \u00b7 ' + String(tm.updated || '').toUpperCase()}
+        </Text>
+      </View>
+    </Section>
+  );
+}
 
 function Receipts({ inf }) {
   const [openWhat, setOpenWhat] = useState(null);
@@ -3489,8 +3586,8 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, pi
       {/* 2026-09-16 (user: "for data, don't start with listing out all the players, that's way too long
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
-      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} initial={room} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} />
       <Receipts inf={data.inflation} />
+      <TimeMachine />
       <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
       {data.plumbing ? <LiveWatchlist items={data.plumbing.series} /> : null}
@@ -4254,7 +4351,7 @@ export default function App() {
     const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist)]);
     setWorldErr(errs.find(Boolean) || null);
   }, []);
-  useEffect(() => { if (tab === 'data' && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
+  useEffect(() => { if ((tab === 'data' || tab === 'rooms') && !world && !hist) loadWorld(); }, [tab, world, hist, loadWorld]);
   // older stories: the 30-day archive, pulled only when the reader asks for it at the foot of the wire
   const [older, setOlder] = useState('idle');   // idle | loading | done | error
   const loadOlder = useCallback(async () => {
@@ -4320,6 +4417,7 @@ export default function App() {
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
+                {tab === 'rooms' && <TocHost><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /></TocHost>}
                 {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /></TocHost>}
               </>
             )}
