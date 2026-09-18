@@ -3558,6 +3558,15 @@ export default function App() {
     if (hit) markRead(storyId(hit));
     setArticle(i); scrollTop();   // 2026-09-15: stays on the current tab; ArticleHost renders above it, Back returns here
   };
+  // 2026-09-17: every tap handler calls scrollTop() BEFORE the new content commits, and on iOS (new
+  // architecture) the ScrollView keeps the index's offset when its children swap - a long front page
+  // opened a story at the BOTTOM. So scroll again AFTER the commit, and once more on the next frame
+  // when the story's height is known. Fires on article, tab and search changes alike.
+  useEffect(() => {
+    scrollTop();
+    const t = requestAnimationFrame(scrollTop);
+    return () => cancelAnimationFrame(t);
+  }, [article, tab, searching]);
   // What you've opened and what you've kept. Both are per-device and never leave it.
   const [read, setRead] = useState({});
   const [saved, setSaved] = useState({});
