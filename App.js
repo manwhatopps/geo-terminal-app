@@ -754,7 +754,168 @@ function Movement({ n, title, sub, children }) {
   );
 }
 
-function AnalystPanel({ item, specMatches }) {
+// ── YOUR CALL — the reader predicts alongside the desk. 2026-09-17 (editor: "predictions score cards ...
+// give readers the option of A through D scenarios and score them based on percentage. Like Polymarket
+// but no money. People flex their intelligence."). Every card carries `hist.scenarios`: three or four
+// exclusive outcomes by a date, each with the desk's own probability. The reader picks one, locks a
+// confidence, and only THEN sees the desk's numbers (no anchoring). When the weekly audit resolves the
+// set (feed/resolutions.json), both are scored with the multi-outcome Brier score and the scorecard on
+// CALLS keeps the running tally. Per device, no account, no stakes - the score is the flex. ──
+const RESOLUTIONS_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/resolutions.json';
+const RES_CACHE_KEY = 'geo-resolutions-cache-v1';
+const PICKS_KEY = 'geo-picks-v1';
+const CONFS = [55, 70, 85, 95];
+function readerDist(pick, options) {
+  const n = options.length, c = Math.max(0, Math.min(100, Number(pick.conf) || 0)) / 100;
+  const rest = n > 1 ? (1 - c) / (n - 1) : 0;
+  const d = {}; options.forEach((o) => { d[o.k] = o.k === pick.k ? c : rest; });
+  return d;
+}
+function deskDist(options) {
+  const tot = options.reduce((a, o) => a + (Number(o.p) || 0), 0) || 100;
+  const d = {}; options.forEach((o) => { d[o.k] = (Number(o.p) || 0) / tot; });
+  return d;
+}
+// multi-outcome Brier: sum over outcomes of (p - o)^2, 0 best, 2 worst; shown as a 0-100 score
+const brierOf = (dist, outcome, options) => options.reduce((a, o) => a + Math.pow((dist[o.k] || 0) - (o.k === outcome ? 1 : 0), 2), 0);
+const scoreOf = (b) => Math.round(100 * (1 - b / 2));
+function scenariosOf(item) {
+  const sc = (item.hist || {}).scenarios;
+  if (!sc || !Array.isArray(sc.options) || sc.options.length < 2) return null;
+  return sc;
+}
+function YourCall({ item, pick, onPick, resolved }) {
+  const sc = scenariosOf(item);
+  const [sel, setSel] = useState(null);
+  const [conf, setConf] = useState(null);
+  if (!sc) return null;
+  const opts = sc.options;
+  const byTxt = sc.by ? fmtDue(String(sc.by).slice(0, 10)).replace('BY ', '') : '';
+  const lbl = [MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }];
+  const optRow = (o, on, showP) => (
+    <View key={o.k} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 9, borderTopWidth: 1, borderTopColor: C.line }}>
+      <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: on ? C.accent : C.line, backgroundColor: on ? C.accent : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+        <Text style={[MONO, { color: on ? C.ink : C.muted, fontSize: 12, fontWeight: '800' }]}>{o.k}</Text>
+      </View>
+      <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, flex: 1, fontWeight: on ? '700' : '400' }}>{decode(o.text)}</Text>
+      {showP ? <Text style={[MONO, { color: C.accent, fontSize: 14, fontWeight: '800', marginLeft: 10, width: 44, textAlign: 'right' }]}>{Math.round(Number(o.p) || 0) + '%'}</Text> : null}
+    </View>
+  );
+  if (pick) {
+    const rd = readerDist(pick, opts), dd = deskDist(opts);
+    const done = resolved && resolved.k;
+    const yours = done ? scoreOf(brierOf(rd, resolved.k, opts)) : null;
+    const desk = done ? scoreOf(brierOf(dd, resolved.k, opts)) : null;
+    return (
+      <View style={[s.storycard, { borderColor: C.accent, marginTop: 8 }]}>
+        <Text style={lbl}>{done ? 'RESOLVED \u00b7 ' + String(resolved.k) : 'YOUR CALL \u00b7 LOCKED' + (byTxt ? ' \u00b7 SCORED AFTER ' + byTxt : '')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 28, fontWeight: '800' }]}>{pick.k + ' \u00b7 ' + pick.conf + '%'}</Text>
+          <Text style={{ color: C.muted, fontSize: 12.5, marginLeft: 10, flex: 1 }}>{'you' + (done ? (pick.k === resolved.k ? ' \u2014 right' : ' \u2014 wrong') : '')}</Text>
+        </View>
+        <Text style={[lbl, { marginTop: 12, color: C.muted }]}>THE DESK'S NUMBERS</Text>
+        {opts.map((o) => optRow(o, done ? o.k === resolved.k : o.k === pick.k, true))}
+        {done ? (
+          <View style={{ marginTop: 12, flexDirection: 'row', gap: 22 }}>
+            <View><Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>YOUR SCORE</Text><Text style={[MONO, { color: yours >= desk ? C.calm : C.high, fontSize: 24, fontWeight: '800' }]}>{yours}</Text></View>
+            <View><Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>THE DESK</Text><Text style={[MONO, { color: C.text, fontSize: 24, fontWeight: '800' }]}>{desk}</Text></View>
+            {resolved.note ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, flex: 1 }}>{decode(resolved.note)}</Text> : null}
+          </View>
+        ) : (
+          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 10 }}>{'Scored against the desk when it resolves' + (sc.rule ? ' \u2014 ' + decode(sc.rule) : '') + '. Your call stays on this phone.'}</Text>
+        )}
+        {!done ? <Pressable onPress={() => onPick && onPick(null)} hitSlop={6} style={{ marginTop: 8 }}><Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>CHANGE YOUR CALL</Text></Pressable> : null}
+      </View>
+    );
+  }
+  return (
+    <View style={[s.storycard, { borderColor: C.accent, marginTop: 8 }]}>
+      <Text style={lbl}>{'YOUR CALL' + (byTxt ? ' \u00b7 WHAT HAPPENS BY ' + byTxt : '')}</Text>
+      <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 5 }}>
+        Pick the outcome, then how sure you are. The desk's own numbers show once you lock in, and you are scored against it when this resolves.
+      </Text>
+      <View style={{ marginTop: 8 }}>{opts.map((o) => (
+        <Pressable key={o.k} onPress={() => setSel(o.k)}>{optRow(o, sel === o.k, false)}</Pressable>
+      ))}</View>
+      {sel ? (
+        <View style={{ marginTop: 12 }}>
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>HOW SURE</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            {CONFS.map((c) => (
+              <Pressable key={c} onPress={() => setConf(c)} style={[s.rchip, conf === c && s.rchipOn, { marginRight: 0 }]}>
+                <Text style={[s.rchipTxt, MONO, conf === c && { color: C.text, fontWeight: '700' }]}>{c + '%'}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {sel && conf ? (
+        <Pressable onPress={() => onPick && onPick({ k: sel, conf, ts: new Date().toISOString().slice(0, 10), by: sc.by || null,
+            head: articleParts(item).head, options: opts.map((o) => ({ k: o.k, text: o.text, p: o.p })) })}
+          style={[s.artbtn, { marginTop: 14, borderColor: C.accent, alignItems: 'center' }]}>
+          <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'LOCK IN ' + sel + ' AT ' + conf + '%'}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+function resolutionFor(res, id) {
+  return ((res && res.items) || []).find((r) => r.id === id) || null;
+}
+// The scorecard on CALLS: every call the reader has made, scored against the desk where resolved.
+function Scorecard({ picks, cards, res, goArticle }) {
+  const ids = Object.keys(picks || {});
+  if (!ids.length) {
+    return (
+      <Section title="Your scorecard" extra="no calls yet">
+        <Text style={[s.foot, { paddingHorizontal: 16, paddingBottom: 14, fontSize: 13.5, lineHeight: 19.5 }]}>
+          Open any story, find YOUR CALL under ANALYST, pick a scenario and lock a confidence. The desk scores
+          you against itself when it resolves. No account, no money: the score lives on this phone.
+        </Text>
+      </Section>
+    );
+  }
+  const idx = {}; (cards || []).forEach((c, i) => { idx[storyId(c)] = i; });
+  const rows = ids.map((id) => {
+    const pk = picks[id]; const r = resolutionFor(res, id);
+    const opts = pk.options || [];
+    const done = r && r.k && r.k !== 'VOID' && opts.length;
+    return { id, pk, r, done, yours: done ? scoreOf(brierOf(readerDist(pk, opts), r.k, opts)) : null,
+      desk: done ? scoreOf(brierOf(deskDist(opts), r.k, opts)) : null, days: pk.by ? Math.round((Date.parse(pk.by + 'T12:00:00Z') - Date.now()) / 86400000) : null };
+  });
+  const scored = rows.filter((x) => x.done);
+  const mean = (k) => (scored.length ? Math.round(scored.reduce((a, x) => a + x[k], 0) / scored.length) : null);
+  const stat = (label, v, color) => (
+    <View style={{ flex: 1 }}>
+      <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.1 }]}>{label}</Text>
+      <Text style={[MONO, { color: color || C.text, fontSize: 22, fontWeight: '800', marginTop: 2 }]}>{v == null ? '\u2014' : v}</Text>
+    </View>
+  );
+  const y = mean('yours'), d = mean('desk');
+  return (
+    <Section title="Your scorecard" extra={ids.length + (ids.length === 1 ? ' call' : ' calls')}>
+      <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12 }}>
+        {stat('CALLS', ids.length)}{stat('SCORED', scored.length)}{stat('YOUR SCORE', y, y != null && d != null ? (y >= d ? C.calm : C.high) : C.text)}{stat('THE DESK', d)}
+      </View>
+      {rows.sort((a, b) => (a.done === b.done ? (a.days == null ? 1 : b.days == null ? -1 : a.days - b.days) : a.done ? -1 : 1)).map((x) => (
+        <Pressable key={x.id} onPress={() => idx[x.id] != null && goArticle && goArticle(idx[x.id])} style={{ paddingHorizontal: 16, paddingVertical: 11, borderTopWidth: 1, borderTopColor: C.line }}>
+          <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>
+            <Text style={{ color: x.done ? (x.pk.k === x.r.k ? C.calm : C.high) : C.accent }}>{x.done ? (x.pk.k === x.r.k ? 'RIGHT' : 'WRONG') + ' \u00b7 ' + x.yours + ' vs desk ' + x.desk : 'OPEN \u00b7 YOU ' + x.pk.k + ' ' + x.pk.conf + '%'}</Text>
+            <Text style={{ color: C.muted }}>{x.pk.by ? '  \u00b7  ' + (x.done ? 'RESOLVED ' + String(x.r.resolved || x.r.by || '').slice(5, 10) : fmtDue(x.pk.by) + ' \u00b7 ' + inDays(x.days).toUpperCase()) : ''}</Text>
+          </Text>
+          <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, marginTop: 5, fontWeight: '600' }}>{decode(x.pk.head || x.id)}</Text>
+          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 3 }}>{(x.pk.options || []).filter((o) => o.k === x.pk.k).map((o) => 'You: ' + decode(o.text)).join('') + (x.done ? '  \u2014  Outcome: ' + ((x.pk.options || []).find((o) => o.k === x.r.k) || {}).text : '')}</Text>
+        </Pressable>
+      ))}
+      <Text style={[s.foot, { paddingHorizontal: 16, paddingVertical: 12 }]}>
+        Score: 100 means certain and right, 50 is a shrug, 0 is certain and wrong (a Brier score, the standard
+        for forecasters, shown as points). The desk is scored the same way on the same outcomes.
+      </Text>
+    </Section>
+  );
+}
+
+function AnalystPanel({ item, specMatches, pick, onPick, resolved }) {
   const hist = item.hist || {};
   const dec = item.dec || {};
   const call = hist.call || {};
@@ -824,6 +985,7 @@ function AnalystPanel({ item, specMatches }) {
   ].filter(Boolean);
 
   const future = [
+    scenariosOf(item) ? <YourCall key="sc" item={item} pick={pick} onPick={onPick} resolved={resolved} /> : null,
     call.event ? (
       <View key="c" style={{ marginTop: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -879,7 +1041,7 @@ function AnalystPanel({ item, specMatches }) {
 
 function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
-                       tsize, onSize, theme, onTheme, level, onLevel }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved }) {
   const { head, stand, longHead } = articleParts(item);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
@@ -929,7 +1091,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'analyst' ? null : 'analyst')} style={[s.artbtn, pane === 'analyst' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>◉ ANALYST</Text>
-            <Text style={s.artbtnS}>the desk's read and its call</Text>
+            <Text style={s.artbtnS}>{scenariosOf(item) ? 'the desk\'s call \u2014 and yours' : 'the desk\'s read and its call'}</Text>
           </Pressable>
           <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>☍ CONSPIRACY</Text>
@@ -1003,7 +1165,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         ) : null}
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}>
-            <AnalystPanel item={item} specMatches={specMatches} />
+            <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} />
             {item.hist && item.hist.call && item.hist.call.event ? (
               <>
                 <Pressable onPress={() => shareCall(item, cardRef)} style={s.sharebtn}>
@@ -1711,7 +1873,7 @@ function chipsOf(items, valueOf) {
 
 function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
-                   older, loadOlder }) {
+                   older, loadOlder, picks, setPickFor, res }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
   const [sel, setSelRaw] = useState({});
@@ -1760,7 +1922,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         calls={regionForecasts(data, item.region)}
         specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
-        isSaved={!!saved[id]} onSave={() => toggleSave(id)}
+        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} onSave={() => toggleSave(id)}
         tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -2385,7 +2547,7 @@ function callsFrom(cards, clocks) {
     const h = c.hist || {}, call = h.call;
     if (!call || !call.event || call.p == null) return;
     const due = dueOf(c, call);
-    const row = (k, d) => ({ idx, head: c.head, region: c.region || 'Global',
+    const row = (k, d) => ({ idx, id: storyId(c), hasScenarios: !!scenariosOf(c), head: c.head, region: c.region || 'Global',
       theatre: THEATRE_OF[c.region] || c.region || 'Global',
       domain: domainOf(String(k.event), String(c.head || '') + ' ' + String(c.tag || '')),
       p: Math.max(0, Math.min(100, Math.round(Number(k.p) || 0))),
@@ -2425,7 +2587,7 @@ const BUCKETS = [{ lab: 'THE NEXT TWO WEEKS', sub: 'resolve inside a fortnight',
 
 // One call, written out. The number never appears without the position that produced it (L14), which
 // is why FOR and BUT are printed here rather than hidden behind the row.
-function CallRow({ x, goArticle, lede }) {
+function CallRow({ x, goArticle, lede, pick, hasScenarios }) {
   const hs = lede ? 25 : 18.5;
   return (
     <View style={{ borderTopWidth: lede ? 0 : 1, borderTopColor: C.line, paddingHorizontal: 16, paddingTop: lede ? 0 : 15, paddingBottom: lede ? 0 : 17 }}>
@@ -2455,6 +2617,11 @@ function CallRow({ x, goArticle, lede }) {
           <Text style={[MONO, { color: C.high, fontSize: 9.5, letterSpacing: 1.1 }]}>
             {'SETTLED BY ' + String(x.clock.label || '').toUpperCase() + ' ' + String(x.clock.date || '').slice(5)}
           </Text>
+        ) : null}
+        {hasScenarios && !x.long ? (
+          <Pressable onPress={() => goArticle && goArticle(x.idx)} hitSlop={6}>
+            <Text style={[MONO, { color: pick ? C.calm : C.high, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{pick ? 'YOUR CALL \u00b7 ' + pick.k + ' ' + pick.conf + '%' : 'MAKE YOUR CALL \u203a'}</Text>
+          </Pressable>
         ) : null}
         <Pressable onPress={() => goArticle && goArticle(x.idx)} hitSlop={6}>
           <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'THE STORY \u203a'}</Text>
@@ -2551,7 +2718,7 @@ function Rooms({ chairs, goArticle }) {
 // ── CALLS — everything predictive, and nothing else: what the desk thinks happens next, whether it
 // has been right, the branches it is watching, the hypotheses it has not proved, the tripwires, and a
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
-function CallsTab({ data, easy, deep, goArticle, read, saved }) {
+function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res }) {
   const [region, setRegion] = useState('ALL');
   const [book, setBook] = useState(null);   // the tracked book opens one row at a time
   const [sel, setSel] = useState({});
@@ -2600,7 +2767,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
               <Text style={[MONO, { color: C.accent, fontSize: 10.5, letterSpacing: 2.2, fontWeight: '800' }]}>{g.lab}</Text>
               <Text style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>{g.rows.length + ' ' + g.sub}</Text>
             </View>
-            {g.rows.map((x, j) => <CallRow key={j} x={x} goArticle={goArticle} />)}
+            {g.rows.map((x, j) => <CallRow key={j} x={x} goArticle={goArticle} pick={(picks || {})[x.id]} hasScenarios={x.hasScenarios} />)}
           </View>
         ))}
         {!allCalls && !selCount(sel) && near.length > 14 ? (
@@ -2609,6 +2776,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved }) {
           </Pressable>
         ) : null}
       </Section>
+      <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} />
       <IfTrue items={data.speculation} />
       <Rooms chairs={chairs} goArticle={goArticle} />
       {/* everything the desk keeps for itself - the book, the record, the lab - behind ONE door */}
@@ -3562,7 +3730,7 @@ function SituationRooms({ hist, cards, goArticle, initial }) {
 // ── ARTICLE HOST — one story, opened from ANY tab (headlines, boards, strategy, search), rendered above
 // that tab so Back returns to where the reader was. Prev/next walk the whole wire, newest first. ──
 function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, saved, toggleSave, markRead,
-                       tsize, onSize, theme, onTheme, level, onLevel }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, picks, setPickFor, res }) {
   const rows = briefSorted(data.brief);
   const at = rows.findIndex(({ i }) => i === article);
   if (at < 0) { return <Text style={s.foot}>That story is no longer on the wire.</Text>; }
@@ -3578,6 +3746,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
       specMatches={storySpec(data.speculation, item)}
       chatter={data.chatter}
       isSaved={!!saved[id]} onSave={() => toggleSave(id)}
+      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)}
       tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
       prev={at > 0 ? rows[at - 1] : null}
       next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -3771,6 +3940,22 @@ export default function App() {
     AsyncStorage.setItem(READ_KEY, JSON.stringify(next)).catch(() => {});
     return next;
   }), []);
+  // YOUR CALL: the reader's scenario picks, per device, and the desk's resolutions from the feed
+  const [picks, setPicks] = useState({});
+  const [res, setRes] = useState(null);
+  useEffect(() => {
+    AsyncStorage.getItem(PICKS_KEY).then((v) => { try { if (v) setPicks(JSON.parse(v)); } catch (e) {} }).catch(() => {});
+    AsyncStorage.getItem(RES_CACHE_KEY).then((v) => { try { if (v) setRes((cur) => cur || JSON.parse(v)); } catch (e) {} }).catch(() => {});
+    fetch(RESOLUTIONS_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (j) { setRes(j); AsyncStorage.setItem(RES_CACHE_KEY, JSON.stringify(j)).catch(() => {}); }
+    }).catch(() => {});
+  }, []);
+  const setPickFor = useCallback((id, v) => setPicks((cur) => {
+    const next = { ...cur };
+    if (v) next[id] = v; else delete next[id];
+    AsyncStorage.setItem(PICKS_KEY, JSON.stringify(prune(next, 300))).catch(() => {});
+    return next;
+  }), []);
   const toggleSave = useCallback((id) => setSaved((sv) => {
     const next = { ...sv };
     if (next[id]) delete next[id]; else next[id] = 1;
@@ -3905,7 +4090,7 @@ export default function App() {
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {article != null ? (
               <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
-                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead}
+                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res}
                 tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />
             ) : searching ? (
               <SearchScreen data={data} query={query} setQuery={setQuery}
@@ -3913,9 +4098,9 @@ export default function App() {
             ) : (
               <>
                 {tab === 'home' && <FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} />}
-                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} />}
+                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} />}
                 {tab === 'boards' && <BoardsTab data={data} goArticle={goArticle} />}
-                {tab === 'calls' && <CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} />}
+                {tab === 'calls' && <CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} />}
                 {tab === 'data' && <DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} />}
               </>
             )}
