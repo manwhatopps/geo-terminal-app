@@ -3304,65 +3304,12 @@ const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10
 // into "were killed"), what the dead are called, which word the act gets, who is hedged, whether a
 // number leads. The reader draws the conclusion. Built by press_wording.py; no model wrote a word of it. ──
 const WORDING_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/wording.json';
-// ── THE STRIP — 2026-09-18. Five numbers the reader should never have to go looking for, because on this
-// desk they ARE the story's consequence: the barrel, the gas, the long rate, the fear gauge, the dollar.
-// Its own tiny file (world.json is ~900 KB and only loads on DATA). Published series, dated, no estimates.
-const MARKETS_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/markets.json';
-const MARKETS_CACHE_KEY = 'geo-markets-cache-v1';
-const TICKER = [
-  ['brent', 'BRENT', (v) => '$' + Number(v).toFixed(2)],
-  ['wti', 'WTI', (v) => '$' + Number(v).toFixed(2)],
-  ['nat_gas_henry_hub', 'GAS', (v) => '$' + Number(v).toFixed(2)],
-  ['us10y', 'US 10Y', (v) => Number(v).toFixed(2) + '%'],
-  ['gold', 'GOLD', (v) => '$' + Math.round(Number(v)).toLocaleString('en-US')],
-  ['vix', 'VIX', (v) => Number(v).toFixed(1)],
-  ['usd_broad', 'DOLLAR', (v) => Number(v).toFixed(1)],
-];
-// 2026-09-18: a price on a screen has to say when it was true. The first strip ran off a spot series that
-// publishes two to three days late and showed a three-day-old $130.80 while Brent traded at $99.69 - under
-// a masthead whose own lede said Brent had fallen below $100. Anything older than a day is dimmed and
-// stamped with its date rather than shown as current.
-const TICK_STALE_MS = 26 * 3600 * 1000;
-function asofAge(d) {
-  const t = Date.parse(String((d && d.asof) || '').replace(' ', 'T').replace('Z', ':00Z'));
-  return Number.isNaN(t) ? null : Date.now() - t;
-}
-function MarketStrip({ onPress }) {
-  const [m, setM] = useState(null);
-  useEffect(() => {
-    AsyncStorage.getItem(MARKETS_CACHE_KEY).then((v) => { try { if (v) setM((c) => c || JSON.parse(v)); } catch (e) {} }).catch(() => {});
-    fetch(MARKETS_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
-      if (j && j.markets) { setM(j); AsyncStorage.setItem(MARKETS_CACHE_KEY, JSON.stringify(j)).catch(() => {}); }
-    }).catch(() => {});
-  }, []);
-  const rows = TICKER.map(([k, label, fmt]) => [label, (m && m.markets && m.markets[k]) || null, fmt]).filter((r) => r[1] && r[1].v != null);
-  if (!rows.length) return null;
-  return (
-    <Pressable onPress={onPress}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        style={{ backgroundColor: C.panel2, borderBottomWidth: 1, borderBottomColor: C.line }}
-        contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 7, alignItems: 'center', gap: 18 }}>
-        {rows.map(([label, d, fmt], i) => {
-          const up = Number(d.chg_pct) > 0, flat = !d.chg_pct || Math.abs(Number(d.chg_pct)) < 0.05;
-          const age = asofAge(d), stale = d.stale || (age != null && age > TICK_STALE_MS);
-          return (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, opacity: stale ? 0.45 : 1 }}>
-              <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.1 }]}>{label}</Text>
-              <Text style={[MONO, { color: C.text, fontSize: 12, fontWeight: '800' }]}>{fmt(d.v)}</Text>
-              {stale ? <Text style={[MONO, { color: C.muted, fontSize: 9 }]}>{String(d.asof || '').slice(5, 10)}</Text> : null}
-              {!flat ? (
-                <Text style={[MONO, { color: up ? C.high : C.calm, fontSize: 10, fontWeight: '700' }]}>
-                  {(up ? '▲' : '▼') + Math.abs(Number(d.chg_pct)).toFixed(1) + '%'}
-                </Text>
-              ) : null}
-            </View>
-          );
-        })}
-        <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8 }]}>{String((m && m.asof) || '').slice(0, 10) + '  ›'}</Text>
-      </ScrollView>
-    </Pressable>
-  );
-}
+// 2026-09-18: THE STRIP IS GONE, and the reason is worth keeping. A ticker promises live. This feed
+// updates when a content run fires - a handful of times a day - so a row of prices under the masthead
+// was making a promise the pipeline cannot keep, which is the same failure as the stale print it was
+// built to fix. markets.py still writes feed/markets.json (front-month futures, each carrying its own
+// exchange timestamp) because the numbers are cheap and the desk cites them - they belong beside their
+// explanation on DATA, dated, not scrolling across the masthead pretending to tick.
 const WORDING_CACHE_KEY = 'geo-wording-cache-v1';
 const ACT_NOTE = {
   'active, actor named': 'names who did it',
@@ -4691,7 +4638,6 @@ export default function App() {
             <Text style={[MONO, { color: C.elev, fontSize: 9, letterSpacing: 1 }]}>{'OFFLINE · SHOWING LAST SAVED BRIEF · TAP TO RETRY'}</Text>
           </Pressable>
         ) : null}
-        <MarketStrip onPress={() => { setSearching(false); setArticle(null); setTab('data'); scrollTop(); }} />
         {data && (
           <ScrollCtx.Provider value={scrollCtx}><View ref={scrollBox} style={{ flex: 1 }}>
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
