@@ -620,6 +620,18 @@ function chatterFor(item) {
 // news headlines read" is a counter to the NEWS, not to the poster) - and it is allowed to come back
 // empty: when the check finds nothing against a claim, the desk says so and names what would settle
 // it, because a panel that always finds the claim wrong is running a narrative in the other direction.
+function OfficialAccount({ text }) {
+  // 2026-09-18, rule 16: on the boards the official account is a COMPETING account, not the baseline the
+  // claim has to beat. It is printed beside the claim at full strength, with its own falsifier.
+  if (!text) return null;
+  return (
+    <View style={{ marginTop: 10, borderLeftWidth: 2, borderLeftColor: C.line, paddingLeft: 11 }}>
+      <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.2, fontWeight: '700' }]}>THE OFFICIAL ACCOUNT</Text>
+      <Text style={{ color: C.text, fontSize: 14, lineHeight: 20.5, marginTop: 4 }}>{decode(String(text))}</Text>
+    </View>
+  );
+}
+
 function Counter({ c }) {
   if (!c) return null;
   const holds = /^\s*(HOLDS|NOTHING)/i.test(String(c));
@@ -687,7 +699,8 @@ function ConspiracyPanel({ items, forceOpen }) {
                       <Text style={[s.ctxP, T(15, 24), { color: C.muted }]}>{decode(c.spread)}</Text>
                     </>
                   ) : null}
-                  <Counter c={c.counter} />
+                  <OfficialAccount text={c.official} />
+        <Counter c={c.counter} />
                   {Array.isArray(c.reads) && c.reads.length ? (
                     <View style={{ marginTop: 10 }}><Sections items={c.reads.map((sec) => (/VERDICT/i.test(sec.h || '') && Array.isArray(c.verdicts) ? { ...sec, verdicts: c.verdicts } : sec))} color={C.high} /></View>
                   ) : c.read ? (
@@ -2455,6 +2468,7 @@ function BoardArticle({ c, onBack, onStory }) {
             <Text style={[s.ctxP, T(16, 25), { color: C.muted, marginBottom: 12 }]}>{decode(c.spread)}</Text>
           </>
         ) : null}
+        <OfficialAccount text={c.official} />
         <Counter c={c.counter} />
         {reads.length ? (
           <>
