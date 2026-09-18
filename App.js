@@ -1259,6 +1259,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
                        tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording }) {
   const { head, stand, longHead } = articleParts(item);
+  const isWire = String((item && item.tier) || '').toLowerCase() === 'wire';
   const secRefs = useRef([]);
   const wordEv = wordingFor(wording, item);
   const dc = decodeOf(item);
@@ -1305,7 +1306,17 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
             every card already carries `t` (the desk's 2-4 sentence lede) and `context` (one plain
             paragraph, no labels). Reading time is measured from the full read, not the summary. */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+        {isWire ? (
+          <View style={{ marginBottom: 18, borderLeftWidth: 2, borderLeftColor: C.line, paddingLeft: 12 }}>
+            <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.2 }]}>A BRIEF, NOT A READ</Text>
+            <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
+              The desk logged this one and moved on. It did not score high enough this cycle to be worth a
+              full read, so there is no call, no ledger and no analysis attached — just what happened and
+              where it was reported. If it develops, it gets written properly.
+            </Text>
+          </View>
+        ) : null}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18, display: isWire ? 'none' : 'flex' }}>
           <Pressable onPress={() => setPane(pane === 'sum' ? null : 'sum')} style={[s.artbtn, { borderColor: C.calm }, pane === 'sum' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO, { color: C.calm }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>≡ SUMMARY</Text>
             <Text style={s.artbtnS}>the story in 30 seconds</Text>
@@ -2240,7 +2251,9 @@ function HeadlineRow({ item, onOpen, isRead, isSaved }) {
   return (
     <Pressable onPress={onOpen} style={s.hrow}>
       <Text style={[s.hrowH, T(24, 29), isRead && s.readH]}>{head || longHead}</Text>
-      <Text style={s.hrowMeta}>{String(item.region || kickerOf(item) || '').toUpperCase() + (isSaved ? '  ·  SAVED' : '')}</Text>
+      <Text style={s.hrowMeta}>{String(item.region || kickerOf(item) || '').toUpperCase()
+        + (String(item.tier || '').toLowerCase() === 'wire' ? '  ·  BRIEF' : '')
+        + (isSaved ? '  ·  SAVED' : '')}</Text>
     </Pressable>
   );
 }
