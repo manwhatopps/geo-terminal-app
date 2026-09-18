@@ -1141,6 +1141,11 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
   const lbl = [s.ctxlbl, MONO, { marginTop: 16 }];
   const body = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 6, fontFamily: 'Charter' };
 
+  // 2026-09-18 (editor, sending a breakdown he wanted this door to read like): the chain is the analyst's
+  // actual reasoning - whose problem, what they tried, can't or won't, what the pressure buys, which ally
+  // wants the opposite, the same play elsewhere, what follows. It leads, because it is the argument; the
+  // precedents and the call are what the argument rests on and what it produces.
+  const chain = Array.isArray(hist.chain) ? hist.chain.filter((x) => x && x.h && x.p) : [];
   const past = [
     pres.length ? (
       <View key="pre">
@@ -1232,6 +1237,15 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
     <View style={[s.storycard, { borderColor: C.accent, marginTop: 10, paddingTop: 16 }]}>
       <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>THE GEOPOLITICAL ANALYST</Text>
       <Text style={sub}>The desk's own reading of this story, in the order it happened: the record behind it, where it stands now, and what it thinks comes next.</Text>
+      {chain.length ? (
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 2, fontWeight: '800' }]}>HOW THIS ACTUALLY WORKS</Text>
+          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 4 }}>
+            The constraint first, then what was tried, then whether the thing they say they cannot do is one they will not do.
+          </Text>
+          <View style={{ marginTop: 10 }}><Sections items={chain} size={16} /></View>
+        </View>
+      ) : null}
       <Movement n="I" title="WHAT CAME BEFORE" sub="the precedents the desk is reading from, oldest first">{past}</Movement>
       <Movement n="II" title="WHERE IT STANDS NOW" sub="what the history does to today's picture">{present}</Movement>
       <Movement n="III" title="WHAT HAPPENS NEXT" sub="the desk's call, and the case against it">{future}</Movement>
