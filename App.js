@@ -1152,7 +1152,7 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
 
   const future = [
     scenariosOf(item) ? <YourCall key="sc" item={item} pick={pick} onPick={onPick} resolved={resolved} /> : null,
-    movesOf(item).length ? <ChairGame key="ch" item={item} id={storyId(item)} picks={picks} setPickFor={setPickFor} res={res} /> : null,
+    movesOf(item).length ? <ChairGame key="ch" item={item} id={storyId(item)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /> : null,
     call.event ? (
       <View key="c" style={{ marginTop: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -1208,9 +1208,10 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
 
 function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
-                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording }) {
   const { head, stand, longHead } = articleParts(item);
   const secRefs = useRef([]);
+  const wordEv = wordingFor(wording, item);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
   const [pane, setPane] = useState(null);
@@ -1263,6 +1264,12 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
             <Text style={[s.artbtnT, MONO]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>◉ ANALYST</Text>
             <Text style={s.artbtnS}>{movesOf(item).length ? 'the call, your call, your move' : scenariosOf(item) ? 'the desk\'s call \u2014 and yours' : 'the desk\'s read and its call'}</Text>
           </Pressable>
+          {wordEv ? (
+            <Pressable onPress={() => setPane(pane === 'word' ? null : 'word')} style={[s.artbtn, { borderColor: C.elev }, pane === 'word' && s.artbtnOn]}>
+              <Text style={[s.artbtnT, MONO, { color: C.elev }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{'\u2338 WORDING'}</Text>
+              <Text style={s.artbtnS}>{wordEv.n + ' outlets, side by side'}</Text>
+            </Pressable>
+          ) : null}
           <Pressable onPress={() => setPane(pane === 'consp' ? null : 'consp')} style={[s.artbtn, { borderColor: C.high }, pane === 'consp' && s.artbtnOn]}>
             <Text style={[s.artbtnT, MONO, { color: C.high }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>☍ CONSPIRACY</Text>
             <Text style={s.artbtnS}>{conspItems.length ? conspItems.length + (conspItems.length === 1 ? ' claim circulating' : ' claims circulating') : 'nothing circulating yet'}</Text>
@@ -1335,7 +1342,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
         ) : null}
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}>
-            <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} picks={picks} setPickFor={setPickFor} res={res} />
+            <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />
             {item.hist && item.hist.call && item.hist.call.event ? (
               <>
                 <Pressable onPress={() => shareCall(item, cardRef)} style={s.sharebtn}>
@@ -1350,6 +1357,15 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, onBoard, calls,
           </View>
         ) : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
+        {pane === 'word' && wordEv ? (
+          <View style={[s.storycard, { borderColor: C.elev, marginBottom: 18 }]}>
+            <Text style={[MONO, { color: C.elev, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>HOW EACH OUTLET WORDED IT</Text>
+            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 5 }}>
+              The same event as published elsewhere, with the choices named by the same test for every outlet.
+            </Text>
+            <WordingEvent ev={wordEv} />
+          </View>
+        ) : null}
         {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
         {!simple && Array.isArray(item.read) && item.read.length ? (
           <>
@@ -2028,7 +2044,7 @@ function chipsOf(items, valueOf) {
 
 function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scrollTop,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
-                   older, loadOlder, picks, setPickFor, res }) {
+                   older, loadOlder, picks, setPickFor, res, wording }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
   const [region, setRegion] = useState('ALL');
   const [sel, setSelRaw] = useState({});
@@ -2077,7 +2093,7 @@ function NewsTab({ data, easy, deep, goTab, goBoard, article, setArticle, scroll
         calls={regionForecasts(data, item.region)}
         specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
-        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} onSave={() => toggleSave(id)}
+        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} onSave={() => toggleSave(id)}
         tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -3194,6 +3210,114 @@ function Explainer({ label, sub, children, color, boxRef }) {
 }
 const EXPLAIN_P = { color: C.text, fontSize: 15.5, lineHeight: 24, marginTop: 10 };
 
+// ── THE WORDING — 2026-09-17 (editor: "compare articles about events and tell the difference in
+// linguistics ... a headline might say Israeli kids and children killed but when they report on
+// Palestinian children being killed they refer to them as young adults ... focus on how articles are
+// worded, the hidden agenda behind these mainstream articles"). The desk does not call anyone a
+// propagandist. It prints the same event's headline from every outlet that carried it and names the
+// choices each one made, by the same rules for all of them: who did it (or whether the doer vanished
+// into "were killed"), what the dead are called, which word the act gets, who is hedged, whether a
+// number leads. The reader draws the conclusion. Built by press_wording.py; no model wrote a word of it. ──
+const WORDING_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/wording.json';
+const WORDING_CACHE_KEY = 'geo-wording-cache-v1';
+const ACT_NOTE = {
+  'active, actor named': 'names who did it',
+  'passive, actor named': 'passive, but the doer is named',
+  'passive, actor gone': 'passive, and the doer is gone',
+  'intransitive (died)': 'they died, nobody killed them',
+  'intransitive (lost their lives)': 'they lost their lives, nobody killed them',
+  'nominal (deaths, toll)': 'a toll, not an act',
+};
+function useWording() {
+  const [w, setW] = useState(null);
+  useEffect(() => {
+    AsyncStorage.getItem(WORDING_CACHE_KEY).then((v) => { try { if (v) setW((c) => c || JSON.parse(v)); } catch (e) {} }).catch(() => {});
+    fetch(WORDING_URL, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (j && j.events) { setW(j); AsyncStorage.setItem(WORDING_CACHE_KEY, JSON.stringify(j)).catch(() => {}); }
+    }).catch(() => {});
+  }, []);
+  return w;
+}
+function WordingEvent({ ev, compact }) {
+  const [open, setOpen] = useState(!compact);
+  const blocs = {};
+  (ev.outlets || []).forEach((o) => { (blocs[o.bloc] = blocs[o.bloc] || []).push(o); });
+  return (
+    <View style={{ marginTop: 14 }}>
+      {compact ? (
+        <Pressable onPress={() => setOpen((v) => !v)} hitSlop={6}>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.4, fontWeight: '800' }]}>
+            {(open ? '\u2212 ' : '\u2261 ') + ev.n + ' OUTLETS \u00b7 ' + (ev.blocs || []).join(', ').toUpperCase()}
+          </Text>
+        </Pressable>
+      ) : null}
+      {open ? (
+        <>
+          {Object.keys(blocs).map((b) => (
+            <View key={b} style={{ marginTop: 10 }}>
+              <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 1.2 }]}>{b.toUpperCase()}</Text>
+              {blocs[b].map((o, i) => {
+                const f = o.feats || {};
+                const tags = [f.act ? ACT_NOTE[f.act] || f.act : null]
+                  .concat(['the dead', 'the doers', 'the act', 'the register', 'the captives', 'the war', 'the place']
+                    .flatMap((k) => (f[k] || []).map((v) => '\u201c' + v + '\u201d')))
+                  .concat(f.hedged ? ['hedged: \u201c' + f.hedged + '\u201d'] : [])
+                  .concat(f['the number'] ? [f['the number']] : [])
+                  .filter(Boolean);
+                return (
+                  <Pressable key={i} onPress={() => o.link && Linking.openURL(o.link)} style={{ marginTop: 7 }}>
+                    <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20 }}>
+                      <Text style={[MONO, { color: C.accent, fontSize: 11 }]}>{o.source + '  '}</Text>{decode(o.title)}
+                    </Text>
+                    {tags.length ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 2 }}>{tags.join(' \u00b7 ')}</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+          {(ev.contrasts || []).length ? (
+            <View style={{ marginTop: 12, borderLeftWidth: 2, borderLeftColor: C.accent, paddingLeft: 11 }}>
+              <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '700' }]}>WHERE THEY DIFFER</Text>
+              {ev.contrasts.map((c, i) => (
+                <Text key={i} style={{ color: C.text, fontSize: 13.5, lineHeight: 20, marginTop: 5 }}>{c}</Text>
+              ))}
+            </View>
+          ) : null}
+        </>
+      ) : null}
+    </View>
+  );
+}
+function wordingFor(w, item) {
+  if (!w || !item) return null;
+  const id = storyId(item);
+  return (w.events || []).find((e) => e.card === id) || null;
+}
+function Wording({ w }) {
+  const evs = ((w && w.events) || []).filter((e) => (e.contrasts || []).length).slice(0, 12);
+  if (!evs.length) return null;
+  return (
+    <Section title="The wording" extra={evs.length + ' events'}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
+          One event, every outlet that carried it, and the choices each one made: who is named as having
+          done it, what the dead are called, which word the act gets, whose account is hedged. The same
+          test is applied to all of them, including the ones the desk agrees with. No verdicts here.
+        </Text>
+        {evs.map((ev, i) => (
+          <View key={i} style={{ marginTop: 18, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, paddingTop: i ? 14 : 0 }}>
+            <Text style={{ color: C.text, fontSize: 15.5, lineHeight: 22, fontWeight: '700' }}>{decode(ev.head)}</Text>
+            <WordingEvent ev={ev} compact />
+          </View>
+        ))}
+        <Text style={[MONO, { color: C.muted, fontSize: 9, letterSpacing: 0.8, marginTop: 16 }]}>
+          {'HEADLINES AS PUBLISHED \u00b7 ' + String((w && w.updated) || '').toUpperCase()}
+        </Text>
+      </View>
+    </Section>
+  );
+}
+
 // ── THE TIME MACHINE — 2026-09-17 (editor: "I like the CPI inflation tracker ... make that interactive,
 // or search a house and see how much it cost in a certain year and what the hourly wage was"). Pick a year
 // and a state: the median house, the hourly wage, a gallon of gas and what $100 bought, then against now,
@@ -3598,7 +3722,7 @@ function Watchlist({ tripwires }) {
 
 // ── DATA — the reference layer: who the players are, what the countries measure, what is physically
 // happening, and what the money is doing. No forecasts here and no essays; those have their own tabs. ──
-function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, picks, setPickFor, res }) {
+function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, picks, setPickFor, res, wording }) {
   const [region, setRegion] = useState('ALL');
   const [fullRead, setFullRead] = useState(false);
   const actorText = (a) => a.n + ' ' + a.r + ' ' + (a.w || '');
@@ -3609,6 +3733,7 @@ function DataTab({ data, easy, world, hist, goArticle, room, quizzes, onQuiz, pi
           to scroll. I like the money reports"). The money leads; the players are a reference list and
           sit at the bottom where a reader goes looking for them. */}
       <Receipts inf={data.inflation} />
+      <Wording w={wording} />
       <TimeMachine />
       <Chokepoints cp={data.chokepoints} />
       {data.plumbing ? <RedBoard board={data.plumbing.board} /> : null}
@@ -3982,7 +4107,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
           {live.filter(({ s: c }) => movesOf(c).length).map(({ s: c, i }, j) => (
             <View key={j} style={{ marginTop: j ? 18 : 0 }}>
               <Pressable onPress={() => goArticle && goArticle(i)}><Text style={ROOM_H}>{articleParts(c).head}</Text></Pressable>
-              <ChairGame item={c} id={storyId(c)} picks={picks} setPickFor={setPickFor} res={res} compact />
+              <ChairGame item={c} id={storyId(c)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} compact />
             </View>
           ))}
         </Explainer>
@@ -4027,7 +4152,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
           </Pressable>
         ))}
       </ScrollView>
-      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /> : (
+      {cur ? <SituationRoom sit={cur} sources={(hist && hist.sources) || {}} cards={cards} goArticle={goArticle} quizResult={(quizzes || {})[room]} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /> : (
         <View style={{ paddingHorizontal: 16, paddingBottom: 10 }}>
           {keys.map((k) => {
             const n = roomCards(k, cards || []).length;
@@ -4048,7 +4173,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
 // ── ARTICLE HOST — one story, opened from ANY tab (headlines, boards, strategy, search), rendered above
 // that tab so Back returns to where the reader was. Prev/next walk the whole wire, newest first. ──
 function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, saved, toggleSave, markRead,
-                       tsize, onSize, theme, onTheme, level, onLevel, picks, setPickFor, res }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, picks, setPickFor, res, wording }) {
   const rows = briefSorted(data.brief);
   const at = rows.findIndex(({ i }) => i === article);
   if (at < 0) { return <Text style={s.foot}>That story is no longer on the wire.</Text>; }
@@ -4064,7 +4189,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
       specMatches={storySpec(data.speculation, item)}
       chatter={data.chatter}
       isSaved={!!saved[id]} onSave={() => toggleSave(id)}
-      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res}
+      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording}
       tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
       prev={at > 0 ? rows[at - 1] : null}
       next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -4271,6 +4396,7 @@ export default function App() {
   // YOUR CALL: the reader's scenario picks, per device, and the desk's resolutions from the feed
   const [picks, setPicks] = useState({});
   const [res, setRes] = useState(null);
+  const wording = useWording();
   useEffect(() => {
     AsyncStorage.getItem(PICKS_KEY).then((v) => { try { if (v) setPicks(JSON.parse(v)); } catch (e) {} }).catch(() => {});
     AsyncStorage.getItem(RES_CACHE_KEY).then((v) => { try { if (v) setRes((cur) => cur || JSON.parse(v)); } catch (e) {} }).catch(() => {});
@@ -4428,7 +4554,7 @@ export default function App() {
             onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {article != null ? (
               <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
-                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res}
+                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res} wording={wording}
                 tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />
             ) : searching ? (
               <SearchScreen data={data} query={query} setQuery={setQuery}
@@ -4436,11 +4562,11 @@ export default function App() {
             ) : (
               <>
                 {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
-                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} />}
+                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} goBoard={null} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
-                {tab === 'rooms' && <TocHost><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /></TocHost>}
-                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} /></TocHost>}
+                {tab === 'rooms' && <TocHost><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
+                {tab === 'data' && <TocHost><DataTab data={data} easy={easy} world={world} hist={hist} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} wording={wording} /></TocHost>}
               </>
             )}
             <LegalFooter />
