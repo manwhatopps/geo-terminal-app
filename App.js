@@ -2857,57 +2857,63 @@ const BUCKETS = [{ lab: 'THE NEXT TWO WEEKS', sub: 'resolve inside a fortnight',
 // One call, written out. The number never appears without the position that produced it (L14), which
 // is why FOR and BUT are printed here rather than hidden behind the row.
 function CallRow({ x, goArticle, lede, pick, hasScenarios }) {
-  // The claim first, then why the desk believes it, then the number and the date - in that order. A row
-  // that opens with "LIKELY · BY 26 SEP · 8 DAYS" is a betting slip; the desk's product is the argument.
+  // 2026-09-18 (editor: "calls are still showing too long of articles, there's still too much going on",
+  // pointing at Index Briefing). Their discipline: an INDEX row is a label, a headline and one line. The
+  // body lives in the piece. Every call here was carrying four paragraphs in the list, so fourteen rows
+  // read as fourteen articles. Closed: label, claim, one line. Open: the whole argument.
   const hs = lede ? 25 : 19.5;
   const [open, setOpen] = useState(!!lede);
   const body = { fontSize: 15, lineHeight: 23, marginTop: 9, marginBottom: 0 };
   const tag = (color) => [MONO, { color, fontSize: 10, letterSpacing: 1.1, fontWeight: '800' }];
+  const dek = String(x.pro || x.hinge || x.update || '');
   return (
-    <View style={{ borderTopWidth: lede ? 0 : 1, borderTopColor: C.line, paddingHorizontal: 16, paddingTop: lede ? 0 : 16, paddingBottom: lede ? 0 : 18 }}>
+    <View style={{ borderTopWidth: lede ? 0 : 1, borderTopColor: C.line, paddingHorizontal: 16, paddingTop: lede ? 0 : 15, paddingBottom: lede ? 0 : 16 }}>
+      <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.2, fontWeight: '700', marginBottom: 6 }]}>
+        <Text style={{ color: C.accent }}>{oddsWord(x.p)}</Text>
+        <Text style={{ color: C.muted }}>{'  \u00b7  ' + [fmtDue(x.due), String(x.theatre || '').toUpperCase()].filter(Boolean).join('  \u00b7  ')}</Text>
+      </Text>
       <Pressable onPress={() => goArticle && goArticle(x.idx)}>
         <Text style={[SERIF, { color: C.text, fontSize: hs, lineHeight: Math.round(hs * 1.34), fontWeight: '600' }]}>{decode(x.event)}</Text>
       </Pressable>
-      {x.pro ? <Text style={[s.p, body]}><Text style={tag(C.calm)}>{'FOR  '}</Text>{decode(String(x.pro))}</Text> : null}
-      {x.con ? <Text style={[s.p, body]}><Text style={tag(C.crit)}>{'BUT  '}</Text>{decode(String(x.con))}</Text> : null}
-      {open ? (
+      {!open ? (
+        dek ? <Text style={{ color: C.muted, fontSize: 14, lineHeight: 20.5, marginTop: 6 }} numberOfLines={2}>{decode(dek)}</Text> : null
+      ) : (
         <>
+          {x.pro ? <Text style={[s.p, body]}><Text style={tag(C.calm)}>{'FOR  '}</Text>{decode(String(x.pro))}</Text> : null}
+          {x.con ? <Text style={[s.p, body]}><Text style={tag(C.crit)}>{'BUT  '}</Text>{decode(String(x.con))}</Text> : null}
           {x.hinge ? <Text style={[s.p, body]}><Text style={tag(C.accent)}>{"CAN'T OR WON'T  "}</Text>{decode(x.hinge)}</Text> : null}
           {x.ends ? <Text style={[s.p, body]}><Text style={tag(C.accent)}>{'HOW THIS ENDS  '}</Text>{decode(x.ends)}</Text> : null}
           {x.update ? <Text style={[s.p, { ...body, color: C.muted }]}>{decode(x.update)}</Text> : null}
         </>
-      ) : null}
-      {!open && (x.hinge || x.ends || x.update) ? (
-        <Pressable onPress={() => setOpen(true)} hitSlop={6} style={{ marginTop: 10 }}>
-          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{'\u2261 THE REASONING'}</Text>
-        </Pressable>
-      ) : null}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 13 }}>
-        <Text style={[MONO, { fontSize: 9.5, letterSpacing: 1.1, fontWeight: '700' }]}>
-          <Text style={{ color: C.accent }}>{oddsWord(x.p)}</Text>
-          <Text style={{ color: C.muted }}>
-            {'  \u00b7  ' + [fmtDue(x.due), inDays(x.days).toUpperCase(), x.conf ? String(x.conf).toUpperCase() + ' CONFIDENCE' : null,
-              String(x.theatre || '').toUpperCase()].filter(Boolean).join('  \u00b7  ')}
-          </Text>
-        </Text>
-        {x.also ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>{'+' + x.also + ' MORE ' + (x.also === 1 ? 'STORY' : 'STORIES') + ' TURN ON THIS'}</Text> : null}
-        {x.clock ? (
-          <Text style={[MONO, { color: C.high, fontSize: 9.5, letterSpacing: 1.1 }]}>
-            {'SETTLED BY ' + String(x.clock.label || '').toUpperCase() + ' ' + String(x.clock.date || '').slice(5)}
+      )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14, marginTop: open ? 12 : 8 }}>
+        {!lede ? (
+          <Pressable onPress={() => setOpen((v) => !v)} hitSlop={8}>
+            <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{open ? '\u2212 LESS' : '\u2261 THE REASONING'}</Text>
+          </Pressable>
+        ) : null}
+        {open ? (
+          <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 1.1 }]}>
+            {[inDays(x.days).toUpperCase(), x.conf ? String(x.conf).toUpperCase() + ' CONFIDENCE' : null,
+              x.also ? '+' + x.also + ' MORE ' + (x.also === 1 ? 'STORY' : 'STORIES') : null,
+              x.clock ? 'SETTLED BY ' + String(x.clock.label || '').toUpperCase() : null].filter(Boolean).join('  \u00b7  ')}
           </Text>
         ) : null}
-        {hasScenarios && !x.long ? (
+        {open && hasScenarios && !x.long ? (
           <Pressable onPress={() => goArticle && goArticle(x.idx)} hitSlop={6}>
             <Text style={[MONO, { color: pick ? C.calm : C.high, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{pick ? 'YOUR CALL \u00b7 ' + pick.k + ' ' + pick.conf + '%' : 'MAKE YOUR CALL \u203a'}</Text>
           </Pressable>
         ) : null}
-        <Pressable onPress={() => goArticle && goArticle(x.idx)} hitSlop={6}>
-          <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'THE STORY \u203a'}</Text>
-        </Pressable>
+        {open ? (
+          <Pressable onPress={() => goArticle && goArticle(x.idx)} hitSlop={6}>
+            <Text style={[MONO, { color: C.accent, fontSize: 9.5, letterSpacing: 1.1, fontWeight: '800' }]}>{'THE STORY \u203a'}</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
 }
+
 
 
 // The page opens the way a front page does: one thing, said properly.
