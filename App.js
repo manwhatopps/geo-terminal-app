@@ -1211,6 +1211,38 @@ function DecodePanel({ dec }) {
           <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6, marginBottom: 0 }]}>{decode(dec.kill)}</Text>
         </>
       ) : null}
+      <ReaderCard />
+    </View>
+  );
+}
+
+// ── THE READER'S CARD — 2026-09-18 (the editor's field card, the reader's half). The desk decodes;
+// the reader should be able to do it without the desk. Standing text, ships with the app, one fold. ──
+const READER_CARD = [
+  ['THE FIRST 8 SECONDS', 'Headline, subhead, first sentence, photo. That package is the frame - most readers never get past it.'],
+  ['THE FOUR QUESTIONS', 'Every story quietly answers: what is the problem, who caused it, who is good or bad, and what must be done now. Find the four and you have the frame.'],
+  ['THE NOUN IS THE ARGUMENT', 'Children / minors / youths / young adults / military-age males name the same people and decide their innocence. Terrorist / militant / fighter / resistance decide their legitimacy. Demand the number; if it is missing, the noun is doing the work.'],
+  ['WHO DID IT', 'Active names a doer. "Was hit" keeps the act and loses the actor. "Clashes erupted" turns a decision into weather. Ask whether every sentence about harm has someone in it.'],
+  ['THE SPEECH VERB', 'Says is neutral. Claims plants doubt. Insists sounds cornered. Admits implies concealment. Lashes out makes a speaker irrational. Warns and vows lend authority. Notice which side gets which.'],
+  ['WHO GETS DOUBTED', 'Which figures arrive as fact and which as "reportedly", "alleged", "the Hamas-run ministry says"? Scepticism is good. Scepticism applied to one ledger only is the frame.'],
+  ['WHEN HISTORY STARTS', 'A story that begins at the other side\u2019s latest act has chosen its origin. Ask what the clause before "after" leaves out: the other side\u2019s dead, the rejected terms, the sponsors.'],
+  ['SWAP THE FLAGS', 'Read the same sentence with the sides exchanged. What changed in your body before anything changed in the facts? That is the device.'],
+];
+function ReaderCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12 }}>
+      <Pressable onPress={() => setOpen((v) => !v)} hitSlop={6}>
+        <Text style={[MONO, { color: C.accent, fontSize: 10.5, letterSpacing: 1.6, fontWeight: '800' }]}>
+          {(open ? '\u25be' : '\u25b8') + '  HOW TO READ A HEADLINE YOURSELF'}
+        </Text>
+      </Pressable>
+      {open ? READER_CARD.map(([h, p], i) => (
+        <View key={h} style={{ marginTop: 12 }}>
+          <Text style={[MONO, { color: C.text, fontSize: 10, letterSpacing: 1.4, fontWeight: '800' }]}>{h}</Text>
+          <Text style={{ color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 4 }}>{p}</Text>
+        </View>
+      )) : null}
     </View>
   );
 }
