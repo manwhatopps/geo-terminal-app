@@ -36,6 +36,9 @@ function mergeWire(cur, older) {
   return { ...cur, brief, easy: { ...(cur.easy || {}), brief: brief.map((st, i) => st.easy || ((cur.easy || {}).brief || [])[i] || '') } };
 }
 const HISTORY_CACHE_KEY = 'geo-history-cache-v1';
+// 2026-09-18: the chart library (series.py) - a year of each series the desk writes about, keyless FRED
+const SERIES_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/series.json';
+const SERIES_CACHE_KEY = 'geo-series-cache-v1';
 const ACK_KEY = 'geo-disclaimer-ack-v1';
 const MODE_KEY = 'geo-mode';
 const FEED_CACHE_KEY = 'geo-feed-cache-v1'; // last good feed: the app opens on it, then refreshes
@@ -304,6 +307,9 @@ const TABS = [
   // accordion that re-rendered STRATEGY inside itself. Split by the question each tab answers:
   // CALLS = what does the desk predict and is it any good. DATA = what are the underlying numbers.
   { key: 'calls', label: 'CALLS', g: '◉' },
+  // 2026-09-18 (editor): "get rid of history tab and do a money or finance tab". The numbers the
+  // calls turn on - prices, yields, the receipts, the charts - get one home.
+  { key: 'money', label: 'MONEY', g: '$' },
   // 2026-09-17 (editor): the rooms are their own thing, not a section of DATA - DATA opens on the receipts
 ];
 // 2026-09-14 (later): the WORLD tab lasted one build. User: "I didn't want a world menu necessarily, I wanted you to
@@ -516,7 +522,7 @@ function sectionize(txt) {
   }
   return out.filter((x) => x.p);
 }
-function Sections({ items, size, color, refs }) {
+function Sections({ items, size, color, refs, after }) {
   if (!items || !items.length) return null;
   const fs = size || 17, lh = Math.round(fs * 1.62);
   return (
@@ -537,6 +543,7 @@ function Sections({ items, size, color, refs }) {
             )) : paragraphs(decode(sec.p)).map((para, j) => (
               <Text key={j} style={[s.ctxP, T(fs, lh), j > 0 && { marginTop: 10 }]}>{para}</Text>
             ))}
+            {after && after[String(sec.h || '').trim().toUpperCase()] ? after[String(sec.h || '').trim().toUpperCase()] : null}
           </View>
         );
       })}
@@ -1299,7 +1306,7 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
 
 function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
-                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording, series }) {
   const { head, stand, longHead } = articleParts(item);
   const secRefs = useRef([]);
   const wordEv = wordingFor(wording, item);
@@ -1329,6 +1336,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
   const known = CORE_READS.concat(DOOR_READS.analyst, DOOR_READS.decode);
   const strayRead = readAll.filter((x) => known.indexOf(hOf(x)) < 0);
   const shownRead = coreRead.length ? coreRead : readAll;
+  const hasNumbers = shownRead.some((x) => hOf(x) === 'THE NUMBERS');   // the chart sits under the numbers it draws
   const [pane, setPane] = useState(null);
   const cardRef = useRef(null);   // the off-screen SVG the share card rasterises from           // 'analyst' | 'consp' | null
   const conspItems = chatterFor(item);
@@ -1534,7 +1542,9 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {!simple && shownRead.length ? (
           <>
             <Text style={[s.storyP, T(18, 30), { marginBottom: 6 }]}>{decode(item.t || '')}</Text>
-            <Sections items={shownRead} size={18} refs={secRefs} />
+            <Sections items={shownRead} size={18} refs={secRefs}
+              after={hasNumbers ? { 'THE NUMBERS': <ArticleCharts charts={item.charts} series={series} /> } : null} />
+            {!hasNumbers ? <ArticleCharts charts={item.charts} series={series} /> : null}
           </>
         ) : (
           <>
@@ -1999,7 +2009,7 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
           boards first, the wire last - because the wire has its own tab and this is the front page. */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
         {tile('news', '▤', 'NEWS', cards.length, 'stories on the wire')}
-        {tile('rooms', '\u25eb', 'HISTORY', Object.keys((hist && hist.situations) || {}).length || '\u00b7', 'how each war got here')}
+        {tile('money', '$', 'MONEY', ((data.plumbing || {}).series || []).length || '\u00b7', 'prices, yields and the receipts')}
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'what the mainstream will not print')}
         {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'where this is all going, and why')}
       </View>
@@ -2184,7 +2194,7 @@ function chipsOf(items, valueOf) {
   return [...c.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop,
+function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop, series,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
                    older, loadOlder, picks, setPickFor, res, wording }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
@@ -2233,7 +2243,7 @@ function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop,
         calls={regionForecasts(data, item.region)}
         specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
-        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} onSave={() => toggleSave(id)}
+        isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series} onSave={() => toggleSave(id)}
         tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -2729,12 +2739,8 @@ function BoardsTab({ data, goArticle, wording }) {
           measurements that answer it - the official number beside the independent ones, the transit
           counts that decide whether a strait is actually shut, and how each outlet worded the same
           event. They were sitting on a tab of their own where nobody had a reason to go. */}
-      <Section title="The measurements" extra="what the numbers say" fold>
-        <Receipts inf={data.inflation} />
-        <TimeMachine />
-        <Chokepoints cp={data.chokepoints} />
-        <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
-      </Section>
+      {/* 2026-09-18: the receipts, the time machine and the chokepoints moved to MONEY, their one home. */}
+      <Wording w={wording} goArticle={goArticle} cards={(data && data.brief) || []} />
     </View>
   );
 }
@@ -3212,13 +3218,86 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
         </Section>
       ) : null}
       <Watchlist tripwires={data.tripwires} />
-      {/* 2026-09-18: from the retired DATA tab. CALLS asks what happens next and when, so the dated
-          decisions the book turns on and the money the calls depend on belong here, beside them. */}
+      {/* 2026-09-18: the dated decisions the book turns on stay beside the calls; the money moved to its
+          own tab. */}
       <Calendar clocks={data.clocks} />
-      {data.plumbing ? (
-        <Section title="The money" extra={data.plumbing.stage ? 'live' : ''}>
+      <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
+    </View>
+  );
+}
+
+
+// ── THE CHARTS — 2026-09-18 (editor: "see if you can also include graphs in articles if needed").
+// A line earns its place when it says what the sentence cannot: a break, a level not seen since, a
+// trend the headline hides. series.py publishes a year of each series the desk writes about (FRED,
+// keyless, weekly points); a card points at one with `charts: [{id, note}]` and the app draws it. The
+// desk never draws a chart and never invents a number - the line is the source's own. ──
+function fmtV(v, unit) {
+  if (v == null || !Number.isFinite(Number(v))) return '\u2014';
+  const n = Number(v);
+  const s2 = Math.abs(n) >= 1000 ? Math.round(n).toLocaleString() : Math.abs(n) >= 100 ? n.toFixed(1) : n.toFixed(2);
+  return unit === '%' || unit === 'pp' ? s2 + (unit === '%' ? '%' : ' pp') : unit && /USD/.test(unit) && !/mn/.test(unit) ? '$' + s2 : s2;
+}
+function SeriesChart({ sr, note, why }) {
+  if (!sr || !Array.isArray(sr.values) || sr.values.length < 8) return null;
+  const up = sr.chg_1m != null ? sr.chg_1m > 0 : null;
+  const badFor = /yield|spread|VIX|volatil|CPI|unemploy|crude|gas|dollar/i.test(sr.label);   // up is the worrying direction for these
+  const col = up == null ? C.muted : (up === badFor ? C.high : C.calm);
+  const d0 = String((sr.dates || [])[0] || '').slice(0, 7), d1 = String(sr.asof || '').slice(0, 10);
+  return (
+    <View style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.2, fontWeight: '800', flex: 1 }]}>{String(sr.label || '').toUpperCase()}</Text>
+        <Text style={[MONO, { color: C.text, fontSize: 15, fontWeight: '800' }]}>{fmtV(sr.last, sr.unit)}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 }}>
+        <Text style={[MONO, { color: C.muted, fontSize: 9.5, letterSpacing: 0.8 }]}>{sr.src + ' \u00b7 ' + d0 + ' \u2192 ' + d1}</Text>
+        <Text style={[MONO, { color: col, fontSize: 10.5, fontWeight: '800' }]}>
+          {(sr.pct_1m != null ? (sr.pct_1m > 0 ? '+' : '') + sr.pct_1m + '% 1M' : '') + (sr.pct_1y != null ? '  \u00b7  ' + (sr.pct_1y > 0 ? '+' : '') + sr.pct_1y + '% 1Y' : '')}
+        </Text>
+      </View>
+      <View style={{ marginTop: 8 }}><Sparkline hist={sr.values} w={320} h={54} hit={up === badFor && up != null} /></View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+        <Text style={[MONO, { color: C.muted, fontSize: 9 }]}>{'LOW ' + fmtV(sr.lo, sr.unit)}</Text>
+        <Text style={[MONO, { color: C.muted, fontSize: 9 }]}>{'HIGH ' + fmtV(sr.hi, sr.unit)}</Text>
+      </View>
+      {note ? <Text style={[s.p, { fontSize: 14.5, lineHeight: 21, marginTop: 8, marginBottom: 0 }]}>{decode(note)}</Text> : null}
+      {why && sr.why ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>{sr.why}</Text> : null}
+    </View>
+  );
+}
+function ArticleCharts({ charts, series }) {
+  const lib = (series && series.series) || {};
+  const rows = (Array.isArray(charts) ? charts : []).filter((c) => c && lib[c.id]).slice(0, 2);
+  if (!rows.length) return null;
+  return (
+    <View style={{ marginTop: 14, marginBottom: 6 }}>
+      {rows.map((c, i) => <SeriesChart key={c.id + i} sr={lib[c.id]} note={c.note} />)}
+    </View>
+  );
+}
+
+// ── MONEY — 2026-09-18 (editor: "get rid of history tab and do a money or finance tab"). One home for
+// the numbers: the desk's read of the tape, the live prints, the charts, the receipts, and the calls
+// from the book that turn on money. Everything here used to be folded under CALLS or BOARDS. ──
+const MONEY_LEAD = ['DGS10', 'DCOILBRENTEU', 'DTWEXBGS', 'T10Y2Y', 'VIXCLS', 'BAMLH0A0HYM2'];
+function MoneyTab({ data, series, goArticle }) {
+  const [fullRead, setFullRead] = useState(false);
+  const [more, setMore] = useState(false);
+  const pl = data.plumbing || {};
+  const lib = (series && series.series) || {};
+  const lead = MONEY_LEAD.filter((k) => lib[k]);
+  const rest = Object.keys(lib).filter((k) => MONEY_LEAD.indexOf(k) < 0);
+  const cards = data.brief || [];
+  const money = (data.forecasts || [])
+    .filter((f) => f && f.q && domainOf(String(f.q), '') === 'MONEY')
+    .slice(0, 8);
+  return (
+    <View style={s.stack}>
+      {pl.read ? (
+        <Section title="The tape" extra={pl.stage ? 'live' : ''}>
           <View style={{ paddingHorizontal: 16 }}>
-            <Text style={s.p} numberOfLines={fullRead ? undefined : 4}>{decode(easy && data.easy ? data.easy.markets : data.plumbing.read)}</Text>
+            <Text style={s.p} numberOfLines={fullRead ? undefined : 6}>{decode(pl.read)}</Text>
             <Pressable onPress={() => setFullRead((v) => !v)} hitSlop={6} style={{ marginTop: 8 }}>
               <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS \u2039' : 'READ THE FULL READ \u203a'}</Text>
             </Pressable>
@@ -3228,11 +3307,42 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
               </Text>
             ) : null}
           </View>
-          <RedBoard board={data.plumbing.board} bare />
-          <LiveWatchlist items={data.plumbing.series} bare />
+          <RedBoard board={pl.board} bare />
+          <LiveWatchlist items={pl.series} bare />
         </Section>
       ) : null}
-      <Text style={s.foot}>Probabilities are subjective estimates and will often be wrong — that's the point of keeping score. Not advice.</Text>
+      {lead.length ? (
+        <Section title="The charts" extra={(series && series.asof) || ''}>
+          <View style={{ paddingHorizontal: 16 }}>
+            {lead.map((k) => <SeriesChart key={k} sr={lib[k]} why />)}
+            {more ? rest.map((k) => <SeriesChart key={k} sr={lib[k]} why />) : null}
+            {rest.length ? (
+              <Pressable onPress={() => setMore((v) => !v)} hitSlop={6} style={{ paddingVertical: 12 }}>
+                <Text style={[s.readmore, MONO]}>{more ? 'FEWER CHARTS \u2039' : rest.length + ' MORE CHARTS \u203a'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Section>
+      ) : null}
+      <Receipts inf={data.inflation} />
+      <TimeMachine />
+      <Chokepoints cp={data.chokepoints} />
+      {money.length ? (
+        <Section title="The money calls" extra={money.length + ' from the book'}>
+          <View style={{ paddingHorizontal: 12 }}>
+            {money.map((f, i) => {
+              const idx = cards.findIndex((c) => c && c.hist && c.hist.call && c.hist.call.event === f.q);
+              return (
+                <Pressable key={i} onPress={() => idx >= 0 && goArticle(idx)} style={s.hrow} disabled={idx < 0}>
+                  <Text style={s.hrowKick}>{oddsWord(Number(f.p) || 0) + (f.by ? '  \u00b7  BY ' + String(f.by).toUpperCase() : '')}</Text>
+                  <Text style={[s.hrowH, T(19, 25)]}>{decode(f.q)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+      ) : null}
+      <Text style={s.foot}>Prices from exchanges and FRED, each with its own timestamp. Not advice.</Text>
     </View>
   );
 }
@@ -4618,7 +4728,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
 // ── ARTICLE HOST — one story, opened from ANY tab (headlines, boards, strategy, search), rendered above
 // that tab so Back returns to where the reader was. Prev/next walk the whole wire, newest first. ──
 function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, saved, toggleSave, markRead,
-                       tsize, onSize, theme, onTheme, level, onLevel, picks, setPickFor, res, wording }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, picks, setPickFor, res, wording, series }) {
   const rows = briefSorted(data.brief);
   const at = rows.findIndex(({ i }) => i === article);
   if (at < 0) { return <Text style={s.foot}>That story is no longer on the wire.</Text>; }
@@ -4634,7 +4744,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
       specMatches={storySpec(data.speculation, item)}
       chatter={data.chatter}
       isSaved={!!saved[id]} onSave={() => toggleSave(id)}
-      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording}
+      pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series}
       tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
       prev={at > 0 ? rows[at - 1] : null}
       next={at < rows.length - 1 ? rows[at + 1] : null}
@@ -4915,6 +5025,7 @@ export default function App() {
   // pull-to-refresh while it is open). Each falls back to its last cached copy, like the main feed.
   const [world, setWorld] = useState(null);
   const [hist, setHist] = useState(null);
+  const [series, setSeries] = useState(null);
   const [worldErr, setWorldErr] = useState(null);
   const loadWorld = useCallback(async () => {
     const pull = async (url, key, set) => {
@@ -4929,7 +5040,7 @@ export default function App() {
         return String(e.message || e);
       }
     };
-    const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist)]);
+    const errs = await Promise.all([pull(WORLD_URL, WORLD_CACHE_KEY, setWorld), pull(HISTORY_URL, HISTORY_CACHE_KEY, setHist), pull(SERIES_URL, SERIES_CACHE_KEY, setSeries)]);
     setWorldErr(errs.find(Boolean) || null);
   }, []);
   // 2026-09-18: the history used to load only when its tab opened, so HOME advertised "ROOMS 0" - the
@@ -4947,7 +5058,7 @@ export default function App() {
       setOlder('done');
     } catch (e) { setOlder('error'); }
   }, []);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'rooms') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'money') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
 
   if (acked === null) {
     return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
@@ -4998,7 +5109,7 @@ export default function App() {
             onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {article != null ? (
               <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
-                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res} wording={wording}
+                read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series}
                 tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />
             ) : searching ? (
               <SearchScreen data={data} query={query} setQuery={setQuery}
@@ -5006,10 +5117,11 @@ export default function App() {
             ) : (
               <>
                 {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
-                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />}
+                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} wording={wording} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
-                {tab === 'rooms' && <TocHost><SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes} onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} data={data} world={world} /></TocHost>}
+                {/* 2026-09-18: HISTORY (SituationRooms) left the nav at the editor's word; MONEY took its place. */}
+                {tab === 'money' && <TocHost><MoneyTab data={data} series={series} goArticle={goArticle} /></TocHost>}
                               </>
             )}
           </ScrollView>

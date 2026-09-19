@@ -78,7 +78,7 @@ await page.waitForTimeout(3000);
 
 // TABS TO VISIT — a refactor that moves components between tabs compiles fine and still crashes the
 // tab it broke. Landing on HOME proves nothing about the other four.
-const tabs = ['NEWS', 'BOARDS', 'CALLS', 'HISTORY'];
+const tabs = ['NEWS', 'BOARDS', 'CALLS', 'MONEY'];
 const perTab = [];
 for (const t of tabs) {
   const b = page.getByText(t, { exact: true }).last();
