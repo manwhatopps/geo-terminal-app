@@ -1224,6 +1224,30 @@ function DecodePanel({ dec }) {
           ) : null}
         </>
       ) : null}
+      {/* 2026-09-18: MODULE COMMAND - bias has an address. The outlet's class and voting owner, the
+          conflict-zone flag, what the stack explains and what it cannot, and the outlet that would run
+          the opposite frame. The owner is the weather; the copy is the rain. */}
+      {dec.command && (dec.command.cls || dec.command.owner) ? (
+        <>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>THE STACK</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 7 }}>
+            {dec.command.cls ? <Text style={[MONO, { color: C.text, fontSize: 10.5, letterSpacing: 1.2, fontWeight: '800', marginRight: 10 }]}>{'CLASS ' + String(dec.command.cls).toUpperCase()}</Text> : null}
+            {dec.command.flag ? (
+              <Text style={[MONO, { color: String(dec.command.flag).toUpperCase() === 'RED' ? C.crit : String(dec.command.flag).toUpperCase() === 'AMBER' ? C.elev : C.calm, fontSize: 10.5, letterSpacing: 1.2, fontWeight: '800', marginRight: 10 }]}>
+                {String(dec.command.flag).toUpperCase() + ' FLAG'}
+              </Text>
+            ) : null}
+          </View>
+          {[['THE OWNER', dec.command.owner], ['THE BYLINE', dec.command.author], ['THE SACRED COW', dec.command.cow],
+            ['WHAT THE STACK EXPLAINS', dec.command.explains], ['WHAT IT CANNOT', dec.command.cannot], ['WOULD RUN THE OPPOSITE', dec.command.opposite]]
+            .filter(([, v]) => v).map(([k, v]) => (
+              <Text key={k} style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 7, marginBottom: 0 }]}>
+                <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{k + '  '}</Text>
+                {decode(String(v))}
+              </Text>
+            ))}
+        </>
+      ) : null}
       {(dec.angles || []).length ? (
         <>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>WHO GAINS, WHO PAYS</Text>
@@ -3749,7 +3773,13 @@ function WordingEvent({ ev, compact }) {
                 return (
                   <Pressable key={i} onPress={() => o.link && Linking.openURL(o.link)} style={{ marginTop: 7 }}>
                     <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20 }}>
-                      <Text style={[MONO, { color: C.accent, fontSize: 11 }]}>{o.source + '  '}</Text>{decode(o.title)}
+                      <Text style={[MONO, { color: C.accent, fontSize: 11 }]}>{o.source + '  '}</Text>
+                      {o.command && o.command.cls ? (
+                        <Text style={[MONO, { color: String(o.command.flag) === 'RED' ? C.crit : String(o.command.flag) === 'AMBER' ? C.elev : C.muted, fontSize: 9.5, letterSpacing: 1 }]}>
+                          {'[' + String(o.command.cls) + (o.command.flag && o.command.flag !== 'GREEN' ? ' \u00b7 ' + String(o.command.flag) : '') + ']  '}
+                        </Text>
+                      ) : null}
+                      {decode(o.title)}
                     </Text>
                     {tags.length ? <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 2 }}>{tags.join(' \u00b7 ')}</Text> : null}
                     {also ? <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: 2 }]}>{also.toUpperCase()}</Text> : null}
