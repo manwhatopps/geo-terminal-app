@@ -1306,6 +1306,16 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
   const dc = decodeOf(item);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
+  // 2026-09-18: A NEWS ARTICLE IS THREE TO FIVE READS. The desk still writes all nine; these are the
+  // ones that sit on the page. The rest move inside the ANALYST door - reasoning a reader asks for, not
+  // reasoning they scroll past - which also ends DECODE's who-gains-who-pays being a second copy.
+  const CORE_READS = ['WHAT HAPPENED', 'WHY IT MATTERS', 'THE NUMBERS', 'WHAT HAPPENS NEXT',
+                      "WHAT WE DON'T KNOW"];
+  const readAll = Array.isArray(item.read) ? item.read : [];
+  const isCore = (x) => CORE_READS.indexOf(String((x && x.h) || '').trim().toUpperCase()) >= 0;
+  const coreRead = readAll.filter(isCore);
+  const deepRead = readAll.filter((x) => !isCore(x));
+  const shownRead = coreRead.length ? coreRead : readAll;
   const [pane, setPane] = useState(null);
   const cardRef = useRef(null);   // the off-screen SVG the share card rasterises from           // 'analyst' | 'consp' | null
   const conspItems = chatterFor(item);
@@ -1341,7 +1351,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {stand ? <Text style={[s.artStand, T(17.5, 26)]}>{stand}</Text> : null}
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 14 }]}>{fullStamp(item.ts)}</Text>
-        {!simple && Array.isArray(item.read) ? <Toc items={item.read.map((sec, i) => ({ label: sec.h, get: () => secRefs.current[i] }))} /> : null}
+        {!simple && shownRead.length ? <Toc items={shownRead.map((sec, i) => ({ label: sec.h, get: () => secRefs.current[i] }))} /> : null}
         {/* Three doors at the TOP of every story, before the read: the 30-second version, the desk's
             own analysis and call, and what the boards are saying. The pane opens under the buttons.
             2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
@@ -1463,6 +1473,14 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}>
             <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />
+            {deepRead.length ? (
+              <View style={{ marginTop: 22, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 16 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800', marginBottom: 4 }]}>
+                  THE REST OF THE FILE
+                </Text>
+                <Sections items={deepRead} size={17} />
+              </View>
+            ) : null}
             {item.hist && item.hist.call && item.hist.call.event ? (
               <>
                 <Pressable onPress={() => shareCall(item, cardRef)} style={s.sharebtn}>
@@ -1488,10 +1506,10 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
           </View>
         ) : null}
         {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
-        {!simple && Array.isArray(item.read) && item.read.length ? (
+        {!simple && shownRead.length ? (
           <>
             <Text style={[s.storyP, T(18, 30), { marginBottom: 6 }]}>{decode(item.t || '')}</Text>
-            <Sections items={item.read} size={18} refs={secRefs} />
+            <Sections items={shownRead} size={18} refs={secRefs} />
           </>
         ) : (
           <>
