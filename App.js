@@ -216,6 +216,10 @@ function probsFrom(text) {
     let label = m[1].replace(/^[\s,;.]+|[\s,;.]+$/g, '').replace(/^(?:the )?desk(?:'s)? (?:estimate|call|read|puts?|gives?)( that)?\s*/i, '').replace(/^(?:and|that|is|are|at)\s+/i, '');
     label = label.replace(/\s+(?:at|is|of|to|around|about|near)$/i, '');
     if (!label || label.length < 4) continue;
+    // 2026-09-18: WHAT HAPPENS NEXT printed ">5.25%" and "5.01%" as probability bars - they were yields.
+    const window = t.slice(Math.max(0, m.index), re.lastIndex + 40);
+    if (!/\b(probabilit|chance|odds|likelihood|likely|of the time|desk (?:puts|calls|has))\b/i.test(window)) continue;
+    if (/\b(yield|rate|bill|bond|treasury|year|spread|index|cpi|inflation|growth|gdp|unemployment|price|share|vote)\b[^%]{0,40}$/i.test(m[1]) && /\./.test(m[3])) continue;
     if (label.length > 90) label = '…' + label.slice(-88);
     const q = (m[2] || '').toLowerCase();
     const shown = q === 'under' || q === 'below' || q === 'at most' ? '<' + m[3] + '%' : q === 'over' || q === 'above' || q === 'at least' ? '>' + m[3] + '%' : q ? '~' + m[3] + '%' : m[3] + '%';
@@ -481,7 +485,8 @@ function dayLabel(ts) {
 // The body a given reading level should see (unchanged rules, moved off the card).
 // Split a 2-4 sentence block into paragraphs of ~2 sentences so the page has air in it.
 function paragraphs(txt) {
-  const sents = String(txt || '').match(/[^.!?]+[.!?]+["')\]]*\s*/g) || [String(txt || '')];
+  // 2026-09-18: a full stop followed by a digit is a decimal point (5.01%), not the end of a sentence
+  const sents = String(txt || '').match(/(?:[^.!?]|[.!?](?=\d))+[.!?]+["')\]]*\s*/g) || [String(txt || '')];
   const out = [];
   for (let i = 0; i < sents.length; i += 2) out.push(sents.slice(i, i + 2).join('').trim());
   return out.filter(Boolean);
