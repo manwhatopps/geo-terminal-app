@@ -1541,17 +1541,17 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         <View style={s.artrule} />
         <Text style={[s.stime, MONO, { marginBottom: 14 }]}>{fullStamp(item.ts)}</Text>
         {!simple && shownRead.length ? <Toc items={shownRead.map((sec, i) => ({ label: sec.h, get: () => secRefs.current[i] }))} /> : null}
-        {/* Three doors at the TOP of every story, before the read: the 30-second version, the desk's
-            own analysis and call, and what the boards are saying. The pane opens under the buttons.
-            2026-09-16: SUMMARY added at the editor's request - it needs no new pipeline work, because
-            every card already carries `t` (the desk's 2-4 sentence lede) and `context` (one plain
-            paragraph, no labels). Reading time is measured from the full read, not the summary. */}
-        {/* 2026-09-18: four buttons with titles and subtitles made a wall between the standfirst and
-            the first sentence. The reference the editor sent simply starts reading, so these are one
-            slim line now - the same four ways in, a fraction of the height. */}
+        {/* Three doors at the TOP of every story, before the read: the desk's own analysis and call,
+            how the claim checks out, and what the boards are saying. The pane opens under the buttons.
+            2026-09-18: buttons with titles and subtitles made a wall between the standfirst and the
+            first sentence, so these are one slim line - the same ways in, a fraction of the height.
+            2026-09-19 (editor: "the summary button for news can go since it's already a summary"):
+            SUMMARY removed. It restated what the page already opens with - the headline is `h`, the
+            standfirst and lede are on screen above it - and its cross-links only pointed at the three
+            doors that are still here. `context` now reaches the reader through WHY IT MATTERS in the
+            read (all 120 live cards carry both) and still feeds search. */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
           {[
-            { k: 'sum', label: 'SUMMARY', c: C.calm, on: true },
             { k: 'analyst', label: 'ANALYST', c: C.accent, on: true },
             { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) || decodeRead.length > 0 || !!wordEv },
             { k: 'consp', label: 'BOARDS', c: C.high, on: true },   // 2026-09-18: CIRCULATING was too long for the row; the door is named for the tab it opens
@@ -1565,100 +1565,6 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
             </Pressable>
           ))}
         </View>
-        {pane === 'sum' ? (
-          <View style={[s.storycard, { borderColor: C.calm, marginBottom: 18 }]}>
-            <Text style={[s.ctxlbl, MONO, { color: C.calm }]}>THE STORY IN SHORT</Text>
-            {item.h ? <Text style={[s.p, { marginTop: 8 }]}>{decode(item.h)}</Text> : null}
-            {item.t ? <Text style={[s.p, { marginTop: 10 }]}>{decode(item.t)}</Text> : null}
-            {item.context ? (
-              <>
-                <Text style={[s.ctxlbl, MONO, { color: C.calm, marginTop: 16 }]}>WHY IT MATTERS, PLAINLY</Text>
-                <Text style={[s.p, { marginTop: 6 }]}>{decode(item.context)}</Text>
-              </>
-            ) : null}
-            {/* 2026-09-16 (editor: "this should [be] for the user who wants a summary of the analysis
-                or conspiracy. Summary should have a button for all filters of a news article"). SUMMARY
-                used to summarise the READ alone and then point at the analyst. It now carries a short
-                version of every door on the story - the desk's call with the strongest argument each
-                way, and what the boards are saying - each with the button that opens the full thing.
-                A reader in a hurry gets the whole story here; a reader who wants one part taps it. */}
-            {item.hist && item.hist.call && item.hist.call.event ? (
-              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
-                <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>AND THE DESK'S CALL</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 8 }}>
-                  <Text style={[MONO, { color: C.accent, fontSize: 24, fontWeight: '800', width: 68, lineHeight: 27 }]}>
-                    {Math.round(Number(item.hist.call.p) || 0) + '%'}
-                  </Text>
-                  <Text style={{ color: C.text, fontSize: 15, lineHeight: 21, flex: 1 }}>{decode(item.hist.call.event)}</Text>
-                </View>
-                {(item.hist.for || [])[0] ? (
-                  <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 10, marginBottom: 0 }]}>
-                    <Text style={[MONO, { color: C.calm, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>{'FOR  '}</Text>
-                    {decode(argText(item.hist.for[0]))}
-                  </Text>
-                ) : null}
-                {(item.hist.against || [])[0] ? (
-                  <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 6, marginBottom: 0 }]}>
-                    <Text style={[MONO, { color: C.crit, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>{'BUT  '}</Text>
-                    {decode(argText(item.hist.against[0]))}
-                  </Text>
-                ) : null}
-                <Pressable onPress={() => setPane('analyst')} style={s.sumdoor}>
-                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u25c9  THE FULL ANALYSIS \u203a'}</Text>
-                  <Text style={s.artbtnS}>the record behind it, where it stands, every argument both ways</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {conspItems.length ? (
-              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
-                <Text style={[s.ctxlbl, MONO, { color: C.high }]}>AND WHAT IS CIRCULATING</Text>
-                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
-                  {decode(conspItems[0].head || conspItems[0].claim || '')}
-                </Text>
-                <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, marginTop: 6 }]}>
-                  {'UNVERIFIED \u00b7 ' + (conspItems[0].spread ? decode(String(conspItems[0].spread)).toUpperCase() : 'CIRCULATING')
-                    + (conspItems.length > 1 ? '  \u00b7  ' + (conspItems.length - 1) + ' MORE' : '')}
-                </Text>
-                <Pressable onPress={() => setPane('consp')} style={[s.sumdoor, { borderColor: C.high }]}>
-                  <Text style={[s.artbtnT, MONO, { color: C.high }]}>{'\u260d  THE FULL CONSPIRACY READ \u203a'}</Text>
-                  <Text style={s.artbtnS}>each claim, the mechanism it needs, and what the desk makes of it</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {dc ? (
-              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
-                <Text style={[s.ctxlbl, MONO]}>AND HOW THE CLAIM CHECKS OUT</Text>
-                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
-                  <Text style={[MONO, { color: (VERDICT_META[dc.verdict] || VERDICT_META.partly).c, fontSize: 10, letterSpacing: 1.3, fontWeight: '800' }]}>
-                    {String((VERDICT_META[dc.verdict] || VERDICT_META.partly).label) + '  '}
-                  </Text>
-                  {(dc.angles || [])[0]
-                    ? decode(String((dc.angles[0].party || '') + ' ' + (dc.angles[0].effect || '')).trim())
-                    : decode(String(dc.kill || ''))}
-                </Text>
-                <Pressable onPress={() => setPane('decode')} style={s.sumdoor}>
-                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u25a3  DECODE THE CLAIM \u203a'}</Text>
-                  <Text style={s.artbtnS}>who gains, who pays, and the one thing that would kill this reading</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {wordEv ? (
-              <View style={{ marginTop: 18, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 }}>
-                <Text style={[s.ctxlbl, MONO]}>AND HOW THE PRESS WORDED IT</Text>
-                <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
-                  {decode(wordEv.verdict || (wordEv.n + ' outlets carried this story.'))}
-                </Text>
-                <Pressable onPress={() => setPane('decode')} style={s.sumdoor}>
-                  <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u2337  EVERY HEADLINE, SIDE BY SIDE \u203a'}</Text>
-                  <Text style={s.artbtnS}>the same event in every outlet that ran it, and the choices each one made</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {!item.h && !item.t && !item.context ? (
-              <Text style={[s.foot, { marginTop: 10 }]}>No summary was filed for this story — the full read is below.</Text>
-            ) : null}
-          </View>
-        ) : null}
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}>
             <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />
@@ -5382,11 +5288,10 @@ function buildStyles() {
   backtxt: { color: C.accent, fontSize: 14, fontWeight: '600' },
   article: { paddingHorizontal: 6, paddingTop: 8, paddingBottom: 12 },   // flat: the page IS the panel
   readtime: { color: C.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.8 },
-  // 2026-09-18: up to five doors now (summary, analyst, decode, wording, conspiracy). A minimum width
+  // 2026-09-19: three doors on a story (analyst, decode, boards) since SUMMARY was cut. A minimum width
   // makes them wrap onto a second row instead of shrinking to unreadable slivers on a phone.
   artbtn: { flex: 1, minWidth: 104, borderWidth: 1.5, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: C.panel },
   artbtnOn: { backgroundColor: C.chip },
-  sumdoor: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14 },
   sharebtn: { marginTop: 14, borderWidth: 1, borderColor: C.accentDim, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center' },
   artbtnT: { color: C.accent, fontSize: 10.5, fontWeight: '800', letterSpacing: 0.3 },   // one word per door, one line, never broken (2026-09-17: CONSPIRACY clipped at 0.9 spacing on a 375pt phone)
   artbtnS: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 13.5 },
