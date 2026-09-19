@@ -1367,6 +1367,10 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
   // actual reasoning - whose problem, what they tried, can't or won't, what the pressure buys, which ally
   // wants the opposite, the same play elsewhere, what follows. It leads, because it is the argument; the
   // precedents and the call are what the argument rests on and what it produces.
+  // 2026-09-19: the 15:45 pass wrote `contrarian` at the TOP LEVEL of the card instead of under
+  // `hist`, and the panel read only hist.contrarian - so the desk's own contrarian call rendered
+  // nowhere. Read both; the prompt asks for hist.contrarian and the app no longer cares.
+  const ctr = hist.contrarian || item.contrarian || null;
   const chain = Array.isArray(hist.chain) ? hist.chain.filter((x) => x && x.h && x.p) : [];
   const past = [
     pres.length ? (
@@ -1434,16 +1438,16 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
         <ProbList items={[{ label: decode(hist.long.event), p: Math.max(0, Math.min(100, Number(hist.long.p) || 0)) }]} />
       </View>
     ) : null,
-    hist.contrarian && hist.contrarian.claim ? (
+    ctr && ctr.claim ? (
       <View key="x" style={{ marginTop: 10, borderLeftWidth: 3, borderLeftColor: C.high, paddingLeft: 9 }}>
         <Text style={[s.ctxlbl, MONO, { color: C.high }]}>
-          {'THE OTHER SIDE OF THE TRADE' + (hist.contrarian.who ? ' · ' + hist.contrarian.who : '')}
+          {'THE OTHER SIDE OF THE TRADE' + (ctr.who ? ' · ' + ctr.who : '')}
         </Text>
-        <ProbList color={C.high} items={[{ label: decode(hist.contrarian.claim), p: Math.max(0, Math.min(100, Number(hist.contrarian.p_desk) || 0)), shown: (Number(hist.contrarian.p_desk) || 0) + '%' }]} />
+        <ProbList color={C.high} items={[{ label: decode(ctr.claim), p: Math.max(0, Math.min(100, Number(ctr.p_desk) || 0)), shown: (Number(ctr.p_desk) || 0) + '%' }]} />
         <Text style={[MONO, { color: C.muted, fontSize: 9.5, marginTop: -4 }]}>
-          {"THE DESK'S NUMBER ON THEIR CLAIM" + (hist.contrarian.their_record && hist.contrarian.their_record !== 'no scored record' ? ' · THEIR RECORD: ' + decode(hist.contrarian.their_record) : '')}
+          {"THE DESK'S NUMBER ON THEIR CLAIM" + (ctr.their_record && ctr.their_record !== 'no scored record' ? ' · THEIR RECORD: ' + decode(ctr.their_record) : '')}
         </Text>
-        {hist.contrarian.why ? <Text style={body}>{decode(hist.contrarian.why)}</Text> : null}
+        {ctr.why ? <Text style={body}>{decode(ctr.why)}</Text> : null}
       </View>
     ) : null,
     // 2026-09-18: dec.kill used to print here AND in DECODE under a different heading. The note at the
@@ -2059,10 +2063,6 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
   const lead = cards[0];
   const rc = riskColor[(data.risk || {}).color] || C.elev;
   const boards = cards.filter((c) => c.consp && c.consp.head).slice(0, 3);
-  const essay = (data.essays || []).slice().sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')))[0] || null;
-  const seq = ((data.board || {}).sequence) || [];
-  const seqDone = seq.filter((q) => String(q.status || '').toLowerCase() === 'done').length;
-  const seqOn = seq.filter((q) => String(q.status || '').toLowerCase() === 'underway').length;
   const tile = (key, glyph, label, n, sub) => (
     <Pressable key={key} onPress={() => goTab(key)} style={s.fpTile}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -2139,26 +2139,10 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
       {/* 2026-09-18: the watch list printed here AND on NEWS, and the tripwires on CALLS are a
           third, richer version of it. One thing, one place: it lives on NEWS. */}
 
-      {/* 2026-09-18: HOME was advertising "United Russia wins more than half of Duma seats" at 95% as
-          THE DESK'S SHARPEST CALL - a 7-day card call, the exact class the editor cut ("I don't care if
-          the US renews something for Belarus"). The front page now carries what CALLS actually is: the
-          desk's standing essay and where the thesis stands. */}
-      {essay ? (
-        <Pressable onPress={() => goTab('calls')} style={[s.fpCall, { borderColor: C.accent }]}>
-          <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{'THE DESK WRITES  ·  ' + shortStamp(essay.ts).toUpperCase()}</Text>
-          <Text style={[s.hrowH, SERIF, T(22, 27), { marginTop: 7 }]} numberOfLines={3}>{decode(essay.title || '')}</Text>
-          {essay.dek ? <Text style={{ color: C.muted, fontSize: 14, lineHeight: 20, marginTop: 6 }} numberOfLines={3}>{decode(essay.dek)}</Text> : null}
-          {seq.length ? (
-            <View style={{ marginTop: 12 }}>
-              <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.2 }]}>
-                {seqDone + ' OF ' + seq.length + ' STEPS DONE' + (seqOn ? '  ·  ' + seqOn + ' UNDERWAY' : '')}
-              </Text>
-              <View style={{ marginTop: 7 }}><ProbBar p={Math.round(100 * (seqDone + 0.5 * seqOn) / seq.length)} /></View>
-            </View>
-          ) : null}
-          <Text style={[s.readmore, MONO, { marginTop: 10 }]}>{(essay.words ? essay.words + ' WORDS  ·  ' : '') + 'READ THE ESSAY ›'}</Text>
-        </Pressable>
-      ) : null}
+      {/* 2026-09-19 (editor, of the essay card: "completely get rid of this just use the idea for
+          logic"). HOME carried the standing essay and a steps-done bar for it. The essay is written
+          for Substack, not for the front page, and the thesis it advertised lives where it is used:
+          THE BOARD on CALLS, with the dated calls under it. */}
 
       {/* the story of the day */}
       {lead ? (
@@ -3246,10 +3230,6 @@ function Branches({ items }) {
 }
 function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizzes, hist }) {
   const [region, setRegion] = useState('ALL');
-  // 2026-09-18: CALLS is a Substack. The essays are the page; the sequence and the book are the working.
-  const [essay, setEssay] = useState(null);
-  const essays = (data.essays || []).slice().sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
-  const curEssay = essay != null ? essays[essay] : null;
   const [fullRead, setFullRead] = useState(false);   // the money read, moved here from DATA
   const [sel, setSel] = useState({});
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
@@ -3305,39 +3285,11 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   });
   return (
     <View style={s.stack}>
-      {/* 2026-09-18: CALLS is a Substack, not a dashboard. The editor: "don't make this a header... I want
-          you to write articles like you are writing a Substack article." The essay is the page. The
-          sequence checklist appears only under an open essay as "where this stands", and the forward
-          book follows as the dated calls that would have to come true. */}
-      {curEssay ? (
-        <View style={{ paddingHorizontal: 4, paddingTop: 6 }}>
-          <Pressable onPress={() => setEssay(null)} hitSlop={8} style={{ paddingVertical: 8 }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 10.5, letterSpacing: 1.4, fontWeight: '800' }]}>‹  ALL ESSAYS</Text>
-          </Pressable>
-          <Text style={s.hrowKick}>{'THE DESK  ·  ' + shortStamp(curEssay.ts).toUpperCase()}</Text>
-          <Text style={[s.artH, SERIF, T(30, 37)]}>{decode(curEssay.title || '')}</Text>
-          {curEssay.dek ? <Text style={[s.artStand, T(17.5, 26)]}>{decode(curEssay.dek)}</Text> : null}
-          <View style={{ marginTop: 14 }}>
-            <Sections items={curEssay.read || []} size={17} />
-          </View>
-          <TheBoard board={data.board || null} bare />
-        </View>
-      ) : (
-        <Section title="The desk writes" extra={essays.length + (essays.length === 1 ? ' essay' : ' essays')}>
-          <View style={{ paddingHorizontal: 12 }}>
-            {essays.length ? essays.map((e, i) => (
-              <Pressable key={e.id || i} onPress={() => setEssay(i)} style={s.hrow}>
-                <Text style={s.hrowKick}>{'THE DESK  ·  ' + shortStamp(e.ts).toUpperCase()}</Text>
-                <Text style={[s.hrowH, T(24, 29)]}>{decode(e.title || '')}</Text>
-                {e.dek ? <Text style={{ color: C.muted, fontSize: 14.5, lineHeight: 21, marginTop: 6 }}>{decode(e.dek)}</Text> : null}
-                <Text style={s.hrowMeta}>{(e.words ? e.words + ' words' : '') + '  ·  read ›'}</Text>
-              </Pressable>
-            )) : (
-              <Text style={[s.foot, { paddingVertical: 12 }]}>The desk's first essay is being written. The calls below are the dated components it will rest on.</Text>
-            )}
-          </View>
-        </Section>
-      )}
+      {/* 2026-09-19: CALLS opened with the essay list, and THE BOARD - the thesis, which is the
+          product - appeared only UNDERNEATH an open essay: two taps inside an artifact written for
+          somewhere else. The essay is still written and still queued by publish_out.py; it is not a
+          screen here. What it argues leads the tab instead. */}
+      <TheBoard board={data.board || null} />
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 10 }}>
           Every call below is a dated, falsifiable component of what the desk has written: the things that would have to happen if the sequence is right, and the ones that would break it if they do not. An argument that ends in a number, not a betting line. </Text>
@@ -3428,7 +3380,7 @@ function SeriesChart({ sr, note, why }) {
         <Text style={[MONO, { color: C.muted, fontSize: 9 }]}>{'HIGH ' + fmtV(sr.hi, sr.unit)}</Text>
       </View>
       {note ? <Text style={[s.p, { fontSize: 14.5, lineHeight: 21, marginTop: 8, marginBottom: 0 }]}>{decode(note)}</Text> : null}
-      {why && sr.why ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>{sr.why}</Text> : null}
+      {why && sr.why ? <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 6 }}>{plain(sr.why)}</Text> : null}
     </View>
   );
 }
@@ -3446,6 +3398,60 @@ function ArticleCharts({ charts, series }) {
 // ── MONEY — 2026-09-18 (editor: "get rid of history tab and do a money or finance tab"). One home for
 // the numbers: the desk's read of the tape, the live prints, the charts, the receipts, and the calls
 // from the book that turn on money. Everything here used to be folded under CALLS or BOARDS. ──
+// 2026-09-19 (editor): "to many jargon you use acronyms put the full name in parentheses at least".
+// The desk writes the tape for someone who already knows the plumbing; the reader does not. Every
+// acronym below is expanded ON RENDER at its FIRST bare use, so the text already on the wire complies
+// and not just what is written after the prompt change - the same trick as the per-cent rule in
+// decode(). Keep each expansion to a few words: this is a parenthesis, not a lesson. The standing
+// glossary of what a number IS still lives on the chart itself (`why`).
+const GLOSS = [
+  ['SOFR', 'the Secured Overnight Financing Rate, what banks pay to borrow cash overnight against Treasuries'],
+  ['EFFR', "the Effective Federal Funds Rate, the Fed's own overnight rate"],
+  ['IORB', 'the rate the Fed pays banks on reserves'],
+  ['RRP', "the Fed's reverse repo facility, where cash parks overnight"],
+  ['TGA', "the Treasury General Account, the government's checking account at the Fed"],
+  ['QT', 'quantitative tightening, the Fed shrinking its balance sheet'],
+  ['QE', 'quantitative easing, the Fed buying bonds'],
+  ['CPI', 'the Consumer Price Index'],
+  ['PCE', "the inflation gauge the Fed actually targets"],
+  ['VIX', "the Cboe Volatility Index, the market's price for insurance"],
+  ['FRED', "the St Louis Fed's public data service"],
+  ['IMF', 'the International Monetary Fund'],
+  ['BIS', 'the Bank for International Settlements'],
+  ['ECB', 'the European Central Bank'],
+  ['PBOC', "China's central bank"],
+  ['OPEC', 'the Organization of the Petroleum Exporting Countries'],
+  ['USDT', 'Tether, the largest dollar token'],
+  ['USDC', "Circle's dollar token"],
+  ['ETF', 'exchange-traded fund'],
+  ['LNG', 'liquefied natural gas'],
+  ['WTI', 'West Texas Intermediate, the US crude benchmark'],
+  ['G20', 'the twenty biggest economies'],
+  ['G7', 'the seven big industrial democracies'],
+];
+function plain(text) {
+  // No regex here on purpose: this function is written through three layers of quoting and a
+  // backslash does not survive the trip (2026-09-19: the first version shipped /SOFR(?!s*()/ and
+  // crashed MONEY on load). Plain string scanning cannot be mangled.
+  const wordChar = (c) => !!c && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'));
+  let t = String(text == null ? '' : text);
+  for (const [k, full] of GLOSS) {
+    let from = 0;
+    for (;;) {
+      const i = t.indexOf(k, from);
+      if (i < 0) break;
+      const before = i === 0 ? '' : t[i - 1];
+      const after = t[i + k.length] || '';
+      if (wordChar(before) || wordChar(after)) { from = i + k.length; continue; }
+      // already explained by the desk, in brackets or after a comma - leave the sentence alone
+      const tail = t.slice(i + k.length, i + k.length + 8);
+      if (tail.trim().startsWith('(') || tail.startsWith(', the') || tail.startsWith(', what')) break;
+      t = t.slice(0, i + k.length) + ' (' + full + ')' + t.slice(i + k.length);
+      break;   // first bare use only
+    }
+  }
+  return t;
+}
 const MONEY_LEAD = ['DGS10', 'DCOILBRENTEU', 'DTWEXBGS', 'T10Y2Y', 'VIXCLS', 'BAMLH0A0HYM2'];
 function MoneyTab({ data, series, goArticle }) {
   const [fullRead, setFullRead] = useState(false);
@@ -3460,10 +3466,29 @@ function MoneyTab({ data, series, goArticle }) {
     .slice(0, 8);
   return (
     <View style={s.stack}>
-      {pl.read ? (
-        <Section title="The tape" extra={pl.stage ? 'live' : ''}>
+      {/* 2026-09-19 (editor): "Don't start money menu with this looks bad way to boring and to
+          many jargon you use acronyms put the full name in parentheses at least." MONEY opened with
+          six paragraphs of desk shorthand - SOFR minus EFFR, channels A to D, data vintages - which
+          is the working, not the page. The PRICES lead now: what each number is, where it is, where
+          it has been, and what it means, from the source with its own timestamp. The desk's read
+          follows, with every acronym expanded on render by plain(). */}
+      {lead.length ? (
+        <Section title="The prices" extra={(series && series.asof) || ''}>
           <View style={{ paddingHorizontal: 16 }}>
-            <Text style={s.p} numberOfLines={fullRead ? undefined : 6}>{decode(pl.read)}</Text>
+            {lead.map((k) => <SeriesChart key={k} sr={lib[k]} why />)}
+            {more ? rest.map((k) => <SeriesChart key={k} sr={lib[k]} why />) : null}
+            {rest.length ? (
+              <Pressable onPress={() => setMore((v) => !v)} hitSlop={6} style={{ paddingVertical: 12 }}>
+                <Text style={[s.readmore, MONO]}>{more ? 'FEWER CHARTS \u2039' : rest.length + ' MORE CHARTS \u203a'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Section>
+      ) : null}
+      {pl.read ? (
+        <Section title="The desk's read of the tape" extra={pl.stage ? 'live' : ''}>
+          <View style={{ paddingHorizontal: 16 }}>
+            <Text style={s.p} numberOfLines={fullRead ? undefined : 5}>{decode(plain(pl.read))}</Text>
             <Pressable onPress={() => setFullRead((v) => !v)} hitSlop={6} style={{ marginTop: 8 }}>
               <Text style={[s.readmore, MONO]}>{fullRead ? 'SHOW LESS \u2039' : 'READ THE FULL READ \u203a'}</Text>
             </Pressable>
@@ -3475,19 +3500,6 @@ function MoneyTab({ data, series, goArticle }) {
           </View>
           <RedBoard board={pl.board} bare />
           <LiveWatchlist items={pl.series} bare />
-        </Section>
-      ) : null}
-      {lead.length ? (
-        <Section title="The charts" extra={(series && series.asof) || ''}>
-          <View style={{ paddingHorizontal: 16 }}>
-            {lead.map((k) => <SeriesChart key={k} sr={lib[k]} why />)}
-            {more ? rest.map((k) => <SeriesChart key={k} sr={lib[k]} why />) : null}
-            {rest.length ? (
-              <Pressable onPress={() => setMore((v) => !v)} hitSlop={6} style={{ paddingVertical: 12 }}>
-                <Text style={[s.readmore, MONO]}>{more ? 'FEWER CHARTS \u2039' : rest.length + ' MORE CHARTS \u203a'}</Text>
-              </Pressable>
-            ) : null}
-          </View>
         </Section>
       ) : null}
       <Receipts inf={data.inflation} />
@@ -5477,7 +5489,6 @@ function buildStyles() {
   // nav
   navWrap: { backgroundColor: C.panel, borderTopWidth: 1, borderTopColor: C.line },
   prefsBtn: { borderWidth: 1, borderColor: C.line, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 9, marginLeft: 10 },
-  fpCall: { borderWidth: 1, borderRadius: 10, padding: 15, backgroundColor: C.panel },
   fpDoor: { borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 14, backgroundColor: C.panel },
   fpLesson: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 },
   fpTile: { width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 12, marginBottom: 10 },
