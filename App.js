@@ -1476,9 +1476,252 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
   );
 }
 
+// ── DEV: ASK THE DESK ABOUT THIS ARTICLE ───────────────────────────────────────────────────────
+// 2026-09-19 (editor): "for my dev mode can we add ai ask bot for each article so if I have
+// questions the ai can already know the context of the article I'm referring to."
+//
+// It calls the Messages API DIRECTLY from the app, with a key the editor pastes into the running
+// app on his own device. That is only defensible because it is a DEV tool: the key is never in the
+// bundle, never in git, and lives in this device's storage alone. No key, no panel - a shipped
+// build shows nothing and sends nothing, so App Privacy stays "Data Not Collected".
+//
+// Raw HTTP on purpose: @anthropic-ai/sdk states React Native is not supported. This is the
+// documented shape - POST /v1/messages with x-api-key and anthropic-version: 2023-06-01 - plus
+// anthropic-dangerous-direct-browser-access, which api.anthropic.com lists in its CORS
+// access-control-allow-headers, so the web build can call it straight from the browser.
+const DEV_FLAG_KEY = 'geo-dev-v1';
+const DEV_AIKEY_KEY = 'geo-dev-aikey-v1';
+const DEV_MODEL_KEY = 'geo-dev-aimodel-v1';
+const ASK_MODELS = [
+  { id: 'claude-opus-5', label: 'OPUS 5', inR: 5, outR: 25 },
+  { id: 'claude-sonnet-5', label: 'SONNET 5', inR: 2, outR: 10 },
+];
+const ASK_CTX_CAP = 24000;   // characters of article handed over: ~6k tokens, ~3c of input on Opus
+const ASK_SYSTEM = [
+  'You are the desk that wrote the article below, answering the editor. He is looking at this piece',
+  'right now; the whole of it is in THE ARTICLE, and that is your context. Answer HIS question -',
+  'this is a conversation, not a briefing.',
+  '',
+  'RULES OF THE HOUSE.',
+  '1. The article is the evidence. Quote it when it answers him, and say plainly when it does NOT:',
+  '   "the piece does not say" is an answer, and a better one than a guess.',
+  '2. Never invent a number, a date, a source or a quote. If you reason past the article, label it',
+  '   "beyond the piece:" and keep it short.',
+  '3. Constraint before character; name the mechanism and who holds the pen; base rates over vibes.',
+  '4. A call gets a number, a window, and the observation that would kill it.',
+  '5. No trade instructions, no prediction-market prices, no ethnic or religious group as a cause.',
+  '6. He is the editor, not a reader: no throat-clearing, no restating the article back to him, no',
+  '   "great question". Lead with the answer in the first sentence and stop when it is answered.',
+].join('\n');
+
+// The article, flattened for the model. Everything the reader can see on the page and nothing else,
+// so an answer can always be checked against what is on screen.
+function askContext(item) {
+  const P = [];
+  // 2026-09-19: every list here comes out of a model-written feed, so nothing is guaranteed to
+  // be an array - hist.scenarios has shipped as an OBJECT, and one .forEach on it threw and
+  // blanked the whole article page. Coerce, never assume.
+  const arr = (x) => (Array.isArray(x) ? x : x && typeof x === 'object' ? Object.values(x) : []);
+  const add = (label, txt) => {
+    const t = decode(String(txt == null ? '' : txt)).trim();
+    if (t) P.push(label ? label + ': ' + t : t);
+  };
+  const parts = articleParts(item);
+  add('HEADLINE', parts.head || item.head);
+  add('STANDFIRST', parts.stand);
+  add('KICKER', kickerOf(item));
+  add('FILED', item.ts);
+  add('REGION', item.region);
+  add('LEDE', item.t);
+  add('WHY IT MATTERS, PLAINLY', item.context);
+  for (const sec of arr(item.read)) {
+    if (sec && sec.p) add(String(sec.h || 'SECTION').toUpperCase(), sec.p);
+  }
+  const h = item.hist || {};
+  const call = h.call || {};
+  if (call.event) {
+    add('THE CALL', call.event + '  —  ' + (call.p == null ? '' : call.p + '%')
+      + (call.horizon ? ', ' + call.horizon : '') + (call.conf ? ', confidence ' + call.conf : ''));
+  }
+  if (h.long && h.long.event) add('THE LONG CALL', h.long.event + '  —  ' + (h.long.p == null ? '' : h.long.p + '%'));
+  arr(h.for).forEach((x, i) => add('FOR ' + (i + 1), argText(x)));
+  arr(h.against).forEach((x, i) => add('AGAINST ' + (i + 1), argText(x)));
+  arr(h.precedents).forEach((x) => add('PRECEDENT ' + (x.date || ''), x.line));
+  arr(h.chain).forEach((x) => add('CHAIN — ' + String(x.h || '').toUpperCase(), x.p));
+  if (h.outside) add('THE OUTSIDE VIEW', typeof h.outside === 'string' ? h.outside : JSON.stringify(h.outside));
+  arr(h.scenarios).forEach((x) => add('SCENARIO', (x.s || x.label || '') + ' — ' + (x.p == null ? '' : x.p + '%')));
+  arr(h.moves).forEach((m) => add('IN THEIR SHOES — ' + String(m.who || m.chair || '').toUpperCase(),
+    (m.constraint || '') + ' ' + arr(m.options).map((o) => (o.k || '') + ') ' + (o.move || '')).join('  ')));
+  const ctr = h.contrarian || item.contrarian;
+  if (ctr && ctr.claim) add('THE OTHER SIDE OF THE TRADE (' + (ctr.who || 'unattributed') + ')',
+    ctr.claim + ' — the desk puts ' + (ctr.p_desk == null ? '?' : ctr.p_desk + '%') + ' on it. ' + (ctr.why || ''));
+  const d = item.dec || {};
+  if (d.verdict) add('DECODE VERDICT', d.verdict);
+  arr(d.angles).forEach((a) => add('WHO GAINS / WHO PAYS', (a.party || '') + ' — ' + (a.effect || '')));
+  if (d.kill) add('WHAT WOULD KILL THIS READING', d.kill);
+  if (d.frame) add('THE FRAME', ['problem', 'cause', 'moral', 'remedy'].map((k) => k + ': ' + (d.frame[k] || '')).join(' | '));
+  arr(d.words).forEach((w) => add('WORD', '"' + (w.q || '') + '" — ' + (w.does || '')));
+  if (d.rewrite) add('THE SAME EVENT, DESCRIBED', d.rewrite);
+  if (d.command) add('THE STACK', ['cls', 'owner', 'flag', 'cow', 'explains', 'cannot', 'opposite']
+    .map((k) => k + ': ' + (d.command[k] || '')).filter((x) => x.length > 4).join(' | '));
+  if (d.alec) add('THE ENERGY CHAIN', ['loss', 'chokepoint', 'pain', 'observed', 'falsifier']
+    .map((k) => k + ': ' + (d.alec[k] || '')).filter((x) => x.length > 4).join(' | '));
+  const cs = item.consp ? (Array.isArray(item.consp) ? item.consp : [item.consp]) : [];
+  cs.forEach((c) => add('CIRCULATING (unverified)', (c.head || c.claim || '') + ' — ' + (c.read || '')
+    + (c.counter ? '  COUNTER: ' + c.counter : '')));
+  arr(item.srcs).forEach((sc) => add('SOURCE', (sc.n || '') + ' ' + (sc.u || '')));
+  let out = P.join('\n\n');
+  if (out.length > ASK_CTX_CAP) out = out.slice(0, ASK_CTX_CAP) + '\n\n[context truncated to keep the call cheap]';
+  return out;
+}
+
+// One call. Returns the answer and what it cost, from the API's own usage numbers.
+async function askClaude({ apiKey, model, system, turns, maxTokens, effort }) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: maxTokens,
+      system: system,
+      messages: turns,
+      output_config: { effort: effort },
+    }),
+  });
+  let j = null;
+  try { j = await res.json(); } catch (e) { j = null; }
+  if (!res.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + res.status));
+  if (j && j.stop_reason === 'refusal') throw new Error('the model declined this one (refusal)');
+  const text = ((j && j.content) || []).filter((b) => b && b.type === 'text').map((b) => b.text).join('\n').trim();
+  const u = (j && j.usage) || {};
+  const meta = ASK_MODELS.find((m) => m.id === model) || ASK_MODELS[0];
+  const cents = ((u.input_tokens || 0) / 1e6 * meta.inR + (u.output_tokens || 0) / 1e6 * meta.outR) * 100;
+  return { text: text || '(no text came back)', inTok: u.input_tokens || 0, outTok: u.output_tokens || 0, cents: cents };
+}
+
+function AskDesk({ item, ask }) {
+  const [q, setQ] = useState('');
+  const [thread, setThread] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  if (!ask || !ask.dev || !ask.apiKey) return null;
+  const spent = thread.reduce((a, t) => a + (t.cents || 0), 0);
+  const model = ask.model || ASK_MODELS[0].id;
+  const ctxChars = askContext(item).length;
+  const run = async (effort, maxTokens) => {
+    const question = q.trim();
+    if (!question || busy) return;
+    setBusy(true); setErr(null); setQ('');
+    const asked = thread.concat([{ role: 'user', text: question }]);
+    setThread(asked);
+    try {
+      // the article rides in the SYSTEM prompt, once, so a follow-up does not resend it as a turn
+      const system = ASK_SYSTEM + '\n\nTHE ARTICLE\n-----------\n' + askContext(item);
+      const turns = asked.map((t) => ({ role: t.role, content: t.text }));
+      const out = await askClaude({
+        apiKey: ask.apiKey, model: model, system: system,
+        turns: turns, maxTokens: maxTokens, effort: effort,
+      });
+      setThread(asked.concat([{ role: 'assistant', text: out.text, cents: out.cents, inTok: out.inTok, outTok: out.outTok }]));
+    } catch (e) {
+      setErr(String((e && e.message) || e));
+    }
+    setBusy(false);
+  };
+  const btn = (label, sub, onPress, on) => (
+    <Pressable onPress={onPress} disabled={busy}
+      style={{ flex: 1, borderWidth: 1, borderColor: on ? C.accent : C.line, borderRadius: 8,
+        paddingVertical: 10, paddingHorizontal: 12, opacity: busy ? 0.5 : 1, alignItems: 'center' }}>
+      <Text style={[MONO, { color: on ? C.accent : C.muted, fontSize: 11, letterSpacing: 1.2, fontWeight: '800' }]}>{label}</Text>
+      <Text style={{ color: C.muted, fontSize: 10, marginTop: 3 }}>{sub}</Text>
+    </Pressable>
+  );
+  return (
+    <Section title="Ask the desk" extra={'DEV' + (spent ? '  ·  ' + spent.toFixed(1) + 'c here' : '')}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
+        <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginBottom: 10 }}>
+          {'The whole article goes with the question - the read, the call, both ledgers, the decode and '
+            + 'what is circulating - so an answer can be checked against this page. '
+            + (ASK_MODELS.find((m) => m.id === model) || ASK_MODELS[0]).label
+            + ' · about ' + Math.round(ctxChars / 4) + ' tokens of context'}
+        </Text>
+        {thread.map((t, i) => (
+          <View key={i} style={{ marginBottom: 12, borderLeftWidth: 2, paddingLeft: 10,
+            borderLeftColor: t.role === 'user' ? C.line : C.accent }}>
+            <Text style={[MONO, { color: t.role === 'user' ? C.muted : C.accent, fontSize: 9.5, letterSpacing: 1.3, fontWeight: '800' }]}>
+              {(t.role === 'user' ? 'YOU' : 'THE DESK')
+                + (t.cents ? '  ·  ' + t.cents.toFixed(1) + 'c  ·  ' + t.inTok + ' IN / ' + t.outTok + ' OUT' : '')}
+            </Text>
+            <Text style={{ color: C.text, fontSize: 15, lineHeight: 22, marginTop: 5,
+              fontFamily: t.role === 'user' ? undefined : 'Charter' }}>{t.text}</Text>
+          </View>
+        ))}
+        {busy ? <ActivityIndicator color={C.accent} style={{ alignSelf: 'flex-start', marginBottom: 10 }} /> : null}
+        {err ? <Text style={{ color: C.crit, fontSize: 13, lineHeight: 19, marginBottom: 10 }}>{err}</Text> : null}
+        <TextInput value={q} onChangeText={setQ} multiline
+          placeholder="Ask anything about this piece" placeholderTextColor={C.muted}
+          style={{ color: C.text, fontSize: 15, lineHeight: 21, borderWidth: 1, borderColor: C.line,
+            borderRadius: 8, padding: 11, minHeight: 64, backgroundColor: C.panel }} />
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+          {btn('ASK', 'quick, low effort', () => run('low', 1200), true)}
+          {btn('DIG IN', 'high effort, longer', () => run('high', 4000), false)}
+        </View>
+        {thread.length ? (
+          <Pressable onPress={() => { setThread([]); setErr(null); }} hitSlop={8} style={{ paddingTop: 12 }}>
+            <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2 }]}>CLEAR THIS THREAD</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </Section>
+  );
+}
+
+// The dev panel in the menu: where the key is entered, which model answers, and the way out.
+function DevPanel({ dev, onDev, apiKey, onKey, model, onModel }) {
+  const [draft, setDraft] = useState('');
+  if (!dev) return null;
+  const pill = (on, label, onPress, key) => (
+    <Pressable key={key} onPress={onPress}
+      style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1,
+        borderColor: on ? C.accent : C.line, backgroundColor: on ? C.panel2 : 'transparent' }}>
+      <Text style={[MONO, { color: on ? C.accent : C.muted, fontSize: 12, letterSpacing: 0.8, fontWeight: on ? '800' : '600' }]}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <MenuRow label="DEV · ASK THE DESK"
+      hint={apiKey
+        ? 'A key is stored on this device. Every article now carries an ASK panel at the foot.'
+        : 'Paste an Anthropic API key to turn on the per-article ASK panel. It is stored on this device only - never in the build, never in the repo. Anyone with the key can spend on it, so use a scoped one.'}>
+      {apiKey ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {ASK_MODELS.map((m) => pill(model === m.id, m.label, () => onModel(m.id), m.id))}
+          {pill(false, 'FORGET KEY', () => onKey(''), 'forget')}
+          {pill(false, 'DEV OFF', () => onDev(false), 'off')}
+        </View>
+      ) : (
+        <View>
+          <TextInput value={draft} onChangeText={setDraft} autoCapitalize="none" autoCorrect={false}
+            secureTextEntry placeholder="sk-ant-..." placeholderTextColor={C.muted}
+            style={{ color: C.text, fontSize: 14, borderWidth: 1, borderColor: C.line, borderRadius: 8,
+              paddingHorizontal: 11, paddingVertical: 10, backgroundColor: C.panel }} />
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            {pill(true, 'SAVE KEY', () => { if (draft.trim()) { onKey(draft.trim()); setDraft(''); } }, 'save')}
+            {pill(false, 'DEV OFF', () => onDev(false), 'off')}
+          </View>
+        </View>
+      )}
+    </MenuRow>
+  );
+}
+
 function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
                        specMatches, chatter, prev, next, onOpen, isSaved, onSave,
-                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording, series }) {
+                       tsize, onSize, theme, onTheme, level, onLevel, pick, onPick, resolved, picks, setPickFor, res, wording, series, ask }) {
   const { head, stand, longHead } = articleParts(item);
   const secRefs = useRef([]);
   const wordEv = wordingFor(wording, item);
@@ -1643,6 +1886,9 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
           </View>
         ) : null}
       </View>
+      {/* 2026-09-19: the dev ask panel sits at the FOOT of the piece, after the reader has the
+          whole thing - the context it sends is the page above it. Invisible without a key. */}
+      <AskDesk item={item} ask={ask} />
       {/* keep reading — the paper hands you the next story rather than a dead end */}
       {next || prev ? (
         <Section title="Keep reading">
@@ -2271,7 +2517,7 @@ function chipsOf(items, valueOf) {
   return [...c.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop, series,
+function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop, series, ask,
                    read, saved, markRead, toggleSave, tsize, onSize, theme, onTheme, level, onLevel,
                    older, loadOlder, picks, setPickFor, res, wording }) {
   const simple = (easy && data.easy && data.easy.brief) || [];
@@ -2321,7 +2567,7 @@ function NewsTab({ data, easy, deep, goTab, article, setArticle, scrollTop, seri
         specMatches={storySpec(data.speculation, item)}
         chatter={data.chatter}
         isSaved={!!saved[id]} pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series} onSave={() => toggleSave(id)}
-        tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
+        tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel} ask={ask}
         prev={at > 0 ? rows[at - 1] : null}
         next={at < rows.length - 1 ? rows[at + 1] : null}
       />
@@ -4911,7 +5157,7 @@ function SituationRooms({ hist, cards, goArticle, initial, quizzes, onQuiz, pick
 
 // ── ARTICLE HOST — one story, opened from ANY tab (headlines, boards, strategy, search), rendered above
 // that tab so Back returns to where the reader was. Prev/next walk the whole wire, newest first. ──
-function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, saved, toggleSave, markRead,
+function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, saved, toggleSave, markRead, ask,
                        tsize, onSize, theme, onTheme, level, onLevel, picks, setPickFor, res, wording, series }) {
   const rows = briefSorted(data.brief);
   const at = rows.findIndex(({ i }) => i === article);
@@ -4929,7 +5175,7 @@ function ArticleHost({ data, article, setArticle, scrollTop, easy, deep, read, s
       chatter={data.chatter}
       isSaved={!!saved[id]} onSave={() => toggleSave(id)}
       pick={(picks || {})[id]} onPick={(v) => setPickFor && setPickFor(id, v)} resolved={resolutionFor(res, id)} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series}
-      tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel}
+      tsize={tsize} onSize={onSize} theme={theme} onTheme={onTheme} level={level} onLevel={onLevel} ask={ask}
       prev={at > 0 ? rows[at - 1] : null}
       next={at < rows.length - 1 ? rows[at + 1] : null}
     />
@@ -5021,7 +5267,7 @@ function MenuRow({ label, hint, children }) {
     </View>
   );
 }
-function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent }) {
+function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent, dev, onDev, apiKey, onKey, model, onModel }) {
   const pill = (on, label, onPress, key) => (
     <Pressable key={key} onPress={onPress}
       style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1,
@@ -5063,6 +5309,7 @@ function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, on
           </View>
         </MenuRow>
       ) : null}
+      <DevPanel dev={dev} onDev={onDev} apiKey={apiKey} onKey={onKey} model={model} onModel={onModel} />
       <MenuRow label="THE DESK" hint="Not investment advice. The desk publishes its own calls and scores them when they resolve.">
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {pill(false, 'DISCLAIMER', () => Linking.openURL(LEGAL.disclaimer), 'x1')}
@@ -5078,6 +5325,20 @@ export default function App() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [tab, setTab] = useState('home');   // the front page, not the wire
+  // 2026-09-19 DEV MODE: long-press the wordmark to reveal it. Nothing ships with it on, and
+  // nothing is sent anywhere until a key is pasted into the menu on this device.
+  const [dev, setDev] = useState(false);
+  const [aiKey, setAiKey] = useState('');
+  const [aiModel, setAiModel] = useState(ASK_MODELS[0].id);
+  useEffect(() => {
+    AsyncStorage.getItem(DEV_FLAG_KEY).then((v) => setDev(v === '1')).catch(() => {});
+    AsyncStorage.getItem(DEV_AIKEY_KEY).then((v) => { if (v) setAiKey(v); }).catch(() => {});
+    AsyncStorage.getItem(DEV_MODEL_KEY).then((v) => { if (v) setAiModel(v); }).catch(() => {});
+  }, []);
+  const devSet = useCallback((on) => { setDev(on); AsyncStorage.setItem(DEV_FLAG_KEY, on ? '1' : '0').catch(() => {}); }, []);
+  const keySet = useCallback((k) => { setAiKey(k); AsyncStorage.setItem(DEV_AIKEY_KEY, k).catch(() => {}); }, []);
+  const modelSet = useCallback((m) => { setAiModel(m); AsyncStorage.setItem(DEV_MODEL_KEY, m).catch(() => {}); }, []);
+  const ask = useMemo(() => ({ dev: dev, apiKey: aiKey, model: aiModel }), [dev, aiKey, aiModel]);
   const [searching, setSearching] = useState(false);
   const [prefs, setPrefs] = useState(false);   // reading controls, off the page by default
   const [query, setQuery] = useState('');
@@ -5267,14 +5528,16 @@ export default function App() {
             </Pressable>
           ) : null}
           <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: rc, shadowColor: rc, shadowOpacity: 0.9, shadowRadius: 6 }} />
-          <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: C.accent }}>X</Text></Text>
+          <Pressable onLongPress={() => { devSet(!dev); setPrefs(true); }} delayLongPress={900} hitSlop={6}>
+            <Text style={[s.wordmark, MONO]}>PARALLA<Text style={{ color: dev ? C.calm : C.accent }}>X</Text></Text>
+          </Pressable>
           <Text style={[s.stamp, MONO]}>{data ? data.updated : ''}</Text>
           <Pressable onPress={() => setPrefs((v) => !v)} hitSlop={10} style={s.prefsBtn}>
             {/* 2026-09-18: it holds the legal links as well as the reading controls now, so it reads as a menu */}
             <Text style={[MONO, { color: prefs ? C.accent : C.muted, fontSize: 16, fontWeight: '800' }]}>{prefs ? '\u00d7' : '\u2261'}</Text>
           </Pressable>
         </View>
-        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} /> : null}
+        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} dev={dev} onDev={devSet} apiKey={aiKey} onKey={keySet} model={aiModel} onModel={modelSet} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
@@ -5292,7 +5555,7 @@ export default function App() {
           <ScrollView ref={scrollRef} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
             onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}>
             {article != null ? (
-              <ArticleHost data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
+              <ArticleHost ask={ask} data={data} article={article} setArticle={setArticle} scrollTop={scrollTop} easy={easy} deep={deep}
                 read={read} saved={saved} toggleSave={toggleSave} markRead={markRead} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series}
                 tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} />
             ) : searching ? (
@@ -5301,7 +5564,7 @@ export default function App() {
             ) : (
               <>
                 {tab === 'home' && <TocHost><FrontPage data={data} goTab={(k) => { setTab(k); scrollTop(); }} goArticle={goArticle} read={read} hist={hist} /></TocHost>}
-                {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series} />}
+                {tab === 'news' && <NewsTab ask={ask} data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} wording={wording} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
                 {/* 2026-09-18: HISTORY (SituationRooms) left the nav at the editor's word; MONEY took its place.
