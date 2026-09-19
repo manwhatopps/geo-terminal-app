@@ -1478,39 +1478,59 @@ function AnalystPanel({ item, specMatches, pick, onPick, resolved, picks, setPic
 
 // ── DEV: ASK THE DESK ABOUT THIS ARTICLE ───────────────────────────────────────────────────────
 // 2026-09-19 (editor): "for my dev mode can we add ai ask bot for each article so if I have
-// questions the ai can already know the context of the article I'm referring to."
+// questions the ai can already know the context of the article I'm referring to" - and then, of the
+// first build: "to answer questions use our whole geopolitical logic bot engine."
 //
-// It calls the Messages API DIRECTLY from the app, with a key the editor pastes into the running
-// app on his own device. That is only defensible because it is a DEV tool: the key is never in the
-// bundle, never in git, and lives in this device's storage alone. No key, no panel - a shipped
-// build shows nothing and sends nothing, so App Privacy stays "Data Not Collected".
+// So the answer is produced with the desk's ACTUAL doctrine in front of it: the method's 16 moves,
+// L1-L36, the register, the forecasting ladder, revealed preference, claim handling, the board, the
+// decoder, the coalition filters, AJ's moves, the long horizon, the plumbing constitution. That is
+// ~44k tokens, built by geobrief/doctrine.py.
 //
-// Raw HTTP on purpose: @anthropic-ai/sdk states React Native is not supported. This is the
-// documented shape - POST /v1/messages with x-api-key and anthropic-version: 2023-06-01 - plus
-// anthropic-dangerous-direct-browser-access, which api.anthropic.com lists in its CORS
-// access-control-allow-headers, so the web build can call it straight from the browser.
+// IT IS ENCRYPTED, because the app is a static build served from a PUBLIC repo and the method is the
+// product. doctrine.json carries AES-256-GCM ciphertext; the passphrase is typed into the DEV panel
+// once and lives on the device. A scraper gets noise. (Decryption needs WebCrypto, which the web
+// build has and React Native does not - on a native build the panel answers without the engine and
+// says so.)
+//
+// IT IS CACHED, because 44k tokens on every question would be absurd: the engine is its own system
+// block with a `cache_control` breakpoint, so the article and the question sit AFTER it and the
+// prefix is reused. A cache read is 0.1x input, a 5-minute write 1.25x - two asks in a window have
+// already paid for it, and each answer prints what it actually cost.
+//
+// The key never goes in the bundle or the repo, and with no key there is no panel at all - a store
+// build shows nothing and sends nothing, so App Privacy stays "Data Not Collected". Raw HTTP on
+// purpose: @anthropic-ai/sdk states React Native is not supported. The documented shape is POST
+// /v1/messages with x-api-key and anthropic-version: 2023-06-01, plus
+// anthropic-dangerous-direct-browser-access, which api.anthropic.com names in its CORS
+// access-control-allow-headers.
+const DOCTRINE_URL = 'https://raw.githubusercontent.com/manwhatopps/geo-terminal-feed/main/doctrine.json';
 const DEV_FLAG_KEY = 'geo-dev-v1';
 const DEV_AIKEY_KEY = 'geo-dev-aikey-v1';
 const DEV_MODEL_KEY = 'geo-dev-aimodel-v1';
+const DEV_PASS_KEY = 'geo-dev-pass-v1';
+const DEV_ENGINE_CACHE = 'geo-dev-engine-v1';
 const ASK_MODELS = [
   { id: 'claude-opus-5', label: 'OPUS 5', inR: 5, outR: 25 },
   { id: 'claude-sonnet-5', label: 'SONNET 5', inR: 2, outR: 10 },
 ];
-const ASK_CTX_CAP = 24000;   // characters of article handed over: ~6k tokens, ~3c of input on Opus
+const ASK_CTX_CAP = 24000;   // characters of article handed over: ~6k tokens
 const ASK_SYSTEM = [
   'You are the desk that wrote the article below, answering the editor. He is looking at this piece',
-  'right now; the whole of it is in THE ARTICLE, and that is your context. Answer HIS question -',
-  'this is a conversation, not a briefing.',
+  'right now; the whole of it is in THE ARTICLE. Answer HIS question - a conversation, not a briefing.',
   '',
-  'RULES OF THE HOUSE.',
+  'THE ENGINE ABOVE IS HOW YOU ANSWER. It is the desk\'s own doctrine, not background reading: run the',
+  'method\'s moves on his question, hold the register, use the forecasting ladder when he asks what',
+  'happens next, read revealed preference over statements, and take the decoder to any wording he',
+  'asks about. When a named move settles the question, say which one settled it.',
+  '',
+  'AND THESE BIND HARDER THAN ANY OF IT.',
   '1. The article is the evidence. Quote it when it answers him, and say plainly when it does NOT:',
   '   "the piece does not say" is an answer, and a better one than a guess.',
   '2. Never invent a number, a date, a source or a quote. If you reason past the article, label it',
   '   "beyond the piece:" and keep it short.',
-  '3. Constraint before character; name the mechanism and who holds the pen; base rates over vibes.',
-  '4. A call gets a number, a window, and the observation that would kill it.',
-  '5. No trade instructions, no prediction-market prices, no ethnic or religious group as a cause.',
-  '6. He is the editor, not a reader: no throat-clearing, no restating the article back to him, no',
+  '3. A call gets a number, a window, and the observation that would kill it.',
+  '4. No trade instructions, no prediction-market prices, no ethnic or religious group as a cause.',
+  '5. He is the editor, not a reader: no throat-clearing, no restating the article back to him, no',
   '   "great question". Lead with the answer in the first sentence and stop when it is answered.',
 ].join('\n');
 
@@ -1575,6 +1595,31 @@ function askContext(item) {
   return out;
 }
 
+// AES-256-GCM, key from the passphrase by PBKDF2 - the mirror of geobrief/doctrine.py.
+async function unlockEngine(j, pass) {
+  const sub = (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle) || null;
+  if (!sub) throw new Error('this build has no WebCrypto, so it cannot open the engine - use the web app');
+  const raw = (b64) => {
+    const bin = globalThis.atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  const base = await sub.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  const key = await sub.deriveKey(
+    { name: 'PBKDF2', salt: raw(j.kdf.salt), iterations: j.kdf.iter, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  // WebCrypto throws OperationError with the unhelpful "operation failed for an operation-specific
+  // reason". AES-GCM authenticates, so a decrypt that fails after a 200 is the passphrase.
+  let pt = null;
+  try {
+    pt = await sub.decrypt({ name: 'AES-GCM', iv: raw(j.iv) }, key, raw(j.ct));
+  } catch (e) {
+    throw new Error('wrong passphrase');
+  }
+  return new TextDecoder().decode(pt);
+}
+
 // One call. Returns the answer and what it cost, from the API's own usage numbers.
 async function askClaude({ apiKey, model, system, turns, maxTokens, effort }) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1600,8 +1645,18 @@ async function askClaude({ apiKey, model, system, turns, maxTokens, effort }) {
   const text = ((j && j.content) || []).filter((b) => b && b.type === 'text').map((b) => b.text).join('\n').trim();
   const u = (j && j.usage) || {};
   const meta = ASK_MODELS.find((m) => m.id === model) || ASK_MODELS[0];
-  const cents = ((u.input_tokens || 0) / 1e6 * meta.inR + (u.output_tokens || 0) / 1e6 * meta.outR) * 100;
-  return { text: text || '(no text came back)', inTok: u.input_tokens || 0, outTok: u.output_tokens || 0, cents: cents };
+  // a cache read is 0.1x input, a 5-minute write 1.25x (input_tokens is the uncached remainder only)
+  const cents = ((u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) * 1.25
+    + (u.cache_read_input_tokens || 0) * 0.1) / 1e6 * meta.inR * 100
+    + (u.output_tokens || 0) / 1e6 * meta.outR * 100;
+  return {
+    text: text || '(no text came back)',
+    inTok: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    outTok: u.output_tokens || 0,
+    wrote: u.cache_creation_input_tokens || 0,
+    readCache: u.cache_read_input_tokens || 0,
+    cents: cents,
+  };
 }
 
 function AskDesk({ item, ask }) {
@@ -1609,10 +1664,14 @@ function AskDesk({ item, ask }) {
   const [thread, setThread] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [useEngine, setUseEngine] = useState(true);
   if (!ask || !ask.dev || !ask.apiKey) return null;
   const spent = thread.reduce((a, t) => a + (t.cents || 0), 0);
   const model = ask.model || ASK_MODELS[0].id;
-  const ctxChars = askContext(item).length;
+  const meta = ASK_MODELS.find((m) => m.id === model) || ASK_MODELS[0];
+  const engine = useEngine ? ask.engine : null;
+  const engTok = engine ? Math.round(engine.length / 4) : 0;
+  const ctxTok = Math.round(askContext(item).length / 4);
   const run = async (effort, maxTokens) => {
     const question = q.trim();
     if (!question || busy) return;
@@ -1620,14 +1679,20 @@ function AskDesk({ item, ask }) {
     const asked = thread.concat([{ role: 'user', text: question }]);
     setThread(asked);
     try {
-      // the article rides in the SYSTEM prompt, once, so a follow-up does not resend it as a turn
-      const system = ASK_SYSTEM + '\n\nTHE ARTICLE\n-----------\n' + askContext(item);
+      // THE ENGINE FIRST, and alone in its own block with the breakpoint on it: the article and the
+      // question change every time, so anything after this marker is the only part that is re-read.
+      const system = [];
+      if (engine) system.push({ type: 'text', text: engine, cache_control: { type: 'ephemeral' } });
+      system.push({ type: 'text', text: ASK_SYSTEM + '\n\nTHE ARTICLE\n-----------\n' + askContext(item) });
       const turns = asked.map((t) => ({ role: t.role, content: t.text }));
       const out = await askClaude({
         apiKey: ask.apiKey, model: model, system: system,
         turns: turns, maxTokens: maxTokens, effort: effort,
       });
-      setThread(asked.concat([{ role: 'assistant', text: out.text, cents: out.cents, inTok: out.inTok, outTok: out.outTok }]));
+      setThread(asked.concat([{
+        role: 'assistant', text: out.text, cents: out.cents, inTok: out.inTok, outTok: out.outTok,
+        wrote: out.wrote, readCache: out.readCache,
+      }]));
     } catch (e) {
       setErr(String((e && e.message) || e));
     }
@@ -1641,21 +1706,32 @@ function AskDesk({ item, ask }) {
       <Text style={{ color: C.muted, fontSize: 10, marginTop: 3 }}>{sub}</Text>
     </Pressable>
   );
+  const cold = ((engTok * 1.25 + ctxTok) / 1e6 * meta.inR + 1200 / 1e6 * meta.outR) * 100;
+  const warm = ((engTok * 0.1 + ctxTok) / 1e6 * meta.inR + 1200 / 1e6 * meta.outR) * 100;
   return (
     <Section title="Ask the desk" extra={'DEV' + (spent ? '  ·  ' + spent.toFixed(1) + 'c here' : '')}>
       <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
-        <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginBottom: 10 }}>
-          {'The whole article goes with the question - the read, the call, both ledgers, the decode and '
-            + 'what is circulating - so an answer can be checked against this page. '
-            + (ASK_MODELS.find((m) => m.id === model) || ASK_MODELS[0]).label
-            + ' · about ' + Math.round(ctxChars / 4) + ' tokens of context'}
+        <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginBottom: 8 }}>
+          {'The question goes up with the whole article - the read, the call, both ledgers, the decode, '
+            + 'what is circulating - so an answer can be checked against this page.'}
         </Text>
+        <Pressable onPress={() => setUseEngine((v) => !v)} hitSlop={6} style={{ marginBottom: 12 }}>
+          <Text style={[MONO, { color: engine ? C.accent : C.muted, fontSize: 10, letterSpacing: 1.1, lineHeight: 15 }]}>
+            {(engine
+              ? 'ENGINE ON · ' + (engTok / 1000).toFixed(0) + 'K TOKENS OF DOCTRINE, CACHED'
+              : (ask.engine ? 'ENGINE OFF · TAP TO USE THE FULL DOCTRINE' : 'ENGINE UNAVAILABLE' + (ask.engineErr ? ' · ' + ask.engineErr.toUpperCase() : '')))
+              + '\n' + meta.label + ' · ' + ctxTok + ' TOKENS OF ARTICLE · ABOUT '
+              + cold.toFixed(0) + 'c COLD, ' + warm.toFixed(0) + 'c WARM'}
+          </Text>
+        </Pressable>
         {thread.map((t, i) => (
           <View key={i} style={{ marginBottom: 12, borderLeftWidth: 2, paddingLeft: 10,
             borderLeftColor: t.role === 'user' ? C.line : C.accent }}>
             <Text style={[MONO, { color: t.role === 'user' ? C.muted : C.accent, fontSize: 9.5, letterSpacing: 1.3, fontWeight: '800' }]}>
               {(t.role === 'user' ? 'YOU' : 'THE DESK')
-                + (t.cents ? '  ·  ' + t.cents.toFixed(1) + 'c  ·  ' + t.inTok + ' IN / ' + t.outTok + ' OUT' : '')}
+                + (t.cents ? '  ·  ' + t.cents.toFixed(1) + 'c  ·  ' + t.inTok + ' IN / ' + t.outTok + ' OUT'
+                  + (t.readCache ? '  ·  ' + Math.round(t.readCache / 1000) + 'K FROM CACHE' : '')
+                  + (t.wrote ? '  ·  ' + Math.round(t.wrote / 1000) + 'K WRITTEN' : '') : '')}
             </Text>
             <Text style={{ color: C.text, fontSize: 15, lineHeight: 22, marginTop: 5,
               fontFamily: t.role === 'user' ? undefined : 'Charter' }}>{t.text}</Text>
@@ -1681,9 +1757,10 @@ function AskDesk({ item, ask }) {
   );
 }
 
-// The dev panel in the menu: where the key is entered, which model answers, and the way out.
-function DevPanel({ dev, onDev, apiKey, onKey, model, onModel }) {
+// The dev panel in the menu: the key, the engine passphrase, the model, and the way out.
+function DevPanel({ dev, onDev, apiKey, onKey, model, onModel, pass, onPass, engine, engineErr, engineMeta, onReload }) {
   const [draft, setDraft] = useState('');
+  const [pdraft, setPdraft] = useState('');
   if (!dev) return null;
   const pill = (on, label, onPress, key) => (
     <Pressable key={key} onPress={onPress}
@@ -1692,29 +1769,43 @@ function DevPanel({ dev, onDev, apiKey, onKey, model, onModel }) {
       <Text style={[MONO, { color: on ? C.accent : C.muted, fontSize: 12, letterSpacing: 0.8, fontWeight: on ? '800' : '600' }]}>{label}</Text>
     </Pressable>
   );
+  const field = (value, setValue, placeholder, save) => (
+    <View>
+      <TextInput value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false}
+        secureTextEntry placeholder={placeholder} placeholderTextColor={C.muted}
+        style={{ color: C.text, fontSize: 14, borderWidth: 1, borderColor: C.line, borderRadius: 8,
+          paddingHorizontal: 11, paddingVertical: 10, backgroundColor: C.panel }} />
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+        {pill(true, 'SAVE', save, 'save')}
+        {pill(false, 'DEV OFF', () => onDev(false), 'off')}
+      </View>
+    </View>
+  );
   return (
-    <MenuRow label="DEV · ASK THE DESK"
+    <MenuRow label={'DEV · ASK THE DESK'}
       hint={apiKey
-        ? 'A key is stored on this device. Every article now carries an ASK panel at the foot.'
-        : 'Paste an Anthropic API key to turn on the per-article ASK panel. It is stored on this device only - never in the build, never in the repo. Anyone with the key can spend on it, so use a scoped one.'}>
-      {apiKey ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-          {ASK_MODELS.map((m) => pill(model === m.id, m.label, () => onModel(m.id), m.id))}
-          {pill(false, 'FORGET KEY', () => onKey(''), 'forget')}
-          {pill(false, 'DEV OFF', () => onDev(false), 'off')}
-        </View>
-      ) : (
-        <View>
-          <TextInput value={draft} onChangeText={setDraft} autoCapitalize="none" autoCorrect={false}
-            secureTextEntry placeholder="sk-ant-..." placeholderTextColor={C.muted}
-            style={{ color: C.text, fontSize: 14, borderWidth: 1, borderColor: C.line, borderRadius: 8,
-              paddingHorizontal: 11, paddingVertical: 10, backgroundColor: C.panel }} />
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-            {pill(true, 'SAVE KEY', () => { if (draft.trim()) { onKey(draft.trim()); setDraft(''); } }, 'save')}
+        ? (engine
+          ? 'The engine is open: ' + Math.round((engineMeta && engineMeta.tokens) || 0) / 1000 + 'K tokens of doctrine, built ' + ((engineMeta && engineMeta.generated) || '') + '. Every article carries an ASK panel at the foot.'
+          : 'A key is stored on this device. Add the engine passphrase to answer with the desk\'s full doctrine' + (engineErr ? ' — ' + engineErr : '.'))
+        : 'Paste an Anthropic API key to turn on the per-article ASK panel. Stored on this device only — never in the build, never in the repo.'}>
+      {!apiKey ? field(draft, setDraft, 'sk-ant-...', () => { if (draft.trim()) { onKey(draft.trim()); setDraft(''); } })
+        : !engine ? (
+          <View>
+            {field(pdraft, setPdraft, 'engine passphrase', () => { if (pdraft.trim()) { onPass(pdraft.trim()); setPdraft(''); } })}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+              {ASK_MODELS.map((m) => pill(model === m.id, m.label, () => onModel(m.id), m.id))}
+              {pill(false, 'FORGET KEY', () => onKey(''), 'forget')}
+            </View>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+            {ASK_MODELS.map((m) => pill(model === m.id, m.label, () => onModel(m.id), m.id))}
+            {pill(false, 'FORGET KEY', () => onKey(''), 'forget')}
+            {pill(false, 'RELOAD ENGINE', () => onReload && onReload(), 'reload')}
+            {pill(false, 'FORGET ENGINE', () => onPass(''), 'forgeteng')}
             {pill(false, 'DEV OFF', () => onDev(false), 'off')}
           </View>
-        </View>
-      )}
+        )}
     </MenuRow>
   );
 }
@@ -5267,7 +5358,7 @@ function MenuRow({ label, hint, children }) {
     </View>
   );
 }
-function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent, dev, onDev, apiKey, onKey, model, onModel }) {
+function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, onAccent, dev, onDev, apiKey, onKey, model, onModel, pass, onPass, engine, engineErr, engineMeta, onReload }) {
   const pill = (on, label, onPress, key) => (
     <Pressable key={key} onPress={onPress}
       style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1,
@@ -5309,7 +5400,8 @@ function ModeToggle({ level, onChange, tsize, onSize, theme, onTheme, accent, on
           </View>
         </MenuRow>
       ) : null}
-      <DevPanel dev={dev} onDev={onDev} apiKey={apiKey} onKey={onKey} model={model} onModel={onModel} />
+      <DevPanel dev={dev} onDev={onDev} apiKey={apiKey} onKey={onKey} model={model} onModel={onModel}
+        pass={pass} onPass={onPass} engine={engine} engineErr={engineErr} engineMeta={engineMeta} onReload={onReload} />
       <MenuRow label="THE DESK" hint="Not investment advice. The desk publishes its own calls and scores them when they resolve.">
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {pill(false, 'DISCLAIMER', () => Linking.openURL(LEGAL.disclaimer), 'x1')}
@@ -5330,15 +5422,55 @@ export default function App() {
   const [dev, setDev] = useState(false);
   const [aiKey, setAiKey] = useState('');
   const [aiModel, setAiModel] = useState(ASK_MODELS[0].id);
+  const [aiPass, setAiPass] = useState('');
+  const [engine, setEngine] = useState(null);         // the decrypted doctrine, memory only
+  const [engineMeta, setEngineMeta] = useState(null);
+  const [engineErr, setEngineErr] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
   useEffect(() => {
     AsyncStorage.getItem(DEV_FLAG_KEY).then((v) => setDev(v === '1')).catch(() => {});
     AsyncStorage.getItem(DEV_AIKEY_KEY).then((v) => { if (v) setAiKey(v); }).catch(() => {});
     AsyncStorage.getItem(DEV_MODEL_KEY).then((v) => { if (v) setAiModel(v); }).catch(() => {});
+    AsyncStorage.getItem(DEV_PASS_KEY).then((v) => { if (v) setAiPass(v); }).catch(() => {});
   }, []);
   const devSet = useCallback((on) => { setDev(on); AsyncStorage.setItem(DEV_FLAG_KEY, on ? '1' : '0').catch(() => {}); }, []);
   const keySet = useCallback((k) => { setAiKey(k); AsyncStorage.setItem(DEV_AIKEY_KEY, k).catch(() => {}); }, []);
   const modelSet = useCallback((m) => { setAiModel(m); AsyncStorage.setItem(DEV_MODEL_KEY, m).catch(() => {}); }, []);
-  const ask = useMemo(() => ({ dev: dev, apiKey: aiKey, model: aiModel }), [dev, aiKey, aiModel]);
+  const engineReload = useCallback(() => {
+    // the bundle is rebuilt whenever the doctrine changes; the device keeps the plaintext, so
+    // this is the button that goes and gets the new one
+    setEngine(null); setEngineMeta(null); setEngineErr(null);
+    AsyncStorage.removeItem(DEV_ENGINE_CACHE).then(() => setAiPass((p) => p)).catch(() => {});
+    setReloadTick((n) => n + 1);
+  }, []);
+  const passSet = useCallback((p) => {
+    setAiPass(p); setEngineErr(null); if (!p) { setEngine(null); setEngineMeta(null); }
+    AsyncStorage.setItem(DEV_PASS_KEY, p).catch(() => {});
+    AsyncStorage.removeItem(DEV_ENGINE_CACHE).catch(() => {});
+  }, []);
+  // THE ENGINE: fetched once as ciphertext, opened with the passphrase, then kept in this
+  // device's storage so a reopen costs neither the 234KB nor the key derivation.
+  useEffect(() => {
+    let dead = false;
+    if (!dev || !aiPass) { setEngine(null); return () => { dead = true; }; }
+    (async () => {
+      try {
+        const cached = JSON.parse((await AsyncStorage.getItem(DEV_ENGINE_CACHE)) || 'null');
+        if (cached && cached.text) { if (!dead) { setEngine(cached.text); setEngineMeta(cached.meta); } return; }
+        const j = await (await fetch(DOCTRINE_URL, { cache: 'no-store' })).json();
+        const text = await unlockEngine(j, aiPass);
+        const meta = { tokens: j.tokens, generated: j.generated, files: (j.files || []).length };
+        if (dead) return;
+        setEngine(text); setEngineMeta(meta); setEngineErr(null);
+        AsyncStorage.setItem(DEV_ENGINE_CACHE, JSON.stringify({ text: text, meta: meta })).catch(() => {});
+      } catch (e) {
+        if (!dead) { setEngine(null); setEngineErr(/OperationError|decrypt/i.test(String(e && e.message)) ? 'wrong passphrase' : String((e && e.message) || e).slice(0, 80)); }
+      }
+    })();
+    return () => { dead = true; };
+  }, [dev, aiPass, reloadTick]);
+  const ask = useMemo(() => ({ dev: dev, apiKey: aiKey, model: aiModel, engine: engine, engineErr: engineErr }),
+    [dev, aiKey, aiModel, engine, engineErr]);
   const [searching, setSearching] = useState(false);
   const [prefs, setPrefs] = useState(false);   // reading controls, off the page by default
   const [query, setQuery] = useState('');
@@ -5537,7 +5669,7 @@ export default function App() {
             <Text style={[MONO, { color: prefs ? C.accent : C.muted, fontSize: 16, fontWeight: '800' }]}>{prefs ? '\u00d7' : '\u2261'}</Text>
           </Pressable>
         </View>
-        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} dev={dev} onDev={devSet} apiKey={aiKey} onKey={keySet} model={aiModel} onModel={modelSet} /> : null}
+        {prefs ? <ModeToggle level={level} onChange={setMode} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} accent={accent} onAccent={setAccent} dev={dev} onDev={devSet} apiKey={aiKey} onKey={keySet} model={aiModel} onModel={modelSet} pass={aiPass} onPass={passSet} engine={engine} engineErr={engineErr} engineMeta={engineMeta} onReload={engineReload} /> : null}
         {!data && !err && <View style={s.center}><ActivityIndicator color={C.accent} size="large" /></View>}
         {!data && err && (
           <View style={s.center}>
