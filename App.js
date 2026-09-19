@@ -1188,6 +1188,42 @@ function DecodePanel({ dec }) {
           ))}
         </>
       ) : null}
+      {/* 2026-09-18: ALEC - the apparent-loss / energy-chokepoint chain, run when a story is war + energy +
+          "he's losing" / "master plan". Every link is marked structural or teleological; the second kind is
+          shown as a claim, never as a premise. */}
+      {dec.alec && (dec.alec.loss || dec.alec.chokepoint || dec.alec.pain) ? (
+        <>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>THE ENERGY CHAIN</Text>
+          {[['THE LOSS BEING SOLD', dec.alec.loss], ['THE CHOKEPOINT', dec.alec.chokepoint], ['WHO IMPORTS THE PAIN', dec.alec.pain],
+            ['OBSERVED, NOT WISHED', dec.alec.observed], ['THE DEBT LEVER', dec.alec.debt ? String(dec.alec.debt).toUpperCase() : null],
+            ['THE OTHER POLE', dec.alec.pole], ['CHAOS AS COVER', dec.alec.cover ? String(dec.alec.cover).toUpperCase() : null]]
+            .filter(([, v]) => v).map(([k, v]) => (
+              <Text key={k} style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 7, marginBottom: 0 }]}>
+                <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{k + '  '}</Text>
+                {decode(String(v))}
+              </Text>
+            ))}
+          {(dec.alec.links || []).length ? (
+            <View style={{ marginTop: 10 }}>
+              {dec.alec.links.map((l, i) => (
+                <Text key={i} style={[s.p, { fontSize: 14, lineHeight: 21, marginTop: 4, marginBottom: 0 }]}>
+                  <Text style={[MONO, { color: String(l.kind) === 'teleological' ? C.high : C.calm, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>
+                    {(String(l.kind) === 'teleological' ? 'TELEOLOGICAL' : 'STRUCTURAL') + '  '}
+                  </Text>
+                  {decode(String(l.link || ''))}
+                </Text>
+              ))}
+              <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 6 }}>Structural works even if nobody is a genius. Teleological needs a hidden author, and is shown as a claim.</Text>
+            </View>
+          ) : null}
+          {dec.alec.falsifier ? (
+            <Text style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 8, marginBottom: 0 }]}>
+              <Text style={[MONO, { color: C.high, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{'WHAT BREAKS THE CHAIN  '}</Text>
+              {decode(String(dec.alec.falsifier))}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
       {(dec.angles || []).length ? (
         <>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>WHO GAINS, WHO PAYS</Text>
