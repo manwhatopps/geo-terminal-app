@@ -1373,17 +1373,18 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {/* 2026-09-18: four buttons with titles and subtitles made a wall between the standfirst and
             the first sentence. The reference the editor sent simply starts reading, so these are one
             slim line now - the same four ways in, a fraction of the height. */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
           {[
             { k: 'sum', label: 'SUMMARY', c: C.calm, on: true },
             { k: 'analyst', label: 'ANALYST', c: C.accent, on: true },
             { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) || decodeRead.length > 0 },
             { k: 'word', label: 'WORDING', c: C.elev, on: !!wordEv },
-            { k: 'consp', label: 'CIRCULATING', c: C.high, on: true },
+            { k: 'consp', label: 'BOARDS', c: C.high, on: true },   // 2026-09-18: CIRCULATING was too long for the row; the door is named for the tab it opens
           ].filter((d) => d.on).map((d, i) => (
-            <Pressable key={d.k} onPress={() => setPane(pane === d.k ? null : d.k)} hitSlop={8}
-              style={{ marginRight: 16, marginTop: 6, borderBottomWidth: pane === d.k ? 2 : 0, borderBottomColor: d.c, paddingBottom: 2 }}>
-              <Text style={[MONO, { color: d.c, fontSize: 11, letterSpacing: 1.3, fontWeight: pane === d.k ? '800' : '700' }]}>
+            <Pressable key={d.k} onPress={() => setPane(pane === d.k ? null : d.k)} hitSlop={6}
+              style={{ flex: 1, marginTop: 6, borderWidth: 1, borderColor: d.c, borderRadius: 6, paddingHorizontal: 4, paddingVertical: 7, alignItems: 'center',
+                       backgroundColor: pane === d.k ? d.c : 'transparent' }}>
+              <Text numberOfLines={1} style={[MONO, { color: pane === d.k ? C.ink : d.c, fontSize: 10.5, letterSpacing: 1, fontWeight: pane === d.k ? '800' : '700' }]}>
                 {d.label}
               </Text>
             </Pressable>
