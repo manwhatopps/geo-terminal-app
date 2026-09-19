@@ -1356,7 +1356,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
       </View>
       <View style={s.article}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
-          <Text style={[s.kick, MONO, { flex: 0, marginRight: 10 }]}>{kickerOf(item)}</Text>
+          <Text style={[s.kick, MONO, { flex: 1, marginRight: 10 }]} numberOfLines={1}>{kickerOf(item)}</Text>
           <Text style={[s.readtime, MONO]}>{readTime(shownRead.map((x) => String(x.p || '')).join(' '), item.t)}</Text>
         </View>
         {/* 2026-09-17 (editor): tapping the headline folds the article back up - no hunt for the back arrow */}
@@ -1373,18 +1373,17 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {/* 2026-09-18: four buttons with titles and subtitles made a wall between the standfirst and
             the first sentence. The reference the editor sent simply starts reading, so these are one
             slim line now - the same four ways in, a fraction of the height. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.line }}>
           {[
             { k: 'sum', label: 'SUMMARY', c: C.calm, on: true },
             { k: 'analyst', label: 'ANALYST', c: C.accent, on: true },
-            { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) || decodeRead.length > 0 },
-            { k: 'word', label: 'WORDING', c: C.elev, on: !!wordEv },
+            { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) || decodeRead.length > 0 || !!wordEv },
             { k: 'consp', label: 'BOARDS', c: C.high, on: true },   // 2026-09-18: CIRCULATING was too long for the row; the door is named for the tab it opens
           ].filter((d) => d.on).map((d, i) => (
             <Pressable key={d.k} onPress={() => setPane(pane === d.k ? null : d.k)} hitSlop={6}
-              style={{ flex: 1, marginTop: 6, borderWidth: 1, borderColor: d.c, borderRadius: 6, paddingHorizontal: 4, paddingVertical: 7, alignItems: 'center',
+              style={{ flexShrink: 0, marginTop: 6, borderWidth: 1, borderColor: d.c, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 7, alignItems: 'center',
                        backgroundColor: pane === d.k ? d.c : 'transparent' }}>
-              <Text numberOfLines={1} style={[MONO, { color: pane === d.k ? C.ink : d.c, fontSize: 10.5, letterSpacing: 1, fontWeight: pane === d.k ? '800' : '700' }]}>
+              <Text style={[MONO, { color: pane === d.k ? C.ink : d.c, fontSize: 10.5, letterSpacing: 0.8, fontWeight: pane === d.k ? '800' : '700' }]}>
                 {d.label}
               </Text>
             </Pressable>
@@ -1473,7 +1472,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
                 <Text style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 8, marginBottom: 0 }]}>
                   {decode(wordEv.verdict || (wordEv.n + ' outlets carried this story.'))}
                 </Text>
-                <Pressable onPress={() => setPane('word')} style={s.sumdoor}>
+                <Pressable onPress={() => setPane('decode')} style={s.sumdoor}>
                   <Text style={[s.artbtnT, MONO, { color: C.accent }]}>{'\u2337  EVERY HEADLINE, SIDE BY SIDE \u203a'}</Text>
                   <Text style={s.artbtnS}>the same event in every outlet that ran it, and the choices each one made</Text>
                 </Pressable>
@@ -1511,6 +1510,15 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {pane === 'decode' ? (
           <View style={{ marginBottom: 18 }}>
             {dc ? <DecodePanel dec={dc} /> : null}
+            {wordEv ? (
+              <View style={[s.storycard, { borderColor: C.elev, marginTop: 18 }]}>
+            <Text style={[MONO, { color: C.elev, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>HOW EACH OUTLET WORDED IT</Text>
+            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 5 }}>
+              The same event as published elsewhere, with the choices named by the same test for every outlet.
+            </Text>
+            <WordingEvent ev={wordEv} />
+          </View>
+            ) : null}
             {decodeRead.length ? (
               <View style={{ marginTop: dc ? 22 : 0, borderTopWidth: dc ? 1 : 0, borderTopColor: C.line, paddingTop: dc ? 16 : 0 }}>
                 <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800', marginBottom: 4 }]}>
@@ -1522,15 +1530,6 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
           </View>
         ) : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
-        {pane === 'word' && wordEv ? (
-          <View style={[s.storycard, { borderColor: C.elev, marginBottom: 18 }]}>
-            <Text style={[MONO, { color: C.elev, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>HOW EACH OUTLET WORDED IT</Text>
-            <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 5 }}>
-              The same event as published elsewhere, with the choices named by the same test for every outlet.
-            </Text>
-            <WordingEvent ev={wordEv} />
-          </View>
-        ) : null}
         {pane ? <View style={[s.artrule, { marginTop: 0 }]} /> : null}
         {!simple && shownRead.length ? (
           <>
