@@ -656,6 +656,44 @@ function OfficialAccount({ text }) {
   );
 }
 
+// ── THE HIT — 2026-09-19, MODULE HIT (the editor's system block). A hit names a set, glues it into one
+// organism and ends in a kill-shot. It is processed, not rebutted: every charge kept with its function and
+// its status, the principal named or UNNAMED IN SOURCE, the wrapper's harvest recorded. The counter beside
+// it still checks the numbers. ──
+const HIT_STATUS = { 'stated': 'STATED', 'sourced elsewhere': 'SOURCED ELSEWHERE', 'not sourced here': 'NOT SOURCED HERE' };
+function HitBlock({ hit }) {
+  if (!hit || !(hit.set || (hit.ledger || []).length)) return null;
+  const lbl = (t, c) => <Text style={[MONO, { color: c || C.high, fontSize: 9.5, letterSpacing: 1.5, fontWeight: '800', marginTop: 12 }]}>{t}</Text>;
+  const line = (t) => <Text style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 4, marginBottom: 0 }]}>{decode(String(t))}</Text>;
+  return (
+    <View style={{ marginTop: 14, borderLeftWidth: 2, borderLeftColor: C.high, paddingLeft: 12 }}>
+      <Text style={[MONO, { color: C.high, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' }]}>THE HIT, PROCESSED</Text>
+      <Text style={{ color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 3 }}>Every charge kept with its status. Nothing denied, nothing confirmed without a record. The numbers are checked beside it.</Text>
+      {hit.set ? <>{lbl('THE TARGET SET')}{line(hit.set)}</> : null}
+      {hit.wrapper ? <>{lbl('WHO SHIPPED IT, AND WHAT THEY HARVEST')}{line(hit.wrapper)}</> : null}
+      {(hit.ledger || []).length ? (
+        <>
+          {lbl('THE STATEMENT LEDGER')}
+          {hit.ledger.map((x, i) => (
+            <View key={i} style={{ marginTop: 6 }}>
+              <Text style={[MONO, { color: x.function === 'kill-shot' ? C.crit : C.muted, fontSize: 9.5, letterSpacing: 1.2, fontWeight: '800' }]}>
+                {String(x.function || '').toUpperCase() + (x.mechanism ? '  \u00b7  ' + String(x.mechanism).toUpperCase() : '') + '  \u00b7  ' + (HIT_STATUS[String(x.status || '').toLowerCase()] || String(x.status || '').toUpperCase())}
+              </Text>
+              <Text style={[s.p, { fontSize: 14.5, lineHeight: 22, marginTop: 2, marginBottom: 0 }]}>{decode(String(x.said || ''))}</Text>
+            </View>
+          ))}
+        </>
+      ) : null}
+      {hit.glue ? <>{lbl('THE GLUE WORDS')}{line(hit.glue)}</> : null}
+      {hit.principal ? <>{lbl('THE PRINCIPAL')}{line(hit.principal)}</> : null}
+      {hit.kill ? <>{lbl('THE KILL-SHOT', C.crit)}{line(hit.kill)}</> : null}
+      {hit.needs ? <>{lbl('WHAT IT NEEDS BELIEVED')}{line(hit.needs)}</> : null}
+      {hit.never_asks ? <>{lbl('WHAT IT NEVER ASKS')}{line(hit.never_asks)}</> : null}
+      {hit.open ? <>{lbl('OPEN FILES', C.accent)}{line(hit.open)}</> : null}
+    </View>
+  );
+}
+
 function Counter({ c }) {
   if (!c) return null;
   const holds = /^\s*(HOLDS|NOTHING)/i.test(String(c));
@@ -725,6 +763,7 @@ function ConspiracyPanel({ items, forceOpen }) {
                   ) : null}
                   <OfficialAccount text={c.official} />
         <Counter c={c.counter} />
+        <HitBlock hit={c.hit} />
                   {Array.isArray(c.reads) && c.reads.length ? (
                     <View style={{ marginTop: 10 }}><Sections items={c.reads.map((sec) => (/VERDICT/i.test(sec.h || '') && Array.isArray(c.verdicts) ? { ...sec, verdicts: c.verdicts } : sec))} color={C.high} /></View>
                   ) : c.read ? (
@@ -1248,6 +1287,7 @@ function DecodePanel({ dec }) {
             ))}
         </>
       ) : null}
+      <HitBlock hit={dec.hit} />
       {(dec.angles || []).length ? (
         <>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>WHO GAINS, WHO PAYS</Text>
@@ -2660,6 +2700,7 @@ function BoardArticle({ c, onBack, onStory }) {
         ) : null}
         <OfficialAccount text={c.official} />
         <Counter c={c.counter} />
+        <HitBlock hit={c.hit} />
         {reads.length ? (
           <>
             <Text style={[s.ctxlbl, MONO, { color: C.high }]}>THE DESK'S READ</Text>
