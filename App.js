@@ -1949,16 +1949,11 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
   const cards = data.brief || [];
   const lead = cards[0];
   const rc = riskColor[(data.risk || {}).color] || C.elev;
-  // the sharpest call on the board: the one furthest from a coin flip, so the reader sees conviction
-  // 2026-09-18: the front page was leading with an ICC preliminary examination at 3%. The parochial
-  // filter reached CALLS but not here, so HOME advertised exactly the class of call the editor cut.
-  const PAROCHIAL_HOME = /\b(impeach\w*|resigns?|is sworn in|steps down|is fired|is confirmed|confirmation vote|public appearance|is indicted|testifies|subpoena\w*|preliminary examination|opens an? (investigation|examination)|a .{0,20}court (orders|rules)|files? an? (lawsuit|motion|appeal)|cycle top|price target)\b/i;
-  const called = cards
-    .map((c, i) => ({ c, i, call: (c.hist || {}).call }))
-    .filter((x) => x.call && !PAROCHIAL_HOME.test(String(x.call.event || '')))
-    .filter((x) => x.call && x.call.event && x.call.p != null)
-    .sort((a, b) => Math.abs(Number(b.call.p) - 50) - Math.abs(Number(a.call.p) - 50))[0];
   const boards = cards.filter((c) => c.consp && c.consp.head).slice(0, 3);
+  const essay = (data.essays || []).slice().sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')))[0] || null;
+  const seq = ((data.board || {}).sequence) || [];
+  const seqDone = seq.filter((q) => String(q.status || '').toLowerCase() === 'done').length;
+  const seqOn = seq.filter((q) => String(q.status || '').toLowerCase() === 'underway').length;
   const tile = (key, glyph, label, n, sub) => (
     <Pressable key={key} onPress={() => goTab(key)} style={s.fpTile}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -2016,20 +2011,24 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
       {/* 2026-09-18: the watch list printed here AND on NEWS, and the tripwires on CALLS are a
           third, richer version of it. One thing, one place: it lives on NEWS. */}
 
-      {/* the desk's sharpest call, straight off the front page */}
-      {called ? (
-        <Pressable onPress={() => goArticle(called.i)} style={[s.fpCall, { borderColor: C.accent }]}>
-          <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>
-            {"THE DESK'S SHARPEST CALL" + (called.call.horizon ? ' · ' + String(called.call.horizon).toUpperCase() : '')}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 7 }}>
-            <Text style={[MONO, { color: C.accent, fontSize: 28, fontWeight: '800', width: 76, lineHeight: 31 }]}>
-              {Math.round(Number(called.call.p)) + '%'}
-            </Text>
-            <Text style={{ color: C.text, fontSize: 14.5, lineHeight: 20, flex: 1, fontWeight: '600' }} numberOfLines={4}>{decode(called.call.event)}</Text>
-          </View>
-          <View style={{ marginTop: 8 }}><ProbBar p={Math.max(0, Math.min(100, Number(called.call.p) || 0))} /></View>
-          <Text style={[s.readmore, MONO, { marginTop: 10 }]}>SEE THE CASE FOR AND AGAINST ›</Text>
+      {/* 2026-09-18: HOME was advertising "United Russia wins more than half of Duma seats" at 95% as
+          THE DESK'S SHARPEST CALL - a 7-day card call, the exact class the editor cut ("I don't care if
+          the US renews something for Belarus"). The front page now carries what CALLS actually is: the
+          desk's standing essay and where the thesis stands. */}
+      {essay ? (
+        <Pressable onPress={() => goTab('calls')} style={[s.fpCall, { borderColor: C.accent }]}>
+          <Text style={[s.ctxlbl, MONO, { color: C.accent }]}>{'THE DESK WRITES  ·  ' + shortStamp(essay.ts).toUpperCase()}</Text>
+          <Text style={[s.hrowH, SERIF, T(22, 27), { marginTop: 7 }]} numberOfLines={3}>{decode(essay.title || '')}</Text>
+          {essay.dek ? <Text style={{ color: C.muted, fontSize: 14, lineHeight: 20, marginTop: 6 }} numberOfLines={3}>{decode(essay.dek)}</Text> : null}
+          {seq.length ? (
+            <View style={{ marginTop: 12 }}>
+              <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.2 }]}>
+                {'WHERE THIS STANDS  ·  ' + seqDone + ' OF ' + seq.length + ' STEPS DONE' + (seqOn ? '  ·  ' + seqOn + ' UNDERWAY' : '')}
+              </Text>
+              <View style={{ marginTop: 7 }}><ProbBar p={Math.round(100 * (seqDone + 0.5 * seqOn) / seq.length)} /></View>
+            </View>
+          ) : null}
+          <Text style={[s.readmore, MONO, { marginTop: 10 }]}>{(essay.words ? essay.words + ' WORDS  ·  ' : '') + 'READ THE ESSAY ›'}</Text>
         </Pressable>
       ) : null}
 
