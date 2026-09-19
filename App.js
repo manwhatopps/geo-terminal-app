@@ -3051,6 +3051,10 @@ function Rooms({ chairs, goArticle }) {
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
 function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizzes, hist }) {
   const [region, setRegion] = useState('ALL');
+  // 2026-09-18: CALLS is a Substack. The essays are the page; the sequence and the book are the working.
+  const [essay, setEssay] = useState(null);
+  const essays = (data.essays || []).slice().sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+  const curEssay = essay != null ? essays[essay] : null;
   const [fullRead, setFullRead] = useState(false);   // the money read, moved here from DATA
   const [sel, setSel] = useState({});
   const cFilter = (txt) => region === 'ALL' || inferRegion(txt) === region;
@@ -3106,12 +3110,42 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
   });
   return (
     <View style={s.stack}>
-      {/* 2026-09-18: the thesis leads, the book is its evidence. The editor: "I don't care if the US
-          renews something for Belarus... this is where we show off our brain and logic." */}
-      <TheBoard board={data.board || null} />
+      {/* 2026-09-18: CALLS is a Substack, not a dashboard. The editor: "don't make this a header... I want
+          you to write articles like you are writing a Substack article." The essay is the page. The
+          sequence checklist appears only under an open essay as "where this stands", and the forward
+          book follows as the dated calls that would have to come true. */}
+      {curEssay ? (
+        <View style={{ paddingHorizontal: 4, paddingTop: 6 }}>
+          <Pressable onPress={() => setEssay(null)} hitSlop={8} style={{ paddingVertical: 8 }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 10.5, letterSpacing: 1.4, fontWeight: '800' }]}>‹  ALL ESSAYS</Text>
+          </Pressable>
+          <Text style={s.hrowKick}>{'THE DESK  ·  ' + shortStamp(curEssay.ts).toUpperCase()}</Text>
+          <Text style={[s.artH, SERIF, T(30, 37)]}>{decode(curEssay.title || '')}</Text>
+          {curEssay.dek ? <Text style={[s.artStand, T(17.5, 26)]}>{decode(curEssay.dek)}</Text> : null}
+          <View style={{ marginTop: 14 }}>
+            <Sections items={curEssay.read || []} size={17} />
+          </View>
+          <TheBoard board={data.board || null} bare />
+        </View>
+      ) : (
+        <Section title="The desk writes" extra={essays.length + (essays.length === 1 ? ' essay' : ' essays')}>
+          <View style={{ paddingHorizontal: 12 }}>
+            {essays.length ? essays.map((e, i) => (
+              <Pressable key={e.id || i} onPress={() => setEssay(i)} style={s.hrow}>
+                <Text style={s.hrowKick}>{'THE DESK  ·  ' + shortStamp(e.ts).toUpperCase()}</Text>
+                <Text style={[s.hrowH, T(24, 29)]}>{decode(e.title || '')}</Text>
+                {e.dek ? <Text style={{ color: C.muted, fontSize: 14.5, lineHeight: 21, marginTop: 6 }}>{decode(e.dek)}</Text> : null}
+                <Text style={s.hrowMeta}>{(e.words ? e.words + ' words' : '') + '  ·  read ›'}</Text>
+              </Pressable>
+            )) : (
+              <Text style={[s.foot, { paddingVertical: 12 }]}>The desk's first essay is being written. The calls below are the dated components it will rest on.</Text>
+            )}
+          </View>
+        </Section>
+      )}
       <Section title="The forward book" extra={hit.length + (hit.length === 1 ? ' call' : ' calls')}>
         <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 10 }}>
-          Every call below is a checkable piece of the thesis above: the dated, falsifiable components that would have to happen if the sequence is right, and the ones that would break it if they do not. An argument that ends in a number, not a betting line. </Text>
+          Every call below is a dated, falsifiable component of what the desk has written: the things that would have to happen if the sequence is right, and the ones that would break it if they do not. An argument that ends in a number, not a betting line. </Text>
         <MultiFilter groups={CGROUPS} sel={sel} onChange={(nx) => setSel(nx)}
           total={calls.length} shown={hit.length} />
         {selCount(sel) === 1 && (sel.topic || []).length === 1 ? (
@@ -4285,7 +4319,7 @@ function SituationRoom({ sit, sources, cards, goArticle, quizResult, onQuiz, pic
 }
 
 // The rooms lead DATA: pick a war, read its history, see what is live in it.
-function TheBoard({ board }) {
+function TheBoard({ board, bare }) {
   const [who, setWho] = useState(null);
   // 2026-09-18: this required `actors`, so a board carrying only the SEQUENCE - the thesis, which is
   // the headline feature - rendered nothing at all. Any one section is enough to show the board.
@@ -4294,7 +4328,7 @@ function TheBoard({ board }) {
   const lbl = (t, color) => <Text style={[MONO, { color, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 18 }]}>{t}</Text>;
   const cur = who != null ? board.actors[who] : null;
   return (
-    <Section title="The board" extra={((board.sequence || []).length
+    <Section bare={bare} title={bare ? "Where this stands" : "The board"} extra={((board.sequence || []).length
       ? (board.sequence.filter((q) => String(q.status).toLowerCase() === 'done').length + ' of '
          + board.sequence.length + ' done')
       : ((board.actors || []).length + ' principals'))}>
@@ -4363,11 +4397,11 @@ function TheBoard({ board }) {
       })() : null}
 
       <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-        <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
+        {bare ? null : <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19 }}>
           These wars are not separate stories. A state fighting for advantage can take a deal; a state
           fighting for its existence cannot. Below: who is in which kind of war, whose survivals cannot both
           be satisfied, who can still come to whose aid, and what each of those answers opens next.
-        </Text>
+        </Text>}
         {(board.line || board.read) ? <Text style={[s.p, { fontSize: 15.5, lineHeight: 24, marginTop: 12, marginBottom: 0 }]}>{decode((board.line || board.read))}</Text> : null}
 
         {lbl('WHO IS FIGHTING FOR WHAT', C.accent)}
