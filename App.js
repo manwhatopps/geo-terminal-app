@@ -2023,7 +2023,7 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
           {seq.length ? (
             <View style={{ marginTop: 12 }}>
               <Text style={[MONO, { color: C.text, fontSize: 11, letterSpacing: 1.2 }]}>
-                {'WHERE THIS STANDS  ·  ' + seqDone + ' OF ' + seq.length + ' STEPS DONE' + (seqOn ? '  ·  ' + seqOn + ' UNDERWAY' : '')}
+                {seqDone + ' OF ' + seq.length + ' STEPS DONE' + (seqOn ? '  ·  ' + seqOn + ' UNDERWAY' : '')}
               </Text>
               <View style={{ marginTop: 7 }}><ProbBar p={Math.round(100 * (seqDone + 0.5 * seqOn) / seq.length)} /></View>
             </View>
