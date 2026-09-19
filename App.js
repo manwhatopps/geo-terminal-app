@@ -1164,6 +1164,30 @@ function DecodePanel({ dec }) {
             ? 'True in part. The line below is the distinction the whole claim turns on.'
             : dec.verdict === 'false' ? 'The record contradicts it.' : 'The record supports it.'}
       </Text>
+      {/* 2026-09-18: the decoder doctrine. A frame answers four questions quietly - what is the problem,
+          who caused it, who is good or bad, what must be done - and the words are the evidence. */}
+      {dec.frame && (dec.frame.problem || dec.frame.cause || dec.frame.moral || dec.frame.remedy) ? (
+        <>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>THE FRAME</Text>
+          {[['THE PROBLEM', dec.frame.problem], ['WHO CAUSED IT', dec.frame.cause], ['THE MORAL', dec.frame.moral], ['SO THE REMEDY IS', dec.frame.remedy]]
+            .filter(([, v]) => v).map(([k, v], i) => (
+              <Text key={k} style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: i ? 7 : 7, marginBottom: 0 }]}>
+                <Text style={[MONO, { color: C.muted, fontSize: 10, letterSpacing: 1.2, fontWeight: '800' }]}>{k + '  '}</Text>
+                {decode(String(v))}
+              </Text>
+            ))}
+        </>
+      ) : null}
+      {(dec.words || []).length ? (
+        <>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>THE WORDS, AND WHAT THEY DO</Text>
+          {dec.words.slice(0, 5).map((w, i) => (
+            <Text key={i} style={[s.p, { fontSize: 15, lineHeight: 23, marginTop: 7, marginBottom: 0 }]}>
+              <Text style={{ fontWeight: '700' }}>{'\u201c' + decode(String(w.q || '')) + '\u201d'}</Text>{'  ' + decode(String(w.does || ''))}
+            </Text>
+          ))}
+        </>
+      ) : null}
       {(dec.angles || []).length ? (
         <>
           <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>WHO GAINS, WHO PAYS</Text>
@@ -1172,6 +1196,13 @@ function DecodePanel({ dec }) {
               <Text style={{ fontWeight: '700' }}>{decode(a.party)}</Text>{'  ' + decode(a.effect)}
             </Text>
           ))}
+        </>
+      ) : null}
+      {dec.rewrite ? (
+        <>
+          <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800', marginTop: 16 }]}>THE SAME EVENT, DESCRIBED</Text>
+          <Text style={[s.p, SERIF, { fontSize: 17, lineHeight: 25, marginTop: 6, marginBottom: 0, fontWeight: '700' }]}>{decode(String(dec.rewrite))}</Text>
+          <Text style={{ color: C.muted, fontSize: 12.5, lineHeight: 18, marginTop: 4 }}>Actors, action, object, uncertainty - and nothing else. The distance from the headline as published is the finding.</Text>
         </>
       ) : null}
       {dec.kill ? (
