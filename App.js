@@ -1306,15 +1306,28 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
   const dc = decodeOf(item);
   const [simple, setSimple] = useState(false);       // the one reading control: simplify THIS article
   const body = bodyFor(item, simpleText, simple, false);
-  // 2026-09-18: A NEWS ARTICLE IS THREE TO FIVE READS. The desk still writes all nine; these are the
-  // ones that sit on the page. The rest move inside the ANALYST door - reasoning a reader asks for, not
-  // reasoning they scroll past - which also ends DECODE's who-gains-who-pays being a second copy.
+  // 2026-09-18: A NEWS ARTICLE IS THREE TO FIVE READS. The desk still writes all twelve headers; five
+  // sit on the page. The rest are not a dump behind one button - the editor: "the article buttons
+  // store all the information that goes in the headers; recategorise the headers into those button
+  // options." So each header belongs to the door that is ABOUT it: the desk's reasoning under ANALYST,
+  // who-gains-who-pays and what is actually documented under DECODE. One map, read by every pane.
   const CORE_READS = ['WHAT HAPPENED', 'WHY IT MATTERS', 'THE NUMBERS', 'WHAT HAPPENS NEXT',
                       "WHAT WE DON'T KNOW"];
+  const DOOR_READS = {
+    analyst: ['WHO DECIDES', 'IN THEIR SHOES', 'THE HISTORY', 'COMPETING EXPLANATIONS',
+              "WHAT WOULD CHANGE THE DESK'S MIND"],
+    decode: ['THE FACTS ON THE RECORD', 'WHO IS INVOLVED, AND THEIR INTERESTS'],
+  };
+  const hOf = (x) => String((x && x.h) || '').trim().toUpperCase();
   const readAll = Array.isArray(item.read) ? item.read : [];
-  const isCore = (x) => CORE_READS.indexOf(String((x && x.h) || '').trim().toUpperCase()) >= 0;
+  const isCore = (x) => CORE_READS.indexOf(hOf(x)) >= 0;
   const coreRead = readAll.filter(isCore);
-  const deepRead = readAll.filter((x) => !isCore(x));
+  const doorRead = (k) => readAll.filter((x) => DOOR_READS[k].indexOf(hOf(x)) >= 0);
+  const analystRead = doorRead('analyst');
+  const decodeRead = doorRead('decode');
+  // a header the map does not know still has to render somewhere; it goes with the reasoning
+  const known = CORE_READS.concat(DOOR_READS.analyst, DOOR_READS.decode);
+  const strayRead = readAll.filter((x) => known.indexOf(hOf(x)) < 0);
   const shownRead = coreRead.length ? coreRead : readAll;
   const [pane, setPane] = useState(null);
   const cardRef = useRef(null);   // the off-screen SVG the share card rasterises from           // 'analyst' | 'consp' | null
@@ -1344,7 +1357,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
       <View style={s.article}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
           <Text style={[s.kick, MONO, { flex: 0, marginRight: 10 }]}>{kickerOf(item)}</Text>
-          <Text style={[s.readtime, MONO]}>{readTime(body, item.context)}</Text>
+          <Text style={[s.readtime, MONO]}>{readTime(shownRead.map((x) => String(x.p || '')).join(' '), item.t)}</Text>
         </View>
         {/* 2026-09-17 (editor): tapping the headline folds the article back up - no hunt for the back arrow */}
         <Pressable onPress={onBack}><Text style={[stand ? s.artH : s.artHLong, SERIF, T(stand ? 30 : 25, stand ? 37 : 32)]}>{stand ? head : longHead}</Text></Pressable>
@@ -1364,7 +1377,7 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
           {[
             { k: 'sum', label: 'SUMMARY', c: C.calm, on: true },
             { k: 'analyst', label: 'ANALYST', c: C.accent, on: true },
-            { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) },
+            { k: 'decode', label: 'DECODE', c: (VERDICT_META[(decodeOf(item) || {}).verdict] || VERDICT_META.partly).c, on: !!decodeOf(item) || decodeRead.length > 0 },
             { k: 'word', label: 'WORDING', c: C.elev, on: !!wordEv },
             { k: 'consp', label: 'CIRCULATING', c: C.high, on: true },
           ].filter((d) => d.on).map((d, i) => (
@@ -1473,12 +1486,12 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
         {pane === 'analyst' ? (
           <View style={{ marginBottom: 18 }}>
             <AnalystPanel item={item} specMatches={specMatches} pick={pick} onPick={onPick} resolved={resolved} picks={picks} setPickFor={setPickFor} res={res} wording={wording} />
-            {deepRead.length ? (
+            {analystRead.length || strayRead.length ? (
               <View style={{ marginTop: 22, borderTopWidth: 1, borderTopColor: C.line, paddingTop: 16 }}>
                 <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800', marginBottom: 4 }]}>
-                  THE REST OF THE FILE
+                  THE DESK'S WORKING
                 </Text>
-                <Sections items={deepRead} size={17} />
+                <Sections items={analystRead.concat(strayRead)} size={17} />
               </View>
             ) : null}
             {item.hist && item.hist.call && item.hist.call.event ? (
@@ -1494,7 +1507,19 @@ function ArticlePage({ item, simpleText, easy, deep, onBack, calls,
             ) : null}
           </View>
         ) : null}
-        {pane === 'decode' && decodeOf(item) ? <View style={{ marginBottom: 18 }}><DecodePanel dec={decodeOf(item)} /></View> : null}
+        {pane === 'decode' ? (
+          <View style={{ marginBottom: 18 }}>
+            {dc ? <DecodePanel dec={dc} /> : null}
+            {decodeRead.length ? (
+              <View style={{ marginTop: dc ? 22 : 0, borderTopWidth: dc ? 1 : 0, borderTopColor: C.line, paddingTop: dc ? 16 : 0 }}>
+                <Text style={[MONO, { color: C.accent, fontSize: 10, letterSpacing: 1.8, fontWeight: '800', marginBottom: 4 }]}>
+                  ON THE RECORD, AND WHO IS IN IT
+                </Text>
+                <Sections items={decodeRead} size={17} />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         {pane === 'consp' ? <View style={{ marginBottom: 18 }}><ConspiracyPanel items={conspItems} forceOpen /></View> : null}
         {pane === 'word' && wordEv ? (
           <View style={[s.storycard, { borderColor: C.elev, marginBottom: 18 }]}>
