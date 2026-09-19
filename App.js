@@ -2087,6 +2087,25 @@ function FrontPage({ data, goTab, goArticle, read, hist }) {
         {tile('boards', '☍', 'BOARDS', cards.filter((c) => c.consp).length, 'what the mainstream will not print')}
         {tile('calls', '◉', 'CALLS', (data.forecasts || []).length, 'where this is all going, and why')}
       </View>
+      {/* 2026-09-19: HISTORY left the nav on 09-18 when MONEY took its slot - and SituationRooms went
+          unmounted with it, so thirteen war files with every layer, their sources and the live stories
+          became unreachable code. The rooms do not need a tab; they need a door. This is it. */}
+      {Object.keys((hist && hist.situations) || {}).length ? (
+        <Pressable onPress={() => goTab('rooms')} style={s.fpDoor}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <Text style={[MONO, { color: C.accent, fontSize: 11, letterSpacing: 1.2, fontWeight: '800' }]}>
+              {'◫  THE WARS, EXPLAINED ›'}
+            </Text>
+            <Text style={[MONO, { color: C.accent, fontSize: 19, fontWeight: '800' }]}>
+              {Object.keys((hist && hist.situations) || {}).length}
+            </Text>
+          </View>
+          <Text style={{ color: C.muted, fontSize: 11.5, lineHeight: 17, marginTop: 6 }}>
+            One file per war: the history that explains today, what each side has committed to and done
+            before, the record sourced event by event, and the stories on the wire that belong to it.
+          </Text>
+        </Pressable>
+      ) : null}
 
 
       {/* 2026-09-16 (user: "when I click the link to read the education article and take the quiz it
@@ -2663,6 +2682,34 @@ function Attention({ att }) {
   );
 }
 
+// ── THE STANDING REGISTER ─ 2026-09-19. `hypotheses` is the weekly lab's output: readings the desk
+// assesses but cannot yet prove, each with a probability and what last moved it. It lost its only
+// surface when the "More from the desk" drawer went on 09-18, so the lab has been writing to nobody
+// since. It belongs on BOARDS, because this is the tab where the desk adjudicates a claim it cannot
+// settle - and the discipline is the same: the number is an estimate, the text says what moved it. ──
+function Register({ items }) {
+  const rows = (items || []).filter((h) => h && h.name)
+    .slice().sort((a, b) => (Number(b.p) || 0) - (Number(a.p) || 0));
+  if (!rows.length) return null;
+  return (
+    <Section title="The standing register" extra={rows.length + ' assessed'}>
+      <Text style={[s.foot, { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 10 }]}>
+        Readings the desk holds but cannot prove - assessed weekly, each with where the number stands
+        and what has moved it. A hypothesis is not a finding: these are the ones worth holding AT a
+        number rather than asserting or dropping.
+      </Text>
+      {rows.map((h, i) => (
+        <View key={i} style={s.hyp}>
+          <Text style={[s.hypP, MONO]}>{(Number(h.p) || 0) + '%'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.hypName}>{decode(h.name)}</Text>
+            {h.d ? <Text style={s.hypD}>{decode(h.d)}</Text> : null}
+          </View>
+        </View>
+      ))}
+    </Section>
+  );
+}
 function BoardsTab({ data, goArticle, wording }) {
   const [sel, setSel] = useState({});
   const [spec, setSpec] = useState(null);
@@ -2810,6 +2857,7 @@ function BoardsTab({ data, goArticle, wording }) {
       {!items.length ? <Text style={s.foot}>Nothing circulating in this filter right now.</Text> : null}
       <Attention att={data.attention} />
       <Watchtower items={specs} />
+      <Register items={data.hypotheses} />
       {/* 2026-09-18: from the retired DATA tab. BOARDS asks whether a claim is true, and these are the
           measurements that answer it - the official number beside the independent ones, the transit
           counts that decide whether a strait is actually shut, and how each outlet worded the same
@@ -3154,6 +3202,48 @@ function Rooms({ chairs, goArticle }) {
 // ── CALLS — everything predictive, and nothing else: what the desk thinks happens next, whether it
 // has been right, the branches it is watching, the hypotheses it has not proved, the tripwires, and a
 // quiz that tests the read. (Was ConspiracyTab, unrendered since BOARDS took the claims.) ──
+// ── THE BRANCHES ─ 2026-09-19. `scenarios` is the desk's what-if tree: a question the book turns
+// on, the read behind it, three or four EXCLUSIVE outcomes priced separately, and the observation
+// that would break the frame. Written every daily pass and displayed nowhere since the CALLS drawer
+// was cut on 09-18. It sits under the forward book by design: the book says what the desk expects,
+// this says what the alternatives are and what each one is worth. ──
+function Branches({ items }) {
+  const rows = (items || []).filter((x) => x && x.q);
+  if (!rows.length) return null;
+  return (
+    <Section title="The branches" extra={rows.length + (rows.length === 1 ? ' question' : ' questions')}>
+      <Text style={{ color: C.muted, fontSize: 13, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 6 }}>
+        The open questions the book turns on, each with the ways it can go and what the desk puts on
+        each one. The options are exclusive and priced separately, because an outcome nobody wrote
+        down is the one that costs a reader money.
+      </Text>
+      {rows.map((x, i) => {
+        const st = (x.stages || []).filter((o) => o && o.s);
+        return (
+          <View key={i} style={s.pred}>
+            <Text style={s.predq}>{decode(x.q)}</Text>
+            {x.read ? <Text style={s.prednote}>{decode(x.read)}</Text> : null}
+            {st.map((o, j) => (
+              <View key={j} style={{ marginTop: 12 }}>
+                <View style={s.predtop}>
+                  <Text style={[s.predq, { fontSize: 14.5, lineHeight: 20, fontWeight: '500' }]}>{decode(o.s)}</Text>
+                  <Text style={[s.predp, MONO, { fontSize: 17 }]}>{Math.round(Number(o.p) || 0)}<Text style={s.predpS}>%</Text></Text>
+                </View>
+                <ProbBar p={Math.round(Number(o.p) || 0)} />
+              </View>
+            ))}
+            {x.falsifier ? (
+              <View style={s.predmeta}>
+                <Text style={[MONO, { color: C.accent, fontSize: 9, letterSpacing: 1.1, fontWeight: '800' }]}>BREAKS THE FRAME</Text>
+                <Text style={[s.predmetaTxt, { flex: 1, lineHeight: 17 }]}>{decode(x.falsifier)}</Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </Section>
+  );
+}
 function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizzes, hist }) {
   const [region, setRegion] = useState('ALL');
   // 2026-09-18: CALLS is a Substack. The essays are the page; the sequence and the book are the working.
@@ -3278,6 +3368,7 @@ function CallsTab({ data, easy, deep, goArticle, read, saved, picks, res, quizze
           </View>
         ) : null}
       </Section>
+      <Branches items={data.scenarios} />
       <Scorecard picks={picks} cards={data.brief} res={res} goArticle={goArticle} quizzes={quizzes} hist={hist} />
       <Rooms chairs={chairs} goArticle={goArticle} />
       {/* everything the desk keeps for itself - the book, the record, the lab - behind ONE door */}
@@ -5139,7 +5230,7 @@ export default function App() {
       setOlder('done');
     } catch (e) { setOlder('error'); }
   }, []);
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'money') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
+  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); if (tab === 'money' || tab === 'rooms') await loadWorld(); setRefreshing(false); }, [load, loadWorld, tab]);
 
   if (acked === null) {
     return <SafeAreaProvider><SafeAreaView style={s.root}><View style={s.center}><ActivityIndicator color={C.accent} /></View></SafeAreaView></SafeAreaProvider>;
@@ -5201,7 +5292,19 @@ export default function App() {
                 {tab === 'news' && <NewsTab data={data} easy={easy} deep={deep} goTab={setTab} article={article} setArticle={setArticle} scrollTop={scrollTop} read={read} saved={saved} markRead={markRead} toggleSave={toggleSave} tsize={tsize} onSize={setSize} theme={theme} onTheme={setTheme} level={level} onLevel={setMode} older={older} loadOlder={loadOlder} picks={picks} setPickFor={setPickFor} res={res} wording={wording} series={series} />}
                 {tab === 'boards' && <TocHost color={C.high}><BoardsTab data={data} goArticle={goArticle} wording={wording} /></TocHost>}
                 {tab === 'calls' && <TocHost><CallsTab data={data} easy={easy} deep={deep} goArticle={goArticle} read={read} saved={saved} picks={picks} res={res} quizzes={quizzes} hist={hist} /></TocHost>}
-                {/* 2026-09-18: HISTORY (SituationRooms) left the nav at the editor's word; MONEY took its place. */}
+                {/* 2026-09-18: HISTORY (SituationRooms) left the nav at the editor's word; MONEY took its place.
+                    2026-09-19: it is not a tab, but it is reachable again - the door is on HOME. */}
+                {tab === 'rooms' && (
+                  <TocHost>
+                    <View>
+                      <Pressable onPress={() => { setTab('home'); scrollTop(); }} hitSlop={8} style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                        <Text style={[MONO, { color: C.accent, fontSize: 10.5, letterSpacing: 1.4, fontWeight: '800' }]}>{'‹  HOME'}</Text>
+                      </Pressable>
+                      <SituationRooms hist={hist} cards={data.brief} goArticle={goArticle} quizzes={quizzes}
+                        onQuiz={onQuiz} picks={picks} setPickFor={setPickFor} res={res} data={data} world={world} />
+                    </View>
+                  </TocHost>
+                )}
                 {tab === 'money' && <TocHost><MoneyTab data={data} series={series} goArticle={goArticle} /></TocHost>}
                               </>
             )}
@@ -5242,8 +5345,6 @@ function buildStyles() {
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line },
   wordmark: { color: C.text, fontWeight: '800', letterSpacing: 2.5, fontSize: 15 },
   stamp: { color: C.muted, fontSize: 11, letterSpacing: 0.5, marginLeft: 'auto' },
-  levelbar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.panel },
-  levelLbl: { color: C.muted, fontSize: 10, letterSpacing: 1.5 },
   modetog: { flex: 1, flexDirection: 'row', borderWidth: 1, borderColor: C.line, borderRadius: 10, overflow: 'hidden' },
   modeBtn: { flex: 1, paddingVertical: 7, alignItems: 'center' },
   modeBtnDiv: { borderLeftWidth: 1, borderLeftColor: C.line },
@@ -5303,7 +5404,6 @@ function buildStyles() {
   searchin: { flex: 1, fontSize: 17, paddingVertical: 10 },
   searchH: { color: C.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
   srcchip: { borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 13 },
-  verdict: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, marginBottom: 14 },
   ctxbtnWide: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   artH: { color: C.text, fontSize: 32, lineHeight: 38, fontWeight: '700' },
   artHLong: { color: C.text, fontSize: 26, lineHeight: 32, fontWeight: '700' },
@@ -5352,7 +5452,6 @@ function buildStyles() {
   predp: { fontSize: 21, fontWeight: '800', color: C.accent },
   predpS: { fontSize: 12, fontWeight: '400', color: C.muted },
   predmeta: { flexDirection: 'row', gap: 10, alignItems: 'center', marginTop: 4 },
-  chip: { backgroundColor: C.chip, borderRadius: 3, paddingHorizontal: 7, paddingVertical: 1, fontSize: 11 },
   predmetaTxt: { color: C.muted, fontSize: 11 },
   prednote: { color: C.muted, fontFamily: 'Charter', fontSize: 15.5, marginTop: 8, lineHeight: 22 },
   bar: { height: 5, borderRadius: 3, backgroundColor: C.barBg, marginTop: 11, marginBottom: 8 },
@@ -5375,14 +5474,11 @@ function buildStyles() {
   link: { color: C.accent, fontSize: 13.5, textDecorationLine: 'underline' },
   gateBtn: { backgroundColor: C.accent, borderRadius: 6, paddingVertical: 15, alignItems: 'center' },
   gateBtnTxt: { color: C.ink, fontWeight: '800', letterSpacing: 2, fontSize: 14 },
-  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 16 },
-  legalLink: { color: C.muted, fontSize: 12, textDecorationLine: 'underline' },
-  legalDot: { color: C.line },
   // nav
   navWrap: { backgroundColor: C.panel, borderTopWidth: 1, borderTopColor: C.line },
   prefsBtn: { borderWidth: 1, borderColor: C.line, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 9, marginLeft: 10 },
   fpCall: { borderWidth: 1, borderRadius: 10, padding: 15, backgroundColor: C.panel },
-  fpBoards: { borderWidth: 1, borderColor: C.line, borderRadius: 10, padding: 15, backgroundColor: C.panel },
+  fpDoor: { borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 14, backgroundColor: C.panel },
   fpLesson: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 14 },
   fpTile: { width: '48.5%', backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 8, padding: 12, marginBottom: 10 },
 });
